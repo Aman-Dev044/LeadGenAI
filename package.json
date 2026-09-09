@@ -1,0 +1,27 @@
+{
+  "name": "ai-lead-generation",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "npm@11.9.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:widget": "cd apps/widget && npm run dev",
+    "build": "turbo run build",
+    "build:api": "cd apps/api && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "build:widget": "cd apps/widget && npm run build",
+    "lint": "turbo run lint",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "seed": "cd apps/api && npm run seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0"
+  }
+}

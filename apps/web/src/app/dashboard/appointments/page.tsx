@@ -1,0 +1,500 @@
+'use client';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock } from 'lucide-react';
+import { api } from '@/lib/api-client';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DataTable } from '@/components/shared/data-table';
+import { PageHeader } from '@/components/shared/page-header';
+import { EmptyState } from '@/components/shared/empty-state';
+import type { Appointment } from '@/types';
+import { formatDate } from '@/lib/utils';
+
+const statusColors: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
+  scheduled: 'default', confirmed: 'success', cancelled: 'destructive', completed: 'secondary', no_show: 'warning',
+};
+
+const STATUSES = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
+
+const emptyForm = { title: '', description: '', startTime: '', endTime: '', assignedTo: '', leadId: '', attendeeName: '', attendeeEmail: '', attendeePhone: '', meetingLink: '' };
+
+export default function AppointmentsPage() {
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ ...emptyForm });
+
+  // Edit
+  const [editAppt, setEditAppt] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ ...emptyForm, status: 'scheduled' });
+
+  // Delete
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [rescheduleAppt, setRescheduleAppt] = useState<any>(null);
+  const [rescheduleForm, setRescheduleForm] = useState({ startTime: '', endTime: '', reason: '' });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['appointments', page, limit, statusFilter],
+    queryFn: () => api.get<any>('/appointments', { page, limit, status: statusFilter || undefined }),
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ['users', 'assignable'],
+    queryFn: () => api.get<any>('/users/assignable'),
+  });
+
+  const { data: leadsData } = useQuery({
+    queryKey: ['leads-list'],
+    queryFn: () => api.get<any>('/leads', { limit: 100 }),
+  });
+
+  const users = (usersData as any)?.data?.data || (usersData as any)?.data || [];
+  const leads = (leadsData as any)?.data?.data || (leadsData as any)?.data || [];
+
+  const createMutation = useMutation({
+    mutationFn: (body: any) => api.post('/appointments', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setShowCreate(false);
+      setForm({ ...emptyForm });
+      toast.success('Appointment created');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) => api.patch(`/appointments/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setEditAppt(null);
+      toast.success('Appointment updated');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      api.post(`/appointments/${id}/cancel`, reason ? { reason } : undefined),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setCancelId(null);
+      setCancelReason('');
+      toast.success('Appointment cancelled');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) => api.post(`/appointments/${id}/reschedule`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setRescheduleAppt(null);
+      toast.success('Appointment rescheduled');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const toLocalInput = (d: string | Date) => {
+    if (!d) return '';
+    const dt = new Date(d);
+    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+    return dt.toISOString().slice(0, 16);
+  };
+
+  const openReschedule = (appt: any) => {
+    setRescheduleAppt(appt);
+    setRescheduleForm({ startTime: toLocalInput(appt.startTime), endTime: toLocalInput(appt.endTime), reason: '' });
+  };
+
+  // Keep the original duration when the start time changes
+  const onRescheduleStartChange = (value: string) => {
+    let endTime = rescheduleForm.endTime;
+    if (value && rescheduleAppt?.startTime && rescheduleAppt?.endTime) {
+      const duration = new Date(rescheduleAppt.endTime).getTime() - new Date(rescheduleAppt.startTime).getTime();
+      if (duration > 0) endTime = toLocalInput(new Date(new Date(value).getTime() + duration));
+    }
+    setRescheduleForm({ ...rescheduleForm, startTime: value, endTime });
+  };
+
+  const handleReschedule = () => {
+    if (!rescheduleAppt) return;
+    if (!rescheduleForm.startTime || !rescheduleForm.endTime) { toast.error('New start and end time are required'); return; }
+    const start = new Date(rescheduleForm.startTime);
+    const end = new Date(rescheduleForm.endTime);
+    if (end <= start) { toast.error('End time must be after start time'); return; }
+    if (start.toISOString() === rescheduleAppt.startTime && end.toISOString() === rescheduleAppt.endTime) { toast.info('Time is unchanged'); return; }
+    rescheduleMutation.mutate({
+      id: rescheduleAppt._id,
+      body: { startTime: start.toISOString(), endTime: end.toISOString(), ...(rescheduleForm.reason.trim() ? { reason: rescheduleForm.reason.trim() } : {}) },
+    });
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setDeleteId(null);
+      toast.success('Appointment deleted permanently');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const appointments = (data as any)?.data?.data || (data as any)?.data || [];
+  const total = (data as any)?.data?.total || 0;
+  const totalPages = (data as any)?.data?.totalPages || 1;
+
+  const handleCreate = () => {
+    const payload: Record<string, any> = {};
+    if (form.title.trim()) payload.title = form.title.trim();
+    if (form.description.trim()) payload.description = form.description.trim();
+    if (form.startTime) payload.startTime = new Date(form.startTime).toISOString();
+    if (form.endTime) payload.endTime = new Date(form.endTime).toISOString();
+    if (form.assignedTo) payload.assignedTo = form.assignedTo;
+    if (form.leadId) payload.leadId = form.leadId;
+    if (form.meetingLink.trim()) payload.meetingLink = form.meetingLink.trim();
+
+    const attendee: Record<string, string> = {};
+    if (form.attendeeName.trim()) attendee.name = form.attendeeName.trim();
+    if (form.attendeeEmail.trim()) attendee.email = form.attendeeEmail.trim();
+    if (form.attendeePhone.trim()) attendee.phone = form.attendeePhone.trim();
+    if (Object.keys(attendee).length > 0) payload.attendee = attendee;
+
+    if (!payload.title) { toast.error('Title is required'); return; }
+    if (!payload.assignedTo) { toast.error('Assigned To is required'); return; }
+    if (!payload.startTime) { toast.error('Start time is required'); return; }
+    if (!payload.endTime) { toast.error('End time is required'); return; }
+
+    createMutation.mutate(payload);
+  };
+
+  const handleEdit = (appt: any) => {
+    setEditAppt(appt);
+    const toLocal = (d: string) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+      return dt.toISOString().slice(0, 16);
+    };
+    setEditForm({
+      title: appt.title || '',
+      description: appt.description || '',
+      startTime: toLocal(appt.startTime),
+      endTime: toLocal(appt.endTime),
+      assignedTo: appt.assignedTo || '',
+      leadId: appt.leadId || '',
+      attendeeName: appt.attendee?.name || '',
+      attendeeEmail: appt.attendee?.email || '',
+      attendeePhone: appt.attendee?.phone || '',
+      meetingLink: appt.meetingLink || '',
+      status: appt.status || 'scheduled',
+    });
+  };
+
+  const handleEditSave = () => {
+    if (!editAppt) return;
+    const payload: Record<string, any> = {};
+
+    if (editForm.title.trim() !== (editAppt.title || '')) payload.title = editForm.title.trim();
+    if (editForm.description.trim() !== (editAppt.description || '')) payload.description = editForm.description.trim();
+    if (editForm.startTime && new Date(editForm.startTime).toISOString() !== editAppt.startTime) payload.startTime = new Date(editForm.startTime).toISOString();
+    if (editForm.endTime && new Date(editForm.endTime).toISOString() !== editAppt.endTime) payload.endTime = new Date(editForm.endTime).toISOString();
+    if (editForm.status !== editAppt.status) payload.status = editForm.status;
+    if (editForm.meetingLink.trim() !== (editAppt.meetingLink || '')) payload.meetingLink = editForm.meetingLink.trim();
+
+    const attendee: Record<string, string> = {};
+    if (editForm.attendeeName.trim()) attendee.name = editForm.attendeeName.trim();
+    if (editForm.attendeeEmail.trim()) attendee.email = editForm.attendeeEmail.trim();
+    if (editForm.attendeePhone.trim()) attendee.phone = editForm.attendeePhone.trim();
+    const origAttendee = editAppt.attendee || {};
+    if (attendee.name !== (origAttendee.name || '') || attendee.email !== (origAttendee.email || '') || attendee.phone !== (origAttendee.phone || '')) {
+      payload.attendee = attendee;
+    }
+
+    if (Object.keys(payload).length === 0) { toast.info('No changes'); setEditAppt(null); return; }
+    updateMutation.mutate({ id: editAppt._id, body: payload });
+  };
+
+  const getUserName = (id: string) => {
+    const u = users.find((u: any) => u._id === id);
+    return u ? `${u.firstName} ${u.lastName}` : id || '-';
+  };
+
+  const columns = [
+    { key: 'title', label: 'Title', render: (a: Appointment) => <span className="font-medium">{a.title}</span> },
+    {
+      key: 'startTime', label: 'Date & Time', render: (a: any) => (
+        <div>
+          <div>{formatDate(a.startTime)}</div>
+          {a.rescheduledCount > 0 && (
+            <div className="text-[11px] text-muted-foreground">Rescheduled {a.rescheduledCount}x</div>
+          )}
+        </div>
+      ),
+    },
+    { key: 'status', label: 'Status', render: (a: Appointment) => <Badge variant={statusColors[a.status]}>{a.status.replace('_', ' ')}</Badge> },
+    { key: 'attendee', label: 'Attendee', render: (a: any) => a.attendee?.name || a.attendee?.email || '-' },
+    { key: 'assignedTo', label: 'Assigned To', render: (a: any) => getUserName(a.assignedTo) },
+    {
+      key: 'actions', label: '', render: (a: any) => (
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleEdit(a); }}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          {a.status !== 'completed' && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700" title="Reschedule" onClick={(e) => { e.stopPropagation(); openReschedule(a); }}>
+              <CalendarClock className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {a.status !== 'cancelled' && a.status !== 'completed' && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title="Cancel appointment" onClick={(e) => { e.stopPropagation(); setCancelId(a._id); }}>
+              <XCircle className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete permanently" onClick={(e) => { e.stopPropagation(); setDeleteId(a._id); }}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title="Appointments"
+        description="Manage scheduled meetings"
+        actions={<Button onClick={() => setShowCreate(true)}><Plus className="mr-2 h-4 w-4" /> New Appointment</Button>}
+      />
+
+      <div className="flex gap-4 mb-4">
+        <Select value={statusFilter || 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <DataTable columns={columns} data={appointments} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} />
+
+      {/* Create Dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Create Appointment</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Title *</Label>
+              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Sales Demo Call" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} placeholder="Meeting details..." />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Time *</Label>
+                <Input type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>End Time *</Label>
+                <Input type="datetime-local" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Assigned To *</Label>
+                <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                  <SelectContent>
+                    {users.map((u: any) => (
+                      <SelectItem key={u._id} value={u._id}>{u.firstName} {u.lastName} ({u.role})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Lead</Label>
+                <Select value={form.leadId || 'none'} onValueChange={(v) => setForm({ ...form, leadId: v === 'none' ? '' : v })}>
+                  <SelectTrigger><SelectValue placeholder="Select lead" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {leads.map((l: any) => (
+                      <SelectItem key={l._id} value={l._id}>{l.firstName} {l.lastName} {l.email ? `(${l.email})` : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Attendee Info</Label>
+              <div className="grid grid-cols-3 gap-3">
+                <Input placeholder="Name" value={form.attendeeName} onChange={(e) => setForm({ ...form, attendeeName: e.target.value })} />
+                <Input placeholder="Email" value={form.attendeeEmail} onChange={(e) => setForm({ ...form, attendeeEmail: e.target.value })} />
+                <Input placeholder="Phone" value={form.attendeePhone} onChange={(e) => setForm({ ...form, attendeePhone: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Meeting Link</Label>
+              <Input value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} placeholder="https://meet.google.com/..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editAppt} onOpenChange={() => setEditAppt(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Appointment</DialogTitle></DialogHeader>
+          {editAppt && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Title</Label>
+                  <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={2} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <Input type="datetime-local" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Time</Label>
+                  <Input type="datetime-local" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Attendee Info</Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <Input placeholder="Name" value={editForm.attendeeName} onChange={(e) => setEditForm({ ...editForm, attendeeName: e.target.value })} />
+                  <Input placeholder="Email" value={editForm.attendeeEmail} onChange={(e) => setEditForm({ ...editForm, attendeeEmail: e.target.value })} />
+                  <Input placeholder="Phone" value={editForm.attendeePhone} onChange={(e) => setEditForm({ ...editForm, attendeePhone: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Meeting Link</Label>
+                <Input value={editForm.meetingLink} onChange={(e) => setEditForm({ ...editForm, meetingLink: e.target.value })} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditAppt(null)}>Cancel</Button>
+            <Button onClick={handleEditSave} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={!!cancelId} onOpenChange={() => { setCancelId(null); setCancelReason(''); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Appointment</DialogTitle>
+            <DialogDescription>The appointment will be marked as cancelled. You can reschedule it later from the list.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Reason (optional)</Label>
+            <Textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={2} placeholder="Client asked to postpone..." />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCancelId(null); setCancelReason(''); }}>No, Keep It</Button>
+            <Button variant="destructive" onClick={() => cancelId && cancelMutation.mutate({ id: cancelId, reason: cancelReason.trim() || undefined })} disabled={cancelMutation.isPending}>
+              {cancelMutation.isPending ? 'Cancelling...' : 'Yes, Cancel'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Dialog */}
+      <Dialog open={!!rescheduleAppt} onOpenChange={() => setRescheduleAppt(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reschedule Appointment</DialogTitle>
+            <DialogDescription>
+              {rescheduleAppt?.title} · currently {rescheduleAppt ? formatDate(rescheduleAppt.startTime) : ''}
+              {rescheduleAppt?.status === 'cancelled' && ' (cancelled — will become scheduled again)'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>New Start *</Label>
+                <Input type="datetime-local" value={rescheduleForm.startTime} onChange={(e) => onRescheduleStartChange(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>New End *</Label>
+                <Input type="datetime-local" value={rescheduleForm.endTime} onChange={(e) => setRescheduleForm({ ...rescheduleForm, endTime: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason (optional)</Label>
+              <Textarea value={rescheduleForm.reason} onChange={(e) => setRescheduleForm({ ...rescheduleForm, reason: e.target.value })} rows={2} placeholder="Client requested a later slot..." />
+            </div>
+            {rescheduleAppt?.rescheduleHistory?.length > 0 && (
+              <div className="text-xs text-muted-foreground space-y-1">
+                <div className="font-medium">History</div>
+                {rescheduleAppt.rescheduleHistory.slice(-3).reverse().map((h: any, i: number) => (
+                  <div key={i}>{formatDate(h.fromStartTime)} → {formatDate(h.toStartTime)}{h.reason ? ` (${h.reason})` : ''}</div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescheduleAppt(null)}>Cancel</Button>
+            <Button onClick={handleReschedule} disabled={rescheduleMutation.isPending}>
+              {rescheduleMutation.isPending ? 'Saving...' : 'Reschedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Appointment</DialogTitle>
+            <DialogDescription>This will permanently delete the appointment record. This cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
