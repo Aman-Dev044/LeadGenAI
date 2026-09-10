@@ -121,6 +121,8 @@ async function bootstrap() {
     .addTag('follow-ups', 'Follow-up Workflows')
     .addTag('visitor-tracking', 'Visitor Tracking')
     .addTag('billing', 'Billing & Subscriptions')
+    .addTag('super-admin', 'Owner Console (SUPER_ADMIN only, cross-tenant)')
+    .addTag('platform', 'Public platform status')
     .addTag('health', 'Health Check')
     .build();
 

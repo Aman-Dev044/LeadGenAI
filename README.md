@@ -98,9 +98,37 @@ npm run dev
 
 ## 🔑 Default Seed Credentials
 
+### Platform owner (Super Admin / Owner Console)
+- **Tenant slug:** `owner`
+- **Email:** `superadmin@lead.ai`
+- **Password:** `SuperAdmin@Lead.AI`
+
+Logs in at the normal login page and lands on **Dashboard > Owner console** (`/dashboard/admin`). Credentials come from the `SUPER_ADMIN_*` variables in `apps/api/.env` and are (re)applied every time `npm run seed` runs.
+
+### Demo tenant
 - **Workspace / Tenant:** `demo`
 - **Email:** `admin@demo.com`
 - **Password:** `Admin@123`
+
+---
+
+## 👑 Owner Console (Super Admin)
+
+Cross-tenant control panel, restricted to the `SUPER_ADMIN` role (API prefix `/api/v1/admin/*`, Swagger tag `super-admin`).
+
+| Area | What you can do |
+|---|---|
+| **Overview** | Platform KPIs (tenants, users, leads, conversations, AI tokens), 30-day trends, plan/status mix, top tenants, live activity feed, global search across tenants / users / leads |
+| **Tenants** | List with per-tenant counts, create tenant + first admin, edit plan / status / limits / feature flags / notes, suspend (revokes sessions) & re-activate, soft-delete or purge, CSV export |
+| **Log in as tenant** | One-click impersonation of any tenant user. Session is flagged `impersonatedBy`, expires in 1h, banner shown in the dashboard, everything audit-logged |
+| **All users** | Every account across tenants: edit role / active, reset password, force logout, add more platform owners |
+| **Usage & limits** | Monthly consumption vs plan limits per tenant with over / near-limit health |
+| **Audit logs** | Cross-tenant audit trail with actor, tenant, IP and full details |
+| **Announcements** | Platform-wide banner (level, link, time window) + broadcast in-app/email notifications filtered by role / plan / tenant |
+| **Platform settings** | Maintenance mode (everyone except owners gets 503), self-service signup on/off, default plan & trial days, global feature flags, per-plan limits, reserved slugs |
+| **System health** | Uptime, memory, Mongo stats & collection counts, Redis, which integrations (AI / email / Twilio / S3) are configured |
+
+Extra: a `SUPER_ADMIN` may call any tenant-scoped endpoint on behalf of another tenant by sending `X-Tenant-Id: <tenantId>`.
 
 ---
 

@@ -131,6 +131,29 @@ export class Tenant {
   @Prop()
   trialEndsAt: Date;
 
+  // ---- Super admin (owner) managed fields ----
+
+  // Per-tenant feature flags; override the platform-wide defaults
+  @Prop({ type: Object, default: {} })
+  featureFlags: Record<string, boolean>;
+
+  // Private notes only visible in the owner console
+  @Prop({ type: String, default: '' })
+  internalNotes: string;
+
+  @Prop({ type: String })
+  suspendedReason: string;
+
+  @Prop()
+  suspendedAt: Date;
+
+  // Marks the platform owner's own workspace (cannot be suspended/deleted)
+  @Prop({ default: false })
+  isPlatformOwner: boolean;
+
+  @Prop({ type: String })
+  createdBy: string;
+
   @Prop()
   deletedAt: Date;
 }

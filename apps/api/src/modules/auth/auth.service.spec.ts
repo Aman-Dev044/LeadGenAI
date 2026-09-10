@@ -6,6 +6,7 @@ import { ConflictException, UnauthorizedException, BadRequestException } from '@
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
+import { PlatformSettingsService } from '../platform/platform-settings.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -89,6 +90,18 @@ describe('AuthService', () => {
           provide: EMAIL_PROVIDER,
           useValue: {
             sendEmail: jest.fn().mockResolvedValue({ success: true, messageId: 'msg-1' }),
+          },
+        },
+        {
+          provide: PlatformSettingsService,
+          useValue: {
+            isSignupEnabled: () => true,
+            isMaintenance: () => false,
+            maintenanceMessage: () => 'maintenance',
+            isSlugReserved: () => false,
+            defaultPlan: () => 'free',
+            trialDays: () => 14,
+            limitsForPlan: () => ({ maxAgents: 1, maxLeads: 100, maxConversationsPerMonth: 500, maxKnowledgeSources: 5, maxUsers: 2 }),
           },
         },
       ],

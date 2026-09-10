@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The header theme toggle adds/removes `.dark` on <html>; make `dark:` utilities follow it */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-background: #ffffff;
   --color-foreground: #0a0a0a;

@@ -1,5 +1,8 @@
 'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/auth-store';
 import { Users, MessageSquare, Bot, Target, TrendingUp, ArrowLeftRight, Ticket, Calendar } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { StatCard } from '@/components/shared/stat-card';
@@ -10,6 +13,15 @@ import { LeadsByStatusChart } from '@/components/charts/leads-by-status-chart';
 import { ConversationTrendChart } from '@/components/charts/conversation-trend-chart';
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user, impersonation } = useAuthStore();
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+
+  // The owner's home is the console, not their (empty) own workspace
+  useEffect(() => {
+    if (isOwner) router.replace('/dashboard/admin');
+  }, [isOwner, router]);
+
   const { data: overview, isLoading } = useQuery({
     queryKey: ['dashboard', 'overview'],
     queryFn: () => api.get<any>('/dashboard/overview'),
@@ -28,7 +40,7 @@ export default function DashboardPage() {
     refetchInterval: 15000,
   });
 
-  if (isLoading) return <Loading />;
+  if (isLoading || isOwner) return <Loading />;
 
   // Backend overview returns: totalLeads, totalConversations, activeAgents, totalUsers, leadsByStatus (object), leadsByTemperature (object)
   const raw = (overview as any)?.data || {};

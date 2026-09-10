@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
+import { PlatformBanner } from '@/components/layout/platform-banner';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { Loading } from '@/components/shared/loading';
@@ -35,6 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-background">
       <Sidebar />
       <div className={cn('transition-all duration-300', sidebarOpen ? 'ml-64' : 'ml-16')}>
+        <PlatformBanner />
         <Header />
         <main className="p-6">
           <ErrorBoundary>{children}</ErrorBoundary>

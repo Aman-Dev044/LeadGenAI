@@ -6,18 +6,24 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { SUPER_ADMIN_ONLY_KEY } from '../decorators/super-admin.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const superAdminOnly =
+      this.reflector.getAllAndOverride<boolean>(SUPER_ADMIN_ONLY_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) === true;
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    if (!requiredRoles || requiredRoles.length === 0) {
+    if (!superAdminOnly && (!requiredRoles || requiredRoles.length === 0)) {
       return true;
     }
 
@@ -28,12 +34,17 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not found in request');
     }
 
-    // SUPER_ADMIN bypasses all role checks
+    // SUPER_ADMIN (platform owner) bypasses all role checks
     if (user.role === 'SUPER_ADMIN') {
       return true;
     }
 
-    // VIEWER gets read-only access (GET requests only) — but ONLY if their role is in the required list
+    // Owner-console routes: nobody else, regardless of method
+    if (superAdminOnly || (requiredRoles?.length === 1 && requiredRoles[0] === 'SUPER_ADMIN')) {
+      throw new ForbiddenException('This area is restricted to the platform owner');
+    }
+
+    // VIEWER gets read-only access (GET requests only)
     if (user.role === 'VIEWER') {
       const method = request.method;
       if (method === 'GET') {

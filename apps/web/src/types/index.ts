@@ -276,3 +276,50 @@ export interface DashboardOverview {
   pendingHandoffs: number;
   openTickets: number;
 }
+
+// ---------------------------------------------------------------- owner console
+
+export interface SessionTenant {
+  id: string;
+  name: string;
+  slug: string;
+  plan?: string;
+  status?: string;
+  isPlatformOwner?: boolean;
+}
+
+export interface PlatformStatus {
+  platformName: string;
+  supportEmail: string;
+  maintenanceMode: boolean;
+  maintenanceMessage?: string;
+  signupEnabled: boolean;
+  announcement: { message: string; level: 'info' | 'warning' | 'critical'; link?: string } | null;
+}
+
+export interface PlatformSettings {
+  platformName: string;
+  supportEmail: string;
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  signupEnabled: boolean;
+  defaultPlan: string;
+  trialDays: number;
+  announcement: { enabled: boolean; message: string; level: 'info' | 'warning' | 'critical'; link?: string; startsAt?: string; endsAt?: string };
+  featureFlags: Record<string, boolean>;
+  planLimits: Record<string, TenantLimits>;
+  reservedSlugs: string[];
+  knownFeatureFlags: { key: string; label: string; description: string; default: boolean }[];
+  plans: string[];
+  updatedAt?: string;
+}
+
+export interface AdminTenant extends Tenant {
+  featureFlags?: Record<string, boolean>;
+  internalNotes?: string;
+  suspendedReason?: string;
+  suspendedAt?: string;
+  isPlatformOwner?: boolean;
+  deletedAt?: string;
+  stats?: { users: number; leads: number; conversations: number; agents: number; lastConversationAt?: string | null };
+}

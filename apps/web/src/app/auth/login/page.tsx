@@ -40,10 +40,12 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     try {
-      const res: any = await api.post('/auth/login', data);
-      setAuth(res.data.user, res.data.accessToken, res.data.refreshToken);
-      toast.success('Welcome back!');
-      router.push(getNextPath());
+      const res: any = await api.post('/auth/login', { ...data, tenantSlug: data.tenantSlug.trim().toLowerCase(), email: data.email.trim() });
+      setAuth(res.data.user, res.data.accessToken, res.data.refreshToken, res.data.tenant);
+      const isOwner = res.data.user?.role === 'SUPER_ADMIN';
+      toast.success(isOwner ? 'Welcome, platform owner' : 'Welcome back!');
+      const next = getNextPath();
+      router.push(isOwner && next === '/dashboard' ? '/dashboard/admin' : next);
     } catch (err: any) {
       toast.error(err.message || 'Login failed');
     } finally {

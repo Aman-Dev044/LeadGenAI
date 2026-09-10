@@ -31,6 +31,10 @@ export class RefreshToken {
 
   @Prop()
   ip: string;
+
+  // Set when a super admin is impersonating this user (their userId)
+  @Prop()
+  impersonatedBy: string;
 }
 
 export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);

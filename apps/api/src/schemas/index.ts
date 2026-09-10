@@ -25,3 +25,4 @@ export * from './follow-up-log.schema';
 export * from './subscription.schema';
 export * from './invoice.schema';
 export * from './usage-record.schema';
+export * from './platform-settings.schema';

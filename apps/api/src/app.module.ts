@@ -47,6 +47,8 @@ import { AppointmentModule } from './modules/appointment/appointment.module';
 import { FollowUpModule } from './modules/follow-up/follow-up.module';
 import { VisitorTrackingModule } from './modules/visitor-tracking/visitor-tracking.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { PlatformModule } from './modules/platform/platform.module';
+import { SuperAdminModule } from './modules/super-admin/super-admin.module';
 
 // Gateways (WebSocket)
 import { GatewayModule } from './gateways/gateway.module';
@@ -105,6 +107,9 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     // Event bus (global) - must be registered before feature modules that emit on it
     EventBusModule,
 
+    // Platform-wide settings (global): maintenance mode, signup toggle, announcement, plan limits
+    PlatformModule,
+
     // Providers
     AIModule,
     EmailModule,
@@ -134,6 +139,9 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     FollowUpModule,
     VisitorTrackingModule,
     BillingModule,
+
+    // Owner console (SUPER_ADMIN only, cross-tenant)
+    SuperAdminModule,
 
     // WebSocket Gateways
     GatewayModule,

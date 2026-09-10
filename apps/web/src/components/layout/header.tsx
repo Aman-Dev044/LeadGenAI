@@ -1,22 +1,25 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { Bell, LogOut, Moon, Sun, User } from 'lucide-react';
+import { Bell, Crown, LogOut, Moon, Sun, User, UserCog } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { getInitials } from '@/lib/utils';
 import { api } from '@/lib/api-client';
+import { exitImpersonation } from '@/lib/impersonation';
 import { useQuery } from '@tanstack/react-query';
 
 export function Header() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, tenant, impersonation, logout } = useAuthStore();
   const { theme, setTheme, unreadNotificationsCount } = useUIStore();
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications', 'unread-count'],
@@ -36,7 +39,21 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
-      <div className="flex-1" />
+      <div className="flex flex-1 items-center gap-2 min-w-0">
+        {tenant && (
+          <span className="truncate text-sm text-muted-foreground">
+            {tenant.name} <span className="opacity-60">/ {tenant.slug}</span>
+          </span>
+        )}
+        {impersonation && <Badge variant="warning">Impersonating</Badge>}
+        {isOwner && <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400">Platform owner</Badge>}
+      </div>
+
+      {isOwner && (
+        <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/admin')}>
+          <Crown className="mr-2 h-4 w-4 text-amber-500" /> Owner console
+        </Button>
+      )}
 
       <Button
         variant="ghost"
@@ -69,9 +86,23 @@ export function Header() {
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium">{user?.firstName} {user?.lastName}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
+              <p className="text-[11px] text-muted-foreground">{user?.role}</p>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {impersonation && (
+            <>
+              <DropdownMenuItem onClick={exitImpersonation}>
+                <UserCog className="mr-2 h-4 w-4" /> Exit impersonation
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          {isOwner && (
+            <DropdownMenuItem onClick={() => router.push('/dashboard/admin')}>
+              <Crown className="mr-2 h-4 w-4" /> Owner console
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
             <User className="mr-2 h-4 w-4" /> Profile
           </DropdownMenuItem>

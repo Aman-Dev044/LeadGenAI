@@ -106,6 +106,15 @@ export default () => ({
     key: requireInProd(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY', 'dev-encryption-key-32-chars-long!!'),
     algorithm: process.env.ENCRYPTION_ALGORITHM || 'aes-256-gcm',
   },
+  // Platform owner account created/refreshed by `npm run seed`
+  superAdmin: {
+    tenantName: process.env.SUPER_ADMIN_TENANT_NAME || 'Platform Owner',
+    tenantSlug: (process.env.SUPER_ADMIN_TENANT_SLUG || 'owner').toLowerCase(),
+    email: (process.env.SUPER_ADMIN_EMAIL || 'superadmin@lead.ai').toLowerCase(),
+    password: process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin@Lead.AI',
+    firstName: process.env.SUPER_ADMIN_FIRST_NAME || 'Super',
+    lastName: process.env.SUPER_ADMIN_LAST_NAME || 'Admin',
+  },
   swagger: {
     enabled: process.env.SWAGGER_ENABLED !== 'false',
     title: process.env.SWAGGER_TITLE || 'AI Lead Generation API',

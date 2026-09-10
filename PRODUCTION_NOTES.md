@@ -82,6 +82,24 @@ start.bat                                 # builds API, dashboard, widget and st
 
 Tests: `cd apps/api && npx jest` (8 suites, 66 tests).
 
+## Owner console / super admin (new)
+
+- `npm run seed` always ensures the owner workspace (slug `owner`, `isPlatformOwner: true`) and the
+  `SUPER_ADMIN` user exist, using `SUPER_ADMIN_*` from `.env` (defaults: `superadmin@lead.ai` /
+  `SuperAdmin@Lead.AI`). Change these in production before seeding.
+- All owner routes live under `/api/v1/admin/*` (`apps/api/src/modules/super-admin`) and are guarded by
+  `@SuperAdminOnly()`; no other role, including VIEWER's read-only bypass, can reach them.
+- `PlatformSettings` (collection `platform_settings`, single doc `key: global`) holds maintenance mode,
+  signup toggle, announcement banner, global feature flags, per-plan limits and reserved slugs. It is cached
+  in memory and refreshed every 30s (`PlatformSettingsService`), so several API replicas converge quickly.
+- Maintenance mode returns 503 for every non-owner login, refresh and authenticated request. Public widget
+  endpoints keep working.
+- Impersonation issues a 1h session flagged `impersonatedBy`; the claim survives token refresh. Suspending a
+  tenant, resetting a password or force-logout revokes refresh tokens immediately (access tokens expire in 15m).
+- Purging a tenant deletes every tenant-scoped collection except `AuditLog`, so the trail stays.
+- The owner workspace cannot be suspended or deleted, the last active SUPER_ADMIN cannot be demoted or
+  deactivated, and owners cannot deactivate themselves.
+
 ## Not covered here
 
 Billing (payment gateway, invoice webhook verification) is untouched.

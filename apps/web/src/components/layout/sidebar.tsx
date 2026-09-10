@@ -6,16 +6,20 @@ import {
   LayoutDashboard, Users, MessageSquare, Bot, BookOpen, BarChart3,
   Bell, Settings, CreditCard, Ticket, ArrowLeftRight, Calendar,
   Workflow, Globe, Key, Webhook, Target, UserCog, ChevronLeft,
-  ChevronRight, Sparkles,
+  ChevronRight, Sparkles, Crown, Building2, Gauge, ScrollText,
+  Megaphone, SlidersHorizontal, Activity, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui-store';
+import { useAuthStore } from '@/store/auth-store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+type NavItem = { label: string; href: string; icon: any; badgeKey?: string; exact?: boolean };
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
   { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads' },
   { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare },
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
@@ -35,8 +39,21 @@ const navItems = [
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
+/** Owner console - only rendered for SUPER_ADMIN when not impersonating. */
+const ownerNavItems: NavItem[] = [
+  { label: 'Overview', href: '/dashboard/admin', icon: Crown, exact: true },
+  { label: 'Tenants', href: '/dashboard/admin/tenants', icon: Building2 },
+  { label: 'All Users', href: '/dashboard/admin/users', icon: ShieldCheck },
+  { label: 'Usage & Limits', href: '/dashboard/admin/usage', icon: Gauge },
+  { label: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: ScrollText },
+  { label: 'Announcements', href: '/dashboard/admin/announcements', icon: Megaphone },
+  { label: 'Platform Settings', href: '/dashboard/admin/settings', icon: SlidersHorizontal },
+  { label: 'System Health', href: '/dashboard/admin/system', icon: Activity },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, impersonation } = useAuthStore();
   const {
     sidebarOpen,
     toggleSidebar,
@@ -48,6 +65,8 @@ export function Sidebar() {
     clearHandoffBadge,
     clearLeadBadge,
   } = useUIStore();
+
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
 
   // Clear badges when active section is viewed
   useEffect(() => {
@@ -74,6 +93,63 @@ export function Sidebar() {
     return null;
   };
 
+  const renderItem = (item: NavItem, accent = false) => {
+    const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/');
+    const badge = getBadge(item.badgeKey);
+
+    const link = (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+          isActive
+            ? accent ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          !sidebarOpen && 'justify-center px-2',
+        )}
+      >
+        <div className="relative">
+          <item.icon className="h-4 w-4 shrink-0" />
+          {!sidebarOpen && badge && (
+            <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600 ring-2 ring-background"></span>
+            </span>
+          )}
+        </div>
+
+        {sidebarOpen && (
+          <>
+            <span className="flex-1 truncate">{item.label}</span>
+            {badge && (
+              <span className="ml-auto flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm ring-2 ring-red-500/20 animate-pulse">
+                {badge.label}
+              </span>
+            )}
+          </>
+        )}
+      </Link>
+    );
+
+    if (!sidebarOpen) {
+      return (
+        <Tooltip key={item.href} delayDuration={0}>
+          <TooltipTrigger asChild>{link}</TooltipTrigger>
+          <TooltipContent side="right" className="flex items-center gap-2">
+            <span>{item.label}</span>
+            {badge && (
+              <span className="rounded-full bg-red-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                {badge.label}
+              </span>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return link;
+  };
+
   return (
     <aside
       className={cn(
@@ -83,9 +159,14 @@ export function Sidebar() {
     >
       <div className="flex h-14 items-center border-b px-4">
         {sidebarOpen ? (
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href={isOwner ? '/dashboard/admin' : '/dashboard'} className="flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold">LeadAI</span>
+            {isOwner && (
+              <span className="ml-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                Owner
+              </span>
+            )}
           </Link>
         ) : (
           <Sparkles className="h-6 w-6 text-primary mx-auto" />
@@ -94,62 +175,23 @@ export function Sidebar() {
 
       <ScrollArea className="h-[calc(100vh-3.5rem-3rem)]">
         <nav className="flex flex-col gap-1 p-2">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
-            const badge = getBadge(item.badgeKey);
-
-            const link = (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                  !sidebarOpen && 'justify-center px-2',
-                )}
-              >
-                <div className="relative">
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  {!sidebarOpen && badge && (
-                    <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600 ring-2 ring-background"></span>
-                    </span>
-                  )}
-                </div>
-
-                {sidebarOpen && (
-                  <>
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {badge && (
-                      <span className="ml-auto flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm ring-2 ring-red-500/20 animate-pulse">
-                        {badge.label}
-                      </span>
-                    )}
-                  </>
-                )}
-              </Link>
-            );
-
-            if (!sidebarOpen) {
-              return (
-                <Tooltip key={item.href} delayDuration={0}>
-                  <TooltipTrigger asChild>{link}</TooltipTrigger>
-                  <TooltipContent side="right" className="flex items-center gap-2">
-                    <span>{item.label}</span>
-                    {badge && (
-                      <span className="rounded-full bg-red-600 px-1.5 py-0.2 text-[10px] font-bold text-white">
-                        {badge.label}
-                      </span>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            }
-            return link;
-          })}
+          {isOwner && (
+            <>
+              {sidebarOpen && (
+                <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Owner console
+                </p>
+              )}
+              {ownerNavItems.map((item) => renderItem(item, true))}
+              <div className="my-2 border-t" />
+              {sidebarOpen && (
+                <p className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Own workspace
+                </p>
+              )}
+            </>
+          )}
+          {navItems.map((item) => renderItem(item))}
         </nav>
       </ScrollArea>
 
