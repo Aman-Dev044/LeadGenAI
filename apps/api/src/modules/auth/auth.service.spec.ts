@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
@@ -54,6 +54,7 @@ describe('AuthService', () => {
             findOne: jest.fn(),
             findById: jest.fn(),
             create: jest.fn(),
+            updateOne: jest.fn(),
           },
         },
         {
@@ -116,13 +117,14 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
-    it('should register a new tenant and admin user', async () => {
+    it('should register a new tenant and admin user and email a verification code instead of tokens', async () => {
       tenantModel.findOne.mockResolvedValue(null);
       tenantModel.create.mockResolvedValue(mockTenant);
       userModel.create.mockResolvedValue(mockUser);
-      refreshTokenModel.create.mockResolvedValue({});
+      userModel.updateOne.mockResolvedValue({});
+      emailProvider.sendEmail.mockResolvedValue({ success: true, messageId: 'x' });
 
-      const result = await service.register({
+      const result: any = await service.register({
         tenantName: 'Test Org',
         firstName: 'John',
         lastName: 'Doe',
@@ -130,10 +132,22 @@ describe('AuthService', () => {
         password: 'StrongPass@123',
       });
 
-      expect(result).toHaveProperty('accessToken');
-      expect(result).toHaveProperty('refreshToken');
+      expect(result.requiresVerification).toBe(true);
+      expect(result).not.toHaveProperty('accessToken');
+      expect(result).not.toHaveProperty('refreshToken');
       expect(result.user.email).toBe('john@test.com');
       expect(result.tenant.slug).toBe('test-org');
+      expect(result.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(5 * 60 * 1000);
+      expect(userModel.create).toHaveBeenCalledWith(expect.objectContaining({ pendingEmailVerification: true }));
+      expect(userModel.updateOne).toHaveBeenCalledWith(
+        { _id: mockUser._id },
+        expect.objectContaining({
+          $set: expect.objectContaining({ emailVerificationCode: expect.any(String), emailVerificationAttempts: 0 }),
+        }),
+      );
+      expect(emailProvider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'john@test.com', subject: expect.stringMatching(/^\d{6} is your verification code$/) }),
+      );
     });
 
     it('should throw ConflictException if tenant slug exists', async () => {
@@ -148,6 +162,113 @@ describe('AuthService', () => {
           password: 'StrongPass@123',
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('email verification', () => {
+    const crypto = require('crypto');
+    const sha = (c: string) => crypto.createHash('sha256').update(c).digest('hex');
+
+    it('login is blocked with EMAIL_NOT_VERIFIED while the signup is pending', async () => {
+      tenantModel.findOne.mockResolvedValue(mockTenant);
+      const hashedPassword = await bcrypt.hash('StrongPass@123', 12);
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          password: hashedPassword,
+          pendingEmailVerification: true,
+          emailVerificationExpires: new Date(Date.now() + 60_000),
+          emailVerificationSentAt: new Date(),
+        }),
+      });
+
+      const attempt = service.login({ email: 'john@test.com', password: 'StrongPass@123', tenantSlug: 'test-org' });
+      await expect(attempt).rejects.toThrow(ForbiddenException);
+      await attempt.catch((e: any) => {
+        expect(e.getResponse()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED', details: { email: 'john@test.com', tenantSlug: 'test-org' } });
+      });
+      expect(refreshTokenModel.create).not.toHaveBeenCalled();
+    });
+
+    it('verifyEmail with the right code marks the user verified and returns tokens', async () => {
+      tenantModel.findOne.mockResolvedValue(mockTenant);
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          pendingEmailVerification: true,
+          emailVerificationCode: sha('123456'),
+          emailVerificationExpires: new Date(Date.now() + 60_000),
+          emailVerificationAttempts: 0,
+        }),
+      });
+      userModel.updateOne.mockResolvedValue({});
+      refreshTokenModel.create.mockResolvedValue({});
+
+      const result: any = await service.verifyEmail('john@test.com', 'test-org', '123456');
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(userModel.updateOne).toHaveBeenCalledWith(
+        { _id: mockUser._id },
+        expect.objectContaining({ $set: expect.objectContaining({ pendingEmailVerification: false, emailVerifiedAt: expect.any(Date) }) }),
+      );
+    });
+
+    it('verifyEmail rejects a wrong code and counts the attempt', async () => {
+      tenantModel.findOne.mockResolvedValue(mockTenant);
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          pendingEmailVerification: true,
+          emailVerificationCode: sha('123456'),
+          emailVerificationExpires: new Date(Date.now() + 60_000),
+          emailVerificationAttempts: 1,
+        }),
+      });
+      userModel.updateOne.mockResolvedValue({});
+
+      await expect(service.verifyEmail('john@test.com', 'test-org', '654321')).rejects.toThrow(BadRequestException);
+      expect(userModel.updateOne).toHaveBeenCalledWith({ _id: mockUser._id }, { $inc: { emailVerificationAttempts: 1 } });
+    });
+
+    it('verifyEmail rejects an expired code', async () => {
+      tenantModel.findOne.mockResolvedValue(mockTenant);
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          pendingEmailVerification: true,
+          emailVerificationCode: sha('123456'),
+          emailVerificationExpires: new Date(Date.now() - 1_000),
+          emailVerificationAttempts: 0,
+        }),
+      });
+
+      const attempt = service.verifyEmail('john@test.com', 'test-org', '123456');
+      await expect(attempt).rejects.toThrow(BadRequestException);
+      await attempt.catch((e: any) => expect(e.getResponse().code).toBe('VERIFICATION_CODE_EXPIRED'));
+    });
+
+    it('resendVerification enforces the 60s cooldown and then issues a new code', async () => {
+      tenantModel.findOne.mockResolvedValue(mockTenant);
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          pendingEmailVerification: true,
+          emailVerificationSentAt: new Date(),
+        }),
+      });
+      await expect(service.resendVerification('john@test.com', 'test-org')).rejects.toThrow(BadRequestException);
+
+      userModel.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          ...mockUser,
+          pendingEmailVerification: true,
+          emailVerificationSentAt: new Date(Date.now() - 120_000),
+        }),
+      });
+      userModel.updateOne.mockResolvedValue({});
+      const result: any = await service.resendVerification('john@test.com', 'test-org');
+      expect(result.expiresAt).toBeInstanceOf(Date);
+      expect(emailProvider.sendEmail).toHaveBeenCalled();
     });
   });
 

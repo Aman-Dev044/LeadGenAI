@@ -38,7 +38,17 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const res: any = await api.post('/auth/register', data);
-      setAuth(res.data.user, res.data.accessToken, res.data.refreshToken);
+      if (res.data?.requiresVerification) {
+        toast.success('Account created! Check your email for the verification code.');
+        const params = new URLSearchParams({
+          email: res.data.email || data.email,
+          tenant: res.data.tenantSlug || res.data.tenant?.slug || '',
+          ...(res.data.expiresAt ? { expiresAt: res.data.expiresAt } : {}),
+        });
+        router.push(`/auth/verify-email?${params.toString()}`);
+        return;
+      }
+      setAuth(res.data.user, res.data.accessToken, res.data.refreshToken, res.data.tenant);
       toast.success('Account created! Welcome to LeadAI.');
       router.push('/dashboard');
     } catch (err: any) {

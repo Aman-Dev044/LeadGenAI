@@ -12,6 +12,9 @@ import { ConversationSchema } from '../../schemas/conversation.schema';
 import { MessageSchema } from '../../schemas/message.schema';
 import { KnowledgeSourceSchema } from '../../schemas/knowledge-source.schema';
 import { NotificationSchema } from '../../schemas/notification.schema';
+import { UserSchema } from '../../schemas/user.schema';
+import { NotificationModule } from '../notification/notification.module';
+import { PlanExpiryReminderService } from './plan-expiry-reminder.service';
 
 @Module({
   imports: [
@@ -25,10 +28,12 @@ import { NotificationSchema } from '../../schemas/notification.schema';
       { name: 'Message', schema: MessageSchema },
       { name: 'KnowledgeSource', schema: KnowledgeSourceSchema },
       { name: 'Notification', schema: NotificationSchema },
+      { name: 'User', schema: UserSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [BillingController],
-  providers: [BillingService, UsageMeterService],
-  exports: [BillingService, UsageMeterService],
+  providers: [BillingService, UsageMeterService, PlanExpiryReminderService],
+  exports: [BillingService, UsageMeterService, PlanExpiryReminderService],
 })
 export class BillingModule {}

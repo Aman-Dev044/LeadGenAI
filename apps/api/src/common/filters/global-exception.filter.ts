@@ -20,6 +20,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let errors: any = undefined;
+    let code: string | undefined;
+    let details: any = undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -31,6 +33,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         const resp = exceptionResponse as any;
         message = resp.message || exception.message;
         errors = resp.errors;
+        // Machine-readable hints for the client (e.g. EMAIL_NOT_VERIFIED + the email/tenant to verify)
+        if (typeof resp.code === 'string') code = resp.code;
+        if (resp.details && typeof resp.details === 'object') details = resp.details;
 
         // Handle class-validator errors
         if (Array.isArray(resp.message)) {
@@ -56,6 +61,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message,
       ...(errors && { errors }),
+      ...(code && { code }),
+      ...(details && { details }),
       timestamp: new Date().toISOString(),
       path: request.url,
     };

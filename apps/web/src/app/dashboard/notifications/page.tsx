@@ -8,6 +8,7 @@ import {
   MessageSquareOff, AlertTriangle, UserCheck, BookOpen, Mail,
   Smartphone, MessageCircle, Hash, Monitor, Send, BellRing,
   Filter, Eye, XCircle, CheckCircle,
+  CreditCard,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> =
   system_alert: { label: 'System Alert', icon: AlertTriangle, color: 'text-red-500' },
   assignment: { label: 'Assignment', icon: UserCheck, color: 'text-purple-500' },
   kb_processing: { label: 'KB Processing', icon: BookOpen, color: 'text-teal-500' },
+  billing: { label: 'Billing', icon: CreditCard, color: 'text-amber-500' },
 };
 
 const CHANNEL_CONFIG: Record<string, { label: string; icon: any }> = {
@@ -117,6 +119,8 @@ export default function NotificationsPage() {
       router.push(`/dashboard/knowledge-base`);
     } else if (n.type === 'assignment') {
       router.push(`/dashboard/leads`);
+    } else if (n.type === 'billing') {
+      router.push(`/dashboard/billing`);
     }
   };
 
@@ -159,6 +163,7 @@ export default function NotificationsPage() {
             <SelectItem value="system_alert">System Alert</SelectItem>
             <SelectItem value="assignment">Assignment</SelectItem>
             <SelectItem value="kb_processing">KB Processing</SelectItem>
+            <SelectItem value="billing">Billing</SelectItem>
           </SelectContent>
         </Select>
 
@@ -185,7 +190,7 @@ export default function NotificationsPage() {
             const channelCfg = getChannelConfig(n.channel);
             const TypeIcon = typeCfg.icon;
             const ChannelIcon = channelCfg.icon;
-            const isClickable = !!(n.data?.leadId || n.data?.conversationId || n.type === 'handoff_request' || n.type === 'kb_processing' || n.type === 'assignment');
+            const isClickable = !!(n.data?.leadId || n.data?.conversationId || n.type === 'handoff_request' || n.type === 'kb_processing' || n.type === 'assignment' || n.type === 'billing');
 
             return (
               <Card

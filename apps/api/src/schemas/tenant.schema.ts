@@ -131,6 +131,10 @@ export class Tenant {
   @Prop()
   trialEndsAt: Date;
 
+  // Last "your plan/trial is about to expire" reminder; one per expiry date (see PlanExpiryReminderService)
+  @Prop({ type: { kind: String, plan: String, expiresAt: Date, sentAt: Date }, default: undefined })
+  renewalReminder: { kind: 'trial' | 'subscription'; plan: string; expiresAt: Date; sentAt: Date };
+
   // ---- Super admin (owner) managed fields ----
 
   // Per-tenant feature flags; override the platform-wide defaults

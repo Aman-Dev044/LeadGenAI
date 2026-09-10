@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const AUTH_COOKIE = 'la_auth';
-const publicAuthPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password'];
+const publicAuthPaths = ['/auth/login', '/auth/register', '/auth/verify-email', '/auth/forgot-password', '/auth/reset-password'];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

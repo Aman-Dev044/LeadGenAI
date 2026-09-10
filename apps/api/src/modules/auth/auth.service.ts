@@ -15,6 +15,12 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterDto, LoginDto, ChangePasswordDto } from './dto';
+
+/** Email verification code: 6 digits, valid for 5 minutes, at most 5 wrong guesses per code. */
+const VERIFICATION_CODE_TTL_MS = 5 * 60 * 1000;
+const VERIFICATION_MAX_ATTEMPTS = 5;
+const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { PlatformSettingsService } from '../platform/platform-settings.service';
@@ -85,13 +91,18 @@ export class AuthService {
       password: hashedPassword,
       role: 'ADMIN',
       phone: dto.phone,
-      emailVerifiedAt: new Date(),
+      pendingEmailVerification: true,
     });
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user, tenant._id.toString());
+    // Email a one-time code; the account cannot sign in until it is confirmed
+    const { expiresAt } = await this.issueVerificationCode(user, tenant);
 
     return {
+      requiresVerification: true,
+      message: 'We emailed you a 6-digit verification code. Enter it to activate your account.',
+      email: user.email,
+      tenantSlug: tenant.slug,
+      expiresAt,
       user: {
         id: user._id,
         firstName: user.firstName,
@@ -104,8 +115,227 @@ export class AuthService {
         name: tenant.name,
         slug: tenant.slug,
       },
+    };
+  }
+
+  /**
+   * Generate a fresh 6-digit code, store its hash with a 5-minute expiry and email it.
+   * Returns the expiry so the client can show a countdown.
+   */
+  private async issueVerificationCode(user: any, tenant: any) {
+    const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const expiresAt = new Date(Date.now() + VERIFICATION_CODE_TTL_MS);
+    const sentAt = new Date();
+
+    await this.userModel.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          pendingEmailVerification: true,
+          emailVerificationCode: this.hashCode(code),
+          emailVerificationExpires: expiresAt,
+          emailVerificationSentAt: sentAt,
+          emailVerificationAttempts: 0,
+        },
+      },
+    );
+
+    let delivered = false;
+    try {
+      const result = await this.emailProvider.sendEmail({
+        to: user.email,
+        subject: `${code} is your verification code`,
+        text: `Hi ${user.firstName || ''},\n\nYour verification code for ${tenant.name} is: ${code}\n\nIt expires in 5 minutes. If you didn't sign up, ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Verify your email</h2>
+            <p>Hi ${user.firstName || ''},</p>
+            <p>Use this code to finish creating your <strong>${tenant.name}</strong> account:</p>
+            <p style="text-align: center; margin: 30px 0;">
+              <span style="display: inline-block; font-size: 32px; letter-spacing: 10px; font-weight: bold; background: #f4f4f8; padding: 14px 24px; border-radius: 8px; color: #4F46E5;">${code}</span>
+            </p>
+            <p style="color: #666; font-size: 14px;">This code expires in <strong>5 minutes</strong>.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't sign up, you can safely ignore this email.</p>
+            <hr style="border: 1px solid #eee;" />
+            <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+          </div>
+        `,
+      });
+      delivered = !!result?.success;
+    } catch (err: any) {
+      this.logger.error(`Failed to send verification email to ${user.email}: ${err.message}`);
+    }
+
+    if (!delivered) {
+      this.logger.warn(`Verification email to ${user.email} was not delivered (email provider not configured?)`);
+      if (process.env.NODE_ENV !== 'production') {
+        // Local development without SMTP: surface the code in the API log so signup can still be tested
+        this.logger.warn(`[DEV] Verification code for ${user.email}: ${code}`);
+      }
+    }
+
+    return { expiresAt };
+  }
+
+  private hashCode(code: string) {
+    return crypto.createHash('sha256').update(code).digest('hex');
+  }
+
+  private async findPendingUser(email: string, tenantSlug: string) {
+    const tenant = await this.tenantModel.findOne({ slug: tenantSlug.toLowerCase().trim(), deletedAt: null });
+    if (!tenant) return { tenant: null, user: null };
+    const user = await this.userModel
+      .findOne({ tenantId: tenant._id.toString(), email: email.toLowerCase().trim(), deletedAt: null })
+      .select('+emailVerificationCode');
+    return { tenant, user };
+  }
+
+  /** Confirm the emailed code and sign the user in. */
+  async verifyEmail(email: string, tenantSlug: string, code: string, userAgent?: string, ip?: string) {
+    const { tenant, user } = await this.findPendingUser(email, tenantSlug);
+    if (!tenant || !user) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    if (!user.pendingEmailVerification && user.emailVerifiedAt) {
+      throw new BadRequestException('This email is already verified. Please sign in.');
+    }
+
+    if (!user.emailVerificationCode || !user.emailVerificationExpires) {
+      throw new BadRequestException({
+        message: 'No verification code is active. Please request a new one.',
+        code: 'VERIFICATION_CODE_MISSING',
+      });
+    }
+
+    if (new Date(user.emailVerificationExpires) < new Date()) {
+      throw new BadRequestException({
+        message: 'This code has expired. Please request a new one.',
+        code: 'VERIFICATION_CODE_EXPIRED',
+      });
+    }
+
+    if ((user.emailVerificationAttempts || 0) >= VERIFICATION_MAX_ATTEMPTS) {
+      throw new BadRequestException({
+        message: 'Too many incorrect attempts. Please request a new code.',
+        code: 'VERIFICATION_TOO_MANY_ATTEMPTS',
+      });
+    }
+
+    const expected = Buffer.from(user.emailVerificationCode, 'hex');
+    const given = Buffer.from(this.hashCode(code), 'hex');
+    const matches = expected.length === given.length && crypto.timingSafeEqual(expected, given);
+
+    if (!matches) {
+      await this.userModel.updateOne({ _id: user._id }, { $inc: { emailVerificationAttempts: 1 } });
+      const left = VERIFICATION_MAX_ATTEMPTS - (user.emailVerificationAttempts || 0) - 1;
+      throw new BadRequestException({
+        message:
+          left > 0
+            ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.`
+            : 'Incorrect code. Please request a new one.',
+        code: 'VERIFICATION_CODE_INVALID',
+      });
+    }
+
+    await this.userModel.updateOne(
+      { _id: user._id },
+      {
+        $set: { emailVerifiedAt: new Date(), pendingEmailVerification: false, lastLoginAt: new Date() },
+        $unset: {
+          emailVerificationCode: 1,
+          emailVerificationExpires: 1,
+          emailVerificationSentAt: 1,
+          emailVerificationAttempts: 1,
+        },
+      },
+    );
+
+    // Account is live now: welcome the new workspace admin (never blocks the response)
+    this.sendWelcomeEmail(user, tenant).catch((err) =>
+      this.logger.warn(`Welcome email to ${user.email} failed: ${err.message}`),
+    );
+
+    const tokens = await this.generateTokens(user, tenant._id.toString(), { userAgent, ip });
+    return {
+      user: this.publicUser(user),
+      tenant: this.publicTenant(tenant),
       ...tokens,
     };
+  }
+
+  private async sendWelcomeEmail(user: any, tenant: any) {
+    const appUrl = this.configService.get<string>('app.url') || 'http://localhost:3001';
+    const trialDays = tenant.trialEndsAt
+      ? Math.max(0, Math.ceil((new Date(tenant.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : 0;
+    const trialLine = trialDays > 0
+      ? `<p>Your free trial is active for the next <strong>${trialDays} days</strong>. We'll remind you before it ends.</p>`
+      : '';
+    await this.emailProvider.sendEmail({
+      to: user.email,
+      subject: `Welcome to LeadAI, ${user.firstName || 'there'}!`,
+      text: `Hi ${user.firstName || ''},
+
+Your workspace "${tenant.name}" is ready.
+Organization slug (needed to sign in): ${tenant.slug}
+Dashboard: ${appUrl}/dashboard
+
+Next steps: create an AI agent, add your knowledge base, and embed the chat widget on your website.
+
+AI Lead Generation Platform`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Welcome to LeadAI 🎉</h2>
+          <p>Hi ${user.firstName || ''},</p>
+          <p>Your workspace <strong>${tenant.name}</strong> is ready. Here is what you need to sign in:</p>
+          <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+            <tr><td style="padding: 6px 12px; color: #666;">Organization slug</td><td style="padding: 6px 12px;"><code style="background:#f4f4f8; padding: 2px 6px; border-radius: 4px;">${tenant.slug}</code></td></tr>
+            <tr><td style="padding: 6px 12px; color: #666;">Email</td><td style="padding: 6px 12px;">${user.email}</td></tr>
+          </table>
+          ${trialLine}
+          <p><strong>Get started in 3 steps</strong></p>
+          <ol style="color: #444; font-size: 14px; line-height: 1.7;">
+            <li>Create your first AI sales agent and give it a personality.</li>
+            <li>Add your website, PDFs or FAQs to the knowledge base so it answers accurately.</li>
+            <li>Copy the embed snippet and drop the chat widget on your site. Leads start flowing in.</li>
+          </ol>
+          <p style="text-align: center; margin: 30px 0;">
+            <a href="${appUrl}/dashboard" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Open your dashboard
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">Need help? Just reply to this email.</p>
+          <hr style="border: 1px solid #eee;" />
+          <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+        </div>
+      `,
+    });
+  }
+
+  /** Send a new code (60s cooldown). Never reveals whether the account exists. */
+  async resendVerification(email: string, tenantSlug: string) {
+    const generic = {
+      message: 'If the account is awaiting verification, a new code has been sent.',
+      expiresAt: null as Date | null,
+    };
+    const { tenant, user } = await this.findPendingUser(email, tenantSlug);
+    if (!tenant || !user || !user.pendingEmailVerification) {
+      return generic;
+    }
+
+    const sentAt = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
+    const waitMs = sentAt + VERIFICATION_RESEND_COOLDOWN_MS - Date.now();
+    if (waitMs > 0) {
+      throw new BadRequestException({
+        message: `Please wait ${Math.ceil(waitMs / 1000)}s before requesting another code.`,
+        code: 'VERIFICATION_RESEND_COOLDOWN',
+        details: { retryAfterSeconds: Math.ceil(waitMs / 1000) },
+      });
+    }
+
+    const { expiresAt } = await this.issueVerificationCode(user, tenant);
+    return { ...generic, expiresAt };
   }
 
   async login(dto: LoginDto, userAgent?: string, ip?: string) {
@@ -145,6 +375,21 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Self-service signups must confirm the emailed code first. Password was correct, so it is
+    // safe to say why and to push a fresh code when the previous one has expired.
+    if (user.pendingEmailVerification) {
+      const sentAt = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
+      const expired = !user.emailVerificationExpires || new Date(user.emailVerificationExpires) < new Date();
+      if (expired && Date.now() - sentAt >= VERIFICATION_RESEND_COOLDOWN_MS) {
+        await this.issueVerificationCode(user, tenant);
+      }
+      throw new ForbiddenException({
+        message: 'Please verify your email address before signing in. Check your inbox for the 6-digit code.',
+        code: EMAIL_NOT_VERIFIED,
+        details: { email: user.email, tenantSlug: tenant.slug },
+      });
     }
 
     const isSuperAdmin = user.role === 'SUPER_ADMIN';

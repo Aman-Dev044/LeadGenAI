@@ -35,6 +35,7 @@ export class Notification {
       'follow_up',
       'appointment',
       'support_ticket',
+      'billing',
     ],
     required: true,
   })

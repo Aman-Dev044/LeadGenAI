@@ -47,6 +47,16 @@ export default function LoginPage() {
       const next = getNextPath();
       router.push(isOwner && next === '/dashboard' ? '/dashboard/admin' : next);
     } catch (err: any) {
+      if (err?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        const details = err.data.details || {};
+        toast.info('Please verify your email first. We sent you a 6-digit code.');
+        const params = new URLSearchParams({
+          email: details.email || data.email.trim(),
+          tenant: details.tenantSlug || data.tenantSlug.trim().toLowerCase(),
+        });
+        router.push(`/auth/verify-email?${params.toString()}`);
+        return;
+      }
       toast.error(err.message || 'Login failed');
     } finally {
       setLoading(false);

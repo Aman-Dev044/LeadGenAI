@@ -42,6 +42,23 @@ export class User {
   @Prop()
   emailVerifiedAt: Date;
 
+  /** True for self-service signups until the emailed code is confirmed. Login is blocked while set. */
+  @Prop({ default: false })
+  pendingEmailVerification: boolean;
+
+  /** sha256 of the 6-digit code emailed at signup (never returned by default) */
+  @Prop({ select: false })
+  emailVerificationCode: string;
+
+  @Prop()
+  emailVerificationExpires: Date;
+
+  @Prop()
+  emailVerificationSentAt: Date;
+
+  @Prop({ default: 0 })
+  emailVerificationAttempts: number;
+
   @Prop()
   passwordResetToken: string;
 

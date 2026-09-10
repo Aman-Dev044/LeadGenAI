@@ -62,6 +62,21 @@ Embed:
 
 ## Security / robustness
 
+- Self-service signup (`POST /auth/register`) no longer returns tokens. A 6-digit code is emailed
+  (valid 5 minutes, 5 wrong guesses max, 60s resend cooldown) and the account cannot log in until
+  `POST /auth/verify-email` succeeds; `POST /auth/resend-verification` sends a fresh code. Login on an
+  unverified account returns 403 with `code: EMAIL_NOT_VERIFIED` and the dashboard redirects to
+  `/auth/verify-email`. Without SMTP configured the code is printed in the API log in development.
+  Users created by an admin, the owner console or the seed are marked verified and are unaffected.
+- Once the code is confirmed a welcome email goes out with the organization slug, dashboard link
+  and trial length.
+- `PlanExpiryReminderService` (billing module) sweeps hourly (`PLAN_REMINDER_POLL_INTERVAL_MS`) for
+  trials (`tenant.trialEndsAt`) and paid subscriptions (`subscription.currentPeriodEnd`) ending
+  within `PLAN_REMINDER_DAYS_BEFORE` days (default 7) and sends every active tenant ADMIN a renewal
+  email plus an in-app `billing` notification. Each expiry date is reminded about once
+  (`tenant.renewalReminder`, claimed atomically so replicas never double-send). Set
+  `PLAN_REMINDER_ENABLED=false` on all but one replica.
+
 - CORS: widget routes (`/api/v1/widget/*`, `/widget.js`, `/api/v1/health`) accept any origin without
   credentials; every other route only accepts `CORS_ALLOWED_ORIGINS`.
 - Dashboard routes are protected server-side by the Next.js middleware (marker cookie `la_auth`);

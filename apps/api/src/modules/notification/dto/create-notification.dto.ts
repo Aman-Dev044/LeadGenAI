@@ -29,6 +29,7 @@ export class CreateNotificationDto {
     'follow_up',
     'appointment',
     'support_ticket',
+    'billing',
   ])
   type: string;
 

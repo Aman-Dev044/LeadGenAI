@@ -16,6 +16,8 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
 } from './dto';
 import { Public } from '../../common/decorators';
 import { CurrentUser } from '../../common/decorators';
@@ -29,6 +31,22 @@ export class AuthController {
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  async verifyEmail(@Body() dto: VerifyEmailDto, @Req() req: any) {
+    return this.authService.verifyEmail(dto.email, dto.tenantSlug, dto.code, req.headers['user-agent'], req.ip);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email, dto.tenantSlug);
   }
 
   @Public()
