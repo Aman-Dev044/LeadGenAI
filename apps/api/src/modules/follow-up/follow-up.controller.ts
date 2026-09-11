@@ -14,7 +14,7 @@ import { CurrentTenant, Roles } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Controller('follow-ups')
-@Roles('ADMIN')
+@Roles('ADMIN', 'SALES_MANAGER')
 export class FollowUpController {
   constructor(private readonly followUpService: FollowUpService) {}
 

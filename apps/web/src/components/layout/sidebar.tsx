@@ -16,54 +16,69 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-export type NavItem = { label: string; href: string; icon: LucideIcon; badgeKey?: string; exact?: boolean };
+export type NavItem = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  badgeKey?: string;
+  exact?: boolean;
+  roles?: string[];
+};
 type NavGroup = { title: string; items: NavItem[] };
 
 export const navGroups: NavGroup[] = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true }],
+    items: [
+      {
+        label: 'Dashboard',
+        href: '/dashboard',
+        icon: LayoutDashboard,
+        exact: true,
+        roles: ['ADMIN', 'SALES_MANAGER', 'VIEWER'],
+      },
+    ],
   },
   {
     title: 'Pipeline',
     items: [
-      { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads' },
-      { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare },
-      { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs' },
-      { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar },
+      { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
+      { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
+      { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] },
+      { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
     ],
   },
   {
     title: 'AI Engine',
     items: [
-      { label: 'Agents', href: '/dashboard/agents', icon: Bot },
-      { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: BookOpen },
-      { label: 'Lead Scoring', href: '/dashboard/lead-scoring', icon: Target },
+      { label: 'Agents', href: '/dashboard/agents', icon: Bot, roles: ['ADMIN', 'SALES_MANAGER'] },
+      { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: BookOpen, roles: ['ADMIN', 'SALES_MANAGER'] },
+      { label: 'Lead Scoring', href: '/dashboard/lead-scoring', icon: Target, roles: ['ADMIN', 'SALES_MANAGER'] },
     ],
   },
   {
     title: 'Automation',
     items: [
-      { label: 'Follow-ups', href: '/dashboard/follow-ups', icon: Workflow },
-      { label: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook },
-      { label: 'API Keys', href: '/dashboard/api-keys', icon: Key },
+      { label: 'Follow-ups', href: '/dashboard/follow-ups', icon: Workflow, roles: ['ADMIN', 'SALES_MANAGER'] },
+      { label: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, roles: ['ADMIN'] },
+      { label: 'API Keys', href: '/dashboard/api-keys', icon: Key, roles: ['ADMIN'] },
     ],
   },
   {
     title: 'Insights',
     items: [
-      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-      { label: 'Visitor Tracking', href: '/dashboard/visitor-tracking', icon: Globe },
-      { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badgeKey: 'notifications' },
+      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER', 'VIEWER'] },
+      { label: 'Visitor Tracking', href: '/dashboard/visitor-tracking', icon: Globe, roles: ['ADMIN', 'SALES_MANAGER'] },
+      { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badgeKey: 'notifications', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
     ],
   },
   {
     title: 'Workspace',
     items: [
-      { label: 'Users', href: '/dashboard/users', icon: UserCog },
-      { label: 'Support Tickets', href: '/dashboard/support-tickets', icon: Ticket },
-      { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings },
+      { label: 'Users', href: '/dashboard/users', icon: UserCog, roles: ['ADMIN'] },
+      { label: 'Support Tickets', href: '/dashboard/support-tickets', icon: Ticket, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] },
+      { label: 'Billing', href: '/dashboard/billing', icon: CreditCard, roles: ['ADMIN'] },
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['ADMIN'] },
     ],
   },
 ];
@@ -81,11 +96,16 @@ export const ownerNavItems: NavItem[] = [
 ];
 
 /** Flat list used by the header's quick-jump search. */
-export const allNavItems = (isOwner: boolean): NavItem[] => [
+export const allNavItems = (isOwner: boolean, userRole?: string): NavItem[] => [
   ...(isOwner ? ownerNavItems.map((i) => ({ ...i, label: `Owner · ${i.label}` })) : []),
   ...navGroups
     .filter((g) => !(isOwner && g.title === 'Overview'))
-    .flatMap((g) => g.items),
+    .flatMap((g) =>
+      g.items.filter((item) => {
+        if (!userRole || userRole === 'SUPER_ADMIN') return true;
+        return !item.roles || item.roles.includes(userRole);
+      }),
+    ),
 ];
 
 export function Sidebar() {
@@ -252,12 +272,19 @@ export function Sidebar() {
           )}
           {navGroups
             .filter((group) => !(isOwner && group.title === 'Overview'))
-            .map((group) => (
-              <div key={group.title} className="contents">
-                <GroupTitle>{group.title}</GroupTitle>
-                {group.items.map((item) => renderItem(item))}
-              </div>
-            ))}
+            .map((group) => {
+              const visibleItems = group.items.filter((item) => {
+                if (!user?.role || user.role === 'SUPER_ADMIN') return true;
+                return !item.roles || item.roles.includes(user.role);
+              });
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={group.title} className="contents">
+                  <GroupTitle>{group.title}</GroupTitle>
+                  {visibleItems.map((item) => renderItem(item))}
+                </div>
+              );
+            })}
         </nav>
       </ScrollArea>
 

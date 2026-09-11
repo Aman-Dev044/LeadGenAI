@@ -123,7 +123,7 @@ export function Header() {
   const { theme, setTheme, unreadNotificationsCount } = useUIStore();
   const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
   const crumbs = useBreadcrumb(pathname, isOwner);
-  const navItems = useMemo(() => allNavItems(isOwner), [isOwner]);
+  const navItems = useMemo(() => allNavItems(isOwner, user?.role), [isOwner, user?.role]);
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications', 'unread-count'],

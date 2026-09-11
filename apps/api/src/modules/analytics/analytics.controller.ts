@@ -4,7 +4,7 @@ import { AnalyticsQueryDto } from './dto';
 import { CurrentTenant, Roles } from '../../common/decorators';
 
 @Controller('analytics')
-@Roles('ADMIN', 'SALES_MANAGER')
+@Roles('ADMIN', 'SALES_MANAGER', 'VIEWER')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 

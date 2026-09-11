@@ -3,7 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { CurrentTenant, Roles } from '../../common/decorators';
 
 @Controller('dashboard')
-@Roles('ADMIN', 'SALES_MANAGER')
+@Roles('ADMIN', 'SALES_MANAGER', 'VIEWER')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

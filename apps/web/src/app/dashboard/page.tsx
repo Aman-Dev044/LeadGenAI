@@ -36,10 +36,11 @@ export default function DashboardPage() {
   const { user, tenant, impersonation } = useAuthStore();
   const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
 
-  // The owner's home is the console, not their (empty) own workspace
+  // The owner's home is the console; salesperson lands on their leads pipeline
   useEffect(() => {
     if (isOwner) router.replace('/dashboard/admin');
-  }, [isOwner, router]);
+    if (user?.role === 'SALESPERSON') router.replace('/dashboard/leads');
+  }, [isOwner, user?.role, router]);
 
   const { data: overview, isLoading } = useQuery({
     queryKey: ['dashboard', 'overview'],
