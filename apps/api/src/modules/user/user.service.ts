@@ -16,6 +16,7 @@ import { escapeRegex } from '../../common/utils/sanitize';
 export class UserService {
   constructor(
     @InjectModel('User') private readonly userModel: Model<any>,
+    @InjectModel('RefreshToken') private readonly refreshTokenModel: Model<any>,
   ) {}
 
   async create(tenantId: string, dto: CreateUserDto) {
@@ -111,15 +112,16 @@ export class UserService {
   }
 
   async remove(tenantId: string, userId: string) {
-    const user = await this.userModel.findOneAndUpdate(
-      { _id: userId, tenantId },
-      { deletedAt: new Date(), isActive: false },
-      { new: true },
-    );
+    const user = await this.userModel.findOneAndDelete({
+      _id: userId,
+      tenantId,
+    });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return { message: 'User deleted' };
+    // Permanently remove all session refresh tokens for this user from DB
+    await this.refreshTokenModel.deleteMany({ userId, tenantId });
+    return { message: 'User permanently deleted from database' };
   }
 
   private sanitizeUser(user: any) {
