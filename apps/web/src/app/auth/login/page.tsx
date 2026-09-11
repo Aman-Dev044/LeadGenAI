@@ -116,12 +116,12 @@ export default function LoginPage() {
               : 'Sign in for Sales Managers & Reps'}
           </CardDescription>
 
-          {/* Sliding Role Switcher: Admin / Staff */}
-          <div className="relative mx-auto mt-4 flex w-full max-w-[260px] p-1 rounded-xl bg-muted/80 border border-border/50">
+          {/* iOS Liquid Glass Segmented Switcher: Admin / Staff */}
+          <div className="relative mx-auto mt-4 flex w-full max-w-[270px] p-1.5 rounded-full bg-slate-200/85 dark:bg-slate-800/90 border border-slate-300/70 dark:border-slate-700/80 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.08)] backdrop-blur-md">
             <div
               className={cn(
-                'absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-background shadow-xs transition-all duration-200 ease-out',
-                roleTab === 'admin' ? 'left-1' : 'left-[calc(50%+2px)]',
+                'absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] rounded-full bg-white/95 dark:bg-slate-900/95 border border-white/80 dark:border-white/10 shadow-[0_2px_10px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]',
+                roleTab === 'admin' ? 'left-1.5' : 'left-[calc(50%+1.5px)]',
               )}
             />
             <button
@@ -131,12 +131,19 @@ export default function LoginPage() {
                 clearErrors();
               }}
               className={cn(
-                'relative z-10 flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer',
-                roleTab === 'admin' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer select-none',
+                roleTab === 'admin'
+                  ? 'text-slate-900 dark:text-white font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
               )}
             >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Admin
+              <ShieldCheck
+                className={cn(
+                  'h-4 w-4 transition-transform duration-200',
+                  roleTab === 'admin' ? 'text-primary scale-110' : 'text-slate-500',
+                )}
+              />
+              <span>Admin</span>
             </button>
             <button
               type="button"
@@ -145,25 +152,43 @@ export default function LoginPage() {
                 clearErrors();
               }}
               className={cn(
-                'relative z-10 flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer',
-                roleTab === 'staff' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer select-none',
+                roleTab === 'staff'
+                  ? 'text-slate-900 dark:text-white font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
               )}
             >
-              <Users className="h-3.5 w-3.5" />
-              Staff
+              <Users
+                className={cn(
+                  'h-4 w-4 transition-transform duration-200',
+                  roleTab === 'staff' ? 'text-primary scale-110' : 'text-slate-500',
+                )}
+              />
+              <span>Staff</span>
             </button>
           </div>
         </CardHeader>
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            {roleTab === 'admin' && (
-              <div className="space-y-2">
+            {/* Organization field with fluid animated collapse/expand */}
+            <div
+              className={cn(
+                'overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]',
+                roleTab === 'admin' ? 'max-h-28 opacity-100' : 'max-h-0 opacity-0 -mb-4 pointer-events-none',
+              )}
+            >
+              <div className="space-y-2 pb-1">
                 <Label htmlFor="tenantSlug">Organization</Label>
-                <Input id="tenantSlug" placeholder="your-org-slug" {...register('tenantSlug')} />
+                <Input
+                  id="tenantSlug"
+                  placeholder="your-org-slug"
+                  tabIndex={roleTab === 'admin' ? 0 : -1}
+                  {...register('tenantSlug')}
+                />
                 {errors.tenantSlug && <p className="text-sm text-destructive">{errors.tenantSlug.message}</p>}
               </div>
-            )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
