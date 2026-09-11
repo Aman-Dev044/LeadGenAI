@@ -7,25 +7,25 @@ export const TENANT_STATUSES = ['trial', 'active', 'suspended', 'cancelled'];
 export const ALL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'];
 
 export function PlanBadge({ plan }: { plan?: string }) {
-  const variant = plan === 'enterprise' ? 'default' : plan === 'professional' ? 'success' : plan === 'starter' ? 'secondary' : 'outline';
+  const variant = plan === 'enterprise' ? 'violet' : plan === 'professional' ? 'default' : plan === 'starter' ? 'info' : 'outline';
   return <Badge variant={variant as any} className="capitalize">{plan || 'free'}</Badge>;
 }
 
 export function StatusBadge({ status }: { status?: string }) {
   const variant = status === 'active' ? 'success' : status === 'trial' ? 'warning' : status === 'suspended' ? 'destructive' : 'secondary';
-  return <Badge variant={variant as any} className="capitalize">{status || 'unknown'}</Badge>;
+  return <Badge variant={variant as any} dot className="capitalize">{status || 'unknown'}</Badge>;
 }
 
 export function RoleBadge({ role }: { role?: string }) {
-  const variant = role === 'SUPER_ADMIN' ? 'default' : role === 'ADMIN' ? 'destructive' : role === 'SALES_MANAGER' ? 'success' : 'secondary';
-  return <Badge variant={variant as any}>{role}</Badge>;
+  const variant = role === 'SUPER_ADMIN' ? 'warning' : role === 'ADMIN' ? 'violet' : role === 'SALES_MANAGER' ? 'info' : 'secondary';
+  return <Badge variant={variant as any} className="normal-case">{role?.toLowerCase().replace('_', ' ')}</Badge>;
 }
 
 /** Thin progress bar with colour that reflects how close a tenant is to its limit. */
 export function UsageBar({ used, limit, label }: { used: number; limit?: number; label?: string }) {
   const pct = !limit || limit <= 0 ? 0 : Math.min(100, Math.round((used / limit) * 100));
   const over = limit ? used > limit : false;
-  const color = over || pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
+  const color = over || pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500';
   return (
     <div className="space-y-1 min-w-[140px]">
       {label && (

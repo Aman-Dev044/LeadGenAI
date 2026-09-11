@@ -4,63 +4,238 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0a0a0a;
+  /* Surfaces */
+  --color-background: #f5f6fb;
+  --color-foreground: #0f172a;
   --color-card: #ffffff;
-  --color-card-foreground: #0a0a0a;
+  --color-card-foreground: #0f172a;
   --color-popover: #ffffff;
-  --color-popover-foreground: #0a0a0a;
-  --color-primary: #2563eb;
+  --color-popover-foreground: #0f172a;
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #334155;
+
+  /* Brand */
+  --color-primary: #4f46e5;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f1f5f9;
+  --color-primary-soft: #eef2ff;
+  --color-brand-from: #4f46e5;
+  --color-brand-to: #8b5cf6;
+
+  --color-secondary: #f1f3f9;
   --color-secondary-foreground: #0f172a;
-  --color-muted: #f1f5f9;
+  --color-muted: #f1f3f9;
   --color-muted-foreground: #64748b;
-  --color-accent: #f1f5f9;
+  --color-accent: #eef0f7;
   --color-accent-foreground: #0f172a;
-  --color-destructive: #ef4444;
+  --color-destructive: #e11d48;
   --color-destructive-foreground: #ffffff;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #2563eb;
-  --color-success: #22c55e;
+  --color-border: #e6e8f0;
+  --color-input: #dfe3ec;
+  --color-ring: #6366f1;
+
+  /* Semantic */
+  --color-success: #16a34a;
   --color-warning: #f59e0b;
-  --color-info: #3b82f6;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-info: #0ea5e9;
+  --color-violet: #8b5cf6;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 4px 14px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-float: 0 12px 40px -12px rgb(15 23 42 / 0.25);
+  --shadow-glow: 0 0 0 1px rgb(99 102 241 / 0.25), 0 8px 24px -8px rgb(99 102 241 / 0.45);
+
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
 }
 
 .dark {
-  --color-background: #0a0a0a;
-  --color-foreground: #fafafa;
-  --color-card: #111111;
-  --color-card-foreground: #fafafa;
-  --color-popover: #111111;
-  --color-popover-foreground: #fafafa;
-  --color-primary: #3b82f6;
+  --color-background: #0a0d16;
+  --color-foreground: #e6e9f2;
+  --color-card: #11162a;
+  --color-card-foreground: #e6e9f2;
+  --color-popover: #131a2e;
+  --color-popover-foreground: #e6e9f2;
+  --color-sidebar: #0d1222;
+  --color-sidebar-foreground: #cbd5e1;
+
+  --color-primary: #6366f1;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #1e293b;
-  --color-secondary-foreground: #f8fafc;
-  --color-muted: #1e293b;
-  --color-muted-foreground: #94a3b8;
-  --color-accent: #1e293b;
-  --color-accent-foreground: #f8fafc;
-  --color-destructive: #dc2626;
+  --color-primary-soft: #1e1b4b;
+  --color-brand-from: #6366f1;
+  --color-brand-to: #a78bfa;
+
+  --color-secondary: #1a2138;
+  --color-secondary-foreground: #e6e9f2;
+  --color-muted: #1a2138;
+  --color-muted-foreground: #8b95ab;
+  --color-accent: #1c2440;
+  --color-accent-foreground: #e6e9f2;
+  --color-destructive: #f43f5e;
   --color-destructive-foreground: #ffffff;
-  --color-border: #1e293b;
-  --color-input: #1e293b;
-  --color-ring: #3b82f6;
+  --color-border: #1f2740;
+  --color-input: #283152;
+  --color-ring: #818cf8;
+
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+  --color-info: #38bdf8;
+  --color-violet: #a78bfa;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-card-hover: 0 8px 24px rgb(0 0 0 / 0.5);
+  --shadow-float: 0 12px 40px -12px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 0 0 1px rgb(129 140 248 / 0.35), 0 8px 24px -8px rgb(129 140 248 / 0.5);
 }
 
+/* ------------------------------------------------------------------ */
+/* Keyframes                                                           */
+/* ------------------------------------------------------------------ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+      scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1));
+  }
+}
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+      scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1));
+  }
+}
+
+/* Radix enter/exit helpers (tiny subset of tailwindcss-animate) */
+@utility animate-in { animation: enter 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+@utility animate-out { animation: exit 0.15s ease-in forwards; }
+@utility fade-in-0 { --tw-enter-opacity: 0; }
+@utility fade-out-0 { --tw-exit-opacity: 0; }
+@utility zoom-in-95 { --tw-enter-scale: 0.95; }
+@utility zoom-out-95 { --tw-exit-scale: 0.95; }
+@utility slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
+@utility slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+@utility slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
+@utility slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
+
+/* Brand helpers */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--color-brand-from), var(--color-brand-to));
+}
+@utility text-gradient {
+  background-image: linear-gradient(135deg, var(--color-brand-from), var(--color-brand-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@utility shadow-card { box-shadow: var(--shadow-card); }
+@utility shadow-card-hover { box-shadow: var(--shadow-card-hover); }
+@utility shadow-float { box-shadow: var(--shadow-float); }
+@utility shadow-glow { box-shadow: var(--shadow-glow); }
+@utility glass {
+  background-color: color-mix(in srgb, var(--color-card) 75%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+@utility page-enter { animation: fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted-foreground) 35%, transparent) transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
 * {
   border-color: var(--color-border);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+  background-image:
+    radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--color-brand-to) 10%, transparent), transparent 60%),
+    radial-gradient(900px 400px at -10% 20%, color-mix(in srgb, var(--color-brand-from) 7%, transparent), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+/* Slim, theme-aware scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-muted-foreground) 30%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-muted-foreground) 50%, transparent);
+  background-clip: padding-box;
+}
+
+/* Recharts: use theme colours instead of the library defaults */
+.recharts-cartesian-grid line { stroke: var(--color-border); }
+.recharts-cartesian-axis-tick-value { fill: var(--color-muted-foreground); font-size: 11px; }
+.recharts-cartesian-axis-line, .recharts-cartesian-axis-tick-line { stroke: var(--color-border); }
+.recharts-default-tooltip {
+  background: var(--color-popover) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: var(--shadow-float);
+  color: var(--color-popover-foreground) !important;
+}
+.recharts-tooltip-label { color: var(--color-muted-foreground) !important; font-size: 11px; }
+.recharts-legend-item-text { color: var(--color-muted-foreground) !important; font-size: 12px; }
+
+/* Tabular numbers everywhere numbers line up */
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

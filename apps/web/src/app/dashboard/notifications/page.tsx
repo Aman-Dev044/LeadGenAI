@@ -7,13 +7,14 @@ import {
   Bell, Check, CheckCheck, UserPlus, Target, ArrowLeftRight,
   MessageSquareOff, AlertTriangle, UserCheck, BookOpen, Mail,
   Smartphone, MessageCircle, Hash, Monitor, Send, BellRing,
-  Filter, Eye, XCircle, CheckCircle,
+  Eye, XCircle, CheckCircle, ChevronRight,
   CreditCard,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Toolbar, ToolbarSpacer } from '@/components/shared/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatCard } from '@/components/shared/stat-card';
@@ -24,15 +25,38 @@ import { formatDate, cn } from '@/lib/utils';
 import { useEffect } from 'react';
 
 const TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
-  new_lead: { label: 'New Lead', icon: UserPlus, color: 'text-blue-500' },
-  lead_scored: { label: 'Lead Scored', icon: Target, color: 'text-green-500' },
-  handoff_request: { label: 'Handoff', icon: ArrowLeftRight, color: 'text-orange-500' },
-  conversation_ended: { label: 'Conversation Ended', icon: MessageSquareOff, color: 'text-gray-500' },
-  system_alert: { label: 'System Alert', icon: AlertTriangle, color: 'text-red-500' },
-  assignment: { label: 'Assignment', icon: UserCheck, color: 'text-purple-500' },
-  kb_processing: { label: 'KB Processing', icon: BookOpen, color: 'text-teal-500' },
-  billing: { label: 'Billing', icon: CreditCard, color: 'text-amber-500' },
+  new_lead: { label: 'New Lead', icon: UserPlus, color: 'bg-indigo-500/12 text-indigo-600 dark:text-indigo-400' },
+  lead_scored: { label: 'Lead Scored', icon: Target, color: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
+  handoff_request: { label: 'Handoff', icon: ArrowLeftRight, color: 'bg-amber-500/14 text-amber-600 dark:text-amber-400' },
+  conversation_ended: { label: 'Conversation Ended', icon: MessageSquareOff, color: 'bg-slate-500/12 text-slate-600 dark:text-slate-300' },
+  system_alert: { label: 'System Alert', icon: AlertTriangle, color: 'bg-rose-500/12 text-rose-600 dark:text-rose-400' },
+  assignment: { label: 'Assignment', icon: UserCheck, color: 'bg-violet-500/12 text-violet-600 dark:text-violet-400' },
+  kb_processing: { label: 'KB Processing', icon: BookOpen, color: 'bg-teal-500/12 text-teal-600 dark:text-teal-400' },
+  billing: { label: 'Billing', icon: CreditCard, color: 'bg-amber-500/14 text-amber-700 dark:text-amber-400' },
 };
+
+function timeAgo(date: string) {
+  const diff = Math.max(0, Date.now() - new Date(date).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return formatDate(date);
+}
+
+/** Group notifications into Today / Yesterday / Earlier buckets */
+function dayGroup(date: string) {
+  const d = new Date(date);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (d.getTime() >= startOfToday) return 'Today';
+  if (d.getTime() >= startOfToday - 86400000) return 'Yesterday';
+  if (d.getTime() >= startOfToday - 6 * 86400000) return 'This week';
+  return 'Earlier';
+}
 
 const CHANNEL_CONFIG: Record<string, { label: string; icon: any }> = {
   in_app: { label: 'In-App', icon: Monitor },
@@ -44,9 +68,9 @@ const CHANNEL_CONFIG: Record<string, { label: string; icon: any }> = {
   push: { label: 'Push', icon: BellRing },
 };
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
+const STATUS_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'info'> = {
   pending: 'warning',
-  sent: 'default',
+  sent: 'info',
   delivered: 'success',
   failed: 'destructive',
   read: 'secondary',
@@ -124,7 +148,14 @@ export default function NotificationsPage() {
     }
   };
 
-  const getTypeConfig = (type: string) => TYPE_CONFIG[type] || { label: type, icon: Bell, color: 'text-muted-foreground' };
+  const getTypeConfig = (type: string) => TYPE_CONFIG[type] || { label: type, icon: Bell, color: 'bg-muted text-muted-foreground' };
+
+  const groups = notifications.reduce((acc: Record<string, any[]>, n: any) => {
+    const g = dayGroup(n.createdAt);
+    (acc[g] ||= []).push(n);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const groupOrder = ['Today', 'Yesterday', 'This week', 'Earlier'].filter((g) => groups[g]?.length);
   const getChannelConfig = (channel: string) => CHANNEL_CONFIG[channel] || { label: channel, icon: Send };
 
   if (isLoading) return <Loading />;
@@ -133,25 +164,35 @@ export default function NotificationsPage() {
     <div>
       <PageHeader
         title="Notifications"
-        description="Stay updated on important events"
+        description="Every alert sent to you — new leads, handoffs, scoring changes and system events."
+        icon={Bell}
         actions={
-          notifications.length > 0 ? (
-            <Button variant="outline" onClick={() => markAllReadMutation.mutate()} disabled={markAllReadMutation.isPending}>
-              <CheckCheck className="mr-2 h-4 w-4" /> Mark All Read
+          allNotifications.length > 0 ? (
+            <Button variant="outline" onClick={() => markAllReadMutation.mutate()} disabled={markAllReadMutation.isPending || unreadCount === 0}>
+              <CheckCheck className="h-4 w-4" /> Mark all read
             </Button>
           ) : undefined
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <StatCard title="Unread" value={unreadCount} icon={Bell} />
-        <StatCard title="Total Notifications" value={allNotifications.length} icon={CheckCheck} />
-        <StatCard title="Failed Delivery" value={failedCount} icon={XCircle} />
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <StatCard title="Unread" value={unreadCount} icon={BellRing} tone={unreadCount > 0 ? 'primary' : 'neutral'} description={unreadCount > 0 ? 'waiting for you' : "you're all caught up"} />
+        <StatCard title="Total" value={allNotifications.length} icon={Bell} tone="violet" description="in your inbox" />
+        <StatCard title="Failed delivery" value={failedCount} icon={XCircle} tone={failedCount > 0 ? 'danger' : 'neutral'} description="email / SMS errors" />
       </div>
 
-      <div className="flex gap-3 mb-4">
+      <Toolbar>
+        <Tabs value={unreadOnly ? 'unread' : 'all'} onValueChange={(v) => setUnreadOnly(v === 'unread')}>
+          <TabsList className="h-9">
+            <TabsTrigger value="all" className="h-7 px-3">All</TabsTrigger>
+            <TabsTrigger value="unread" className="h-7 px-3">
+              Unread
+              {unreadCount > 0 && <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground tabular">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Select value={typeFilter || 'all'} onValueChange={(v) => setTypeFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="h-9 w-[180px]">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
@@ -166,98 +207,102 @@ export default function NotificationsPage() {
             <SelectItem value="billing">Billing</SelectItem>
           </SelectContent>
         </Select>
-
-        <Button
-          variant={unreadOnly ? 'default' : 'outline'}
-          size="sm"
-          className="h-10"
-          onClick={() => setUnreadOnly(!unreadOnly)}
-        >
-          <Filter className="mr-2 h-4 w-4" /> {unreadOnly ? 'Showing Unread' : 'Show Unread Only'}
-        </Button>
-      </div>
+        <ToolbarSpacer />
+        <span className="px-1 text-xs text-muted-foreground tabular">{notifications.length} shown</span>
+      </Toolbar>
 
       {notifications.length === 0 ? (
         <EmptyState
           icon={Bell}
-          title={unreadOnly || typeFilter ? 'No matching notifications' : 'No notifications'}
-          description={unreadOnly || typeFilter ? 'Try changing the filters' : "You're all caught up!"}
+          title={unreadOnly || typeFilter ? 'No matching notifications' : 'Inbox zero'}
+          description={unreadOnly || typeFilter ? 'Try changing the filters above.' : "You're all caught up. New alerts will land here in real time."}
         />
       ) : (
-        <div className="space-y-2">
-          {notifications.map((n: any) => {
-            const typeCfg = getTypeConfig(n.type);
-            const channelCfg = getChannelConfig(n.channel);
-            const TypeIcon = typeCfg.icon;
-            const ChannelIcon = channelCfg.icon;
-            const isClickable = !!(n.data?.leadId || n.data?.conversationId || n.type === 'handoff_request' || n.type === 'kb_processing' || n.type === 'assignment' || n.type === 'billing');
+        <div className="space-y-6">
+          {groupOrder.map((group) => (
+            <section key={group}>
+              <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{group}</h2>
+              <div className="overflow-hidden rounded-xl border bg-card shadow-card divide-y divide-border/70">
+                {groups[group].map((n: any) => {
+                  const typeCfg = getTypeConfig(n.type);
+                  const channelCfg = getChannelConfig(n.channel);
+                  const TypeIcon = typeCfg.icon;
+                  const ChannelIcon = channelCfg.icon;
+                  const isClickable = !!(n.data?.leadId || n.data?.conversationId || n.type === 'handoff_request' || n.type === 'kb_processing' || n.type === 'assignment' || n.type === 'billing');
+                  const unread = !n.readAt;
 
-            return (
-              <Card
-                key={n._id}
-                className={cn(
-                  'transition-colors',
-                  !n.readAt && 'border-primary/30 bg-primary/5',
-                  isClickable && 'cursor-pointer hover:bg-accent/50',
-                )}
-                onClick={() => isClickable && handleClick(n)}
-              >
-                <CardContent className="flex items-center gap-4 p-4">
-                  {/* Type Icon */}
-                  <div className={cn('flex-shrink-0', typeCfg.color)}>
-                    <TypeIcon className="h-5 w-5" />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm">{n.title}</p>
-                      {!n.readAt && <Badge variant="default" className="text-xs">New</Badge>}
-                      <Badge variant="outline" className="text-xs">{typeCfg.label}</Badge>
-                    </div>
-                    {n.body && <p className="text-sm text-muted-foreground mt-0.5 truncate">{n.body}</p>}
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-muted-foreground">{formatDate(n.createdAt)}</span>
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <ChannelIcon className="h-3 w-3" />
-                        {channelCfg.label}
-                      </span>
-                      {n.status && n.status !== 'read' && (
-                        <Badge variant={STATUS_VARIANT[n.status] || 'secondary'} className="text-xs h-5">
-                          {n.status === 'failed' && <XCircle className="mr-1 h-3 w-3" />}
-                          {n.status === 'sent' && <CheckCircle className="mr-1 h-3 w-3" />}
-                          {n.status}
-                        </Badge>
+                  return (
+                    <div
+                      key={n._id}
+                      className={cn(
+                        'group relative flex items-start gap-4 px-4 py-3.5 transition-colors',
+                        unread && 'bg-primary/[0.04]',
+                        isClickable && 'cursor-pointer hover:bg-accent/60',
                       )}
-                      {isClickable && (
-                        <span className="text-xs text-primary flex items-center gap-1">
-                          <Eye className="h-3 w-3" /> View
-                        </span>
-                      )}
-                    </div>
-                    {n.status === 'failed' && n.errorMessage && (
-                      <p className="text-xs text-destructive mt-1">{n.errorMessage}</p>
-                    )}
-                  </div>
-
-                  {/* Mark Read Button */}
-                  {!n.readAt && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        markReadMutation.mutate(n._id);
-                      }}
+                      onClick={() => isClickable && handleClick(n)}
                     >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+                      {unread && <span className="absolute left-0 top-0 h-full w-[3px] bg-primary" />}
+
+                      {/* Type icon tile */}
+                      <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', typeCfg.color)}>
+                        <TypeIcon className="h-[18px] w-[18px]" />
+                      </div>
+
+                      {/* Content */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className={cn('text-sm', unread ? 'font-semibold' : 'font-medium')}>{n.title}</p>
+                          {unread && <span className="h-2 w-2 rounded-full bg-primary" />}
+                          <Badge variant="outline" className="h-5">{typeCfg.label}</Badge>
+                        </div>
+                        {n.body && <p className={cn('mt-0.5 text-sm line-clamp-2', unread ? 'text-foreground/80' : 'text-muted-foreground')}>{n.body}</p>}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          <span className="tabular" title={formatDate(n.createdAt)}>{timeAgo(n.createdAt)}</span>
+                          <span className="inline-flex items-center gap-1">
+                            <ChannelIcon className="h-3 w-3" />
+                            {channelCfg.label}
+                          </span>
+                          {n.status && n.status !== 'read' && (
+                            <Badge variant={STATUS_VARIANT[n.status] || 'secondary'} className="h-4 px-1.5 text-[10px]">
+                              {n.status === 'failed' && <XCircle className="h-2.5 w-2.5" />}
+                              {n.status === 'sent' && <CheckCircle className="h-2.5 w-2.5" />}
+                              {n.status}
+                            </Badge>
+                          )}
+                        </div>
+                        {n.status === 'failed' && n.errorMessage && (
+                          <p className="mt-1 rounded-md bg-destructive/10 px-2 py-1 text-[11px] text-destructive">{n.errorMessage}</p>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex shrink-0 items-center gap-1 self-center">
+                        {unread && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                            title="Mark as read"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markReadMutation.mutate(n._id);
+                            }}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {isClickable && (
+                          <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                            <Eye className="h-3.5 w-3.5" /> View <ChevronRight className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>

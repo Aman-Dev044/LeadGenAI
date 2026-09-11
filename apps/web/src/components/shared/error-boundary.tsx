@@ -24,15 +24,18 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="rounded-full bg-muted p-4 mb-4">
-            <AlertTriangle className="h-8 w-8 text-destructive" />
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/60 px-6 py-20 text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+            <AlertTriangle className="h-8 w-8" />
           </div>
-          <h3 className="text-lg font-semibold mb-1">Something went wrong</h3>
-          <p className="text-muted-foreground max-w-sm mb-4">
-            An unexpected error occurred. Please try again.
+          <h3 className="text-lg font-semibold">Something went wrong</h3>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            An unexpected error occurred while rendering this page. Try again or reload.
           </p>
-          <Button onClick={() => this.setState({ hasError: false })}>Try Again</Button>
+          <div className="mt-5 flex gap-2">
+            <Button onClick={() => this.setState({ hasError: false })}>Try again</Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>Reload</Button>
+          </div>
         </div>
       );
     }

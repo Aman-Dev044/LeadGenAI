@@ -9,9 +9,9 @@ import { exitImpersonation } from '@/lib/impersonation';
 import type { PlatformStatus } from '@/types';
 
 const LEVEL_STYLES: Record<string, string> = {
-  info: 'bg-blue-600 text-white',
-  warning: 'bg-amber-500 text-black',
-  critical: 'bg-red-600 text-white',
+  info: 'bg-gradient-to-r from-sky-600 to-indigo-600 text-white',
+  warning: 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900',
+  critical: 'bg-gradient-to-r from-rose-600 to-red-600 text-white',
 };
 
 /**
@@ -32,7 +32,7 @@ export function PlatformBanner() {
   return (
     <div className="sticky top-0 z-40">
       {impersonation && (
-        <div className="flex items-center gap-3 bg-violet-700 px-4 py-2 text-sm text-white">
+        <div className="flex items-center gap-3 bg-gradient-to-r from-violet-700 to-fuchsia-600 px-4 py-2 text-sm text-white">
           <UserCog className="h-4 w-4 shrink-0" />
           <span className="flex-1 truncate">
             Owner mode: you are viewing <strong>{tenant?.name || 'this workspace'}</strong> as{' '}
@@ -45,7 +45,7 @@ export function PlatformBanner() {
       )}
 
       {status?.maintenanceMode && (
-        <div className="flex items-center gap-3 bg-orange-600 px-4 py-2 text-sm text-white">
+        <div className="flex items-center gap-3 bg-gradient-to-r from-orange-600 to-amber-500 px-4 py-2 text-sm text-white">
           <Wrench className="h-4 w-4 shrink-0" />
           <span className="flex-1">
             {isOwner ? 'Maintenance mode is ON. Only platform owners can use the dashboard right now.' : status.maintenanceMessage}

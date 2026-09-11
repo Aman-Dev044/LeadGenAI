@@ -2,23 +2,52 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeftRight, CheckCircle, XCircle, CheckCheck, Eye, Clock, UserCheck, Ban } from 'lucide-react';
+import { ArrowLeftRight, CheckCircle, XCircle, CheckCheck, Eye, Clock, UserCheck, Ban, MessageSquare, Bot, Smile, Frown, Meh, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable } from '@/components/shared/data-table';
+import { Toolbar, ToolbarSpacer } from '@/components/shared/toolbar';
+import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatCard } from '@/components/shared/stat-card';
 import { formatDate } from '@/lib/utils';
 
-const statusColors: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-  pending: 'warning', accepted: 'success', rejected: 'destructive', completed: 'secondary', expired: 'default',
+const statusColors: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'info'> = {
+  pending: 'warning', accepted: 'info', rejected: 'destructive', completed: 'success', expired: 'secondary',
 };
+
+const SENTIMENT: Record<string, { icon: any; cls: string }> = {
+  positive: { icon: Smile, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  negative: { icon: Frown, cls: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  neutral: { icon: Meh, cls: 'bg-slate-500/10 text-slate-600 dark:text-slate-300' },
+};
+
+function SentimentChip({ value }: { value?: string }) {
+  if (!value) return null;
+  const cfg = SENTIMENT[value.toLowerCase()] || SENTIMENT.neutral;
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${cfg.cls}`}>
+      <Icon className="h-3 w-3" /> {value}
+    </span>
+  );
+}
+
+/** "3m ago", "2h ago" style relative time */
+function timeAgo(date: string) {
+  const diff = Math.max(0, Date.now() - new Date(date).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 export default function HandoffsPage() {
   const queryClient = useQueryClient();
@@ -90,50 +119,53 @@ export default function HandoffsPage() {
   const rejectedCount = handoffs.filter((h: any) => h.status === 'rejected').length;
   const completedCount = handoffs.filter((h: any) => h.status === 'completed').length;
 
+  const pendingHandoffs = handoffs.filter((h: any) => h.status === 'pending');
+  const otherHandoffs = statusFilter === 'pending' ? [] : handoffs.filter((h: any) => h.status !== 'pending');
+
   const columns = [
     {
       key: 'reason', label: 'Reason', render: (h: any) => (
-        <div>
-          <span className="font-medium">{h.reason || 'No reason'}</span>
-          {h.context?.sentiment && (
-            <span className="ml-2 text-xs text-muted-foreground">Sentiment: {h.context.sentiment}</span>
-          )}
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ArrowLeftRight className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium truncate max-w-[320px]">{h.reason || 'No reason'}</div>
+            <div className="mt-0.5 flex items-center gap-2">
+              <SentimentChip value={h.context?.sentiment} />
+              {h.conversationId && <code className="text-[11px] text-muted-foreground">conv …{h.conversationId.slice(-6)}</code>}
+            </div>
+          </div>
         </div>
       ),
     },
-    { key: 'status', label: 'Status', render: (h: any) => <Badge variant={statusColors[h.status]}>{h.status}</Badge> },
-    {
-      key: 'conversationId', label: 'Conversation', render: (h: any) =>
-        h.conversationId ? <code className="text-xs text-muted-foreground">...{h.conversationId.slice(-6)}</code> : '-',
-    },
-    { key: 'createdAt', label: 'Created', render: (h: any) => formatDate(h.createdAt) },
+    { key: 'status', label: 'Status', render: (h: any) => <Badge variant={statusColors[h.status]} dot>{h.status}</Badge> },
+    { key: 'createdAt', label: 'Requested', render: (h: any) => <div className="text-xs"><div className="font-medium">{timeAgo(h.createdAt)}</div><div className="text-muted-foreground tabular">{formatDate(h.createdAt)}</div></div> },
     {
       key: 'timestamps', label: 'Resolved', render: (h: any) => {
-        if (h.acceptedAt) return <span className="text-xs text-muted-foreground">{formatDate(h.acceptedAt)}</span>;
-        if (h.rejectedAt) return <span className="text-xs text-muted-foreground">{formatDate(h.rejectedAt)}</span>;
-        if (h.completedAt) return <span className="text-xs text-muted-foreground">{formatDate(h.completedAt)}</span>;
-        return <span className="text-xs text-muted-foreground">-</span>;
+        const t = h.completedAt || h.rejectedAt || h.acceptedAt;
+        return <span className="text-xs text-muted-foreground tabular">{t ? formatDate(t) : '-'}</span>;
       },
     },
     {
-      key: 'actions', label: '', render: (h: any) => (
-        <div className="flex gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setViewHandoff(h); }}>
+      key: 'actions', label: '', className: 'text-right', render: (h: any) => (
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Details" onClick={(e) => { e.stopPropagation(); setViewHandoff(h); }}>
             <Eye className="h-3.5 w-3.5" />
           </Button>
           {h.status === 'pending' && (
             <>
-              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); acceptMutation.mutate(h._id); }}>
-                <CheckCircle className="mr-1 h-3 w-3" /> Accept
+              <Button size="xs" variant="soft" onClick={(e) => { e.stopPropagation(); acceptMutation.mutate(h._id); }}>
+                <CheckCircle className="h-3 w-3" /> Accept
               </Button>
-              <Button size="sm" variant="ghost" className="text-destructive" onClick={(e) => { e.stopPropagation(); setRejectId(h._id); }}>
-                <XCircle className="mr-1 h-3 w-3" /> Reject
+              <Button size="xs" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setRejectId(h._id); }}>
+                <XCircle className="h-3 w-3" /> Reject
               </Button>
             </>
           )}
           {h.status === 'accepted' && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setCompleteId(h._id); }}>
-              <CheckCheck className="mr-1 h-3 w-3" /> Complete
+            <Button size="xs" variant="outline" onClick={(e) => { e.stopPropagation(); setCompleteId(h._id); }}>
+              <CheckCheck className="h-3 w-3" /> Complete
             </Button>
           )}
         </div>
@@ -143,18 +175,74 @@ export default function HandoffsPage() {
 
   return (
     <div>
-      <PageHeader title="Handoffs" description="Manage conversation handoffs from bot to human" />
+      <PageHeader
+        title="Handoffs"
+        description="Conversations the AI escalated to a human. Accept to take over live, reject to hand it back to the bot."
+        icon={ArrowLeftRight}
+        actions={pendingCount > 0 ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" /></span>
+            {pendingCount} waiting for a human
+          </span>
+        ) : undefined}
+      />
 
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <StatCard title="Pending" value={pendingCount} icon={Clock} />
-        <StatCard title="Accepted" value={acceptedCount} icon={UserCheck} />
-        <StatCard title="Completed" value={completedCount} icon={CheckCheck} />
-        <StatCard title="Rejected" value={rejectedCount} icon={Ban} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
+        <StatCard title="Pending" value={pendingCount} icon={Clock} tone="warning" description="awaiting response" />
+        <StatCard title="Accepted" value={acceptedCount} icon={UserCheck} tone="info" description="live with a human" />
+        <StatCard title="Completed" value={completedCount} icon={CheckCheck} tone="success" description="on this page" />
+        <StatCard title="Rejected" value={rejectedCount} icon={Ban} tone="danger" description="returned to bot" />
       </div>
 
-      <div className="flex gap-4 mb-4">
+      {/* Pending queue */}
+      {!isLoading && pendingHandoffs.length > 0 && (statusFilter === '' || statusFilter === 'pending') && (
+        <div className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" /><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" /></span>
+            <h2 className="text-sm font-semibold">Waiting for you</h2>
+            <span className="text-xs text-muted-foreground">Visitors are on the line — respond quickly.</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pendingHandoffs.map((h: any) => (
+              <Card key={h._id} className="relative overflow-hidden border-amber-500/30 p-5 shadow-glow">
+                <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl" />
+                <div className="relative flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                    <MessageSquare className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-snug line-clamp-2">{h.reason || 'Visitor requested a human'}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400"><Clock className="h-3 w-3" /> waiting {timeAgo(h.createdAt)}</span>
+                      <SentimentChip value={h.context?.sentiment} />
+                    </div>
+                  </div>
+                </div>
+                {h.context?.conversationSummary && (
+                  <p className="relative mt-3 rounded-lg bg-muted/60 p-2.5 text-xs text-muted-foreground line-clamp-3">
+                    <Sparkles className="mr-1 inline h-3 w-3 text-primary" />{h.context.conversationSummary}
+                  </p>
+                )}
+                <div className="relative mt-4 flex items-center gap-2">
+                  <Button variant="gradient" size="sm" className="flex-1" onClick={() => acceptMutation.mutate(h._id)} disabled={acceptMutation.isPending}>
+                    <CheckCircle className="h-4 w-4" /> Accept
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setRejectId(h._id)}>
+                    <XCircle className="h-4 w-4" /> Reject
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" title="Details" onClick={() => setViewHandoff(h)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Toolbar>
         <Select value={statusFilter || 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
@@ -163,9 +251,11 @@ export default function HandoffsPage() {
             <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+        <ToolbarSpacer />
+        <span className="px-1 text-xs text-muted-foreground tabular">{total} handoff{total === 1 ? '' : 's'}</span>
+      </Toolbar>
 
-      <DataTable columns={columns} data={handoffs} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} />
+      <DataTable columns={columns} data={statusFilter === '' ? otherHandoffs : handoffs} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} emptyMessage={statusFilter === '' && pendingHandoffs.length > 0 ? 'No resolved handoffs on this page' : 'No handoffs yet'} emptyDescription="When the AI escalates a chat to a human it will show up here." />
 
       {/* Reject Dialog */}
       <Dialog open={!!rejectId} onOpenChange={() => { setRejectId(null); setRejectNotes(''); }}>
@@ -200,7 +290,7 @@ export default function HandoffsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCompleteId(null); setCompleteNotes(''); }}>Cancel</Button>
-            <Button onClick={() => completeId && completeMutation.mutate({ id: completeId, notes: completeNotes.trim() || undefined })} disabled={completeMutation.isPending}>
+            <Button variant="gradient" onClick={() => completeId && completeMutation.mutate({ id: completeId, notes: completeNotes.trim() || undefined })} disabled={completeMutation.isPending}>
               {completeMutation.isPending ? 'Completing...' : 'Complete Handoff'}
             </Button>
           </DialogFooter>
@@ -210,88 +300,66 @@ export default function HandoffsPage() {
       {/* Detail View Dialog */}
       <Dialog open={!!viewHandoff} onOpenChange={() => setViewHandoff(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Handoff Details</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Handoff Details</DialogTitle>
+            <DialogDescription>Context the AI captured when it escalated this conversation.</DialogDescription>
+          </DialogHeader>
           {viewHandoff && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <Badge variant={statusColors[viewHandoff.status]}>{viewHandoff.status}</Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Created</p>
-                  <p className="text-sm font-medium">{formatDate(viewHandoff.createdAt)}</p>
+              <div className="flex items-start gap-3 rounded-xl border bg-muted/40 p-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ArrowLeftRight className="h-5 w-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{viewHandoff.reason || 'No reason provided'}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <Badge variant={statusColors[viewHandoff.status]} dot>{viewHandoff.status}</Badge>
+                    <SentimentChip value={viewHandoff.context?.sentiment} />
+                    <span className="text-xs text-muted-foreground tabular">{formatDate(viewHandoff.createdAt)}</span>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <p className="text-xs text-muted-foreground">Reason</p>
-                <p className="text-sm">{viewHandoff.reason || 'No reason provided'}</p>
-              </div>
-
-              {viewHandoff.conversationId && (
+              {viewHandoff.context?.conversationSummary && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Conversation ID</p>
-                  <code className="text-xs">{viewHandoff.conversationId}</code>
-                </div>
-              )}
-
-              {viewHandoff.agentId && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Agent ID</p>
-                  <code className="text-xs">{viewHandoff.agentId}</code>
-                </div>
-              )}
-
-              {viewHandoff.assignedTo && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Assigned To</p>
-                  <code className="text-xs">{viewHandoff.assignedTo}</code>
-                </div>
-              )}
-
-              {viewHandoff.context && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Context</p>
-                  {viewHandoff.context.sentiment && (
-                    <p className="text-sm">Sentiment: <Badge variant="outline">{viewHandoff.context.sentiment}</Badge></p>
-                  )}
-                  {viewHandoff.context.conversationSummary && (
-                    <div className="mt-2">
-                      <p className="text-xs text-muted-foreground">Conversation Summary</p>
-                      <p className="text-sm bg-muted p-2 rounded mt-1">{viewHandoff.context.conversationSummary}</p>
-                    </div>
-                  )}
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">AI summary</p>
+                  <p className="rounded-lg border bg-card p-3 text-sm leading-relaxed"><Sparkles className="mr-1.5 inline h-3.5 w-3.5 text-primary" />{viewHandoff.context.conversationSummary}</p>
                 </div>
               )}
 
               {viewHandoff.notes && (
                 <div>
-                  <p className="text-xs text-muted-foreground">Notes</p>
-                  <p className="text-sm bg-muted p-2 rounded">{viewHandoff.notes}</p>
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</p>
+                  <p className="rounded-lg bg-muted p-3 text-sm">{viewHandoff.notes}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl border">
+                {viewHandoff.conversationId && (
+                  <div className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm"><span className="text-muted-foreground">Conversation</span><code className="text-xs">{viewHandoff.conversationId}</code></div>
+                )}
+                {viewHandoff.agentId && (
+                  <div className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm"><span className="inline-flex items-center gap-1.5 text-muted-foreground"><Bot className="h-3.5 w-3.5" /> Agent</span><code className="text-xs">{viewHandoff.agentId}</code></div>
+                )}
+                {viewHandoff.assignedTo && (
+                  <div className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm"><span className="text-muted-foreground">Assigned to</span><code className="text-xs">{viewHandoff.assignedTo}</code></div>
+                )}
                 {viewHandoff.acceptedAt && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Accepted At</p>
-                    <p className="text-xs">{formatDate(viewHandoff.acceptedAt)}</p>
-                  </div>
+                  <div className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm"><span className="text-muted-foreground">Accepted</span><span className="text-xs tabular">{formatDate(viewHandoff.acceptedAt)}</span></div>
                 )}
                 {viewHandoff.rejectedAt && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Rejected At</p>
-                    <p className="text-xs">{formatDate(viewHandoff.rejectedAt)}</p>
-                  </div>
+                  <div className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm"><span className="text-muted-foreground">Rejected</span><span className="text-xs tabular">{formatDate(viewHandoff.rejectedAt)}</span></div>
                 )}
                 {viewHandoff.completedAt && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Completed At</p>
-                    <p className="text-xs">{formatDate(viewHandoff.completedAt)}</p>
-                  </div>
+                  <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm"><span className="text-muted-foreground">Completed</span><span className="text-xs tabular">{formatDate(viewHandoff.completedAt)}</span></div>
                 )}
+                <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm last:border-0"><span className="text-muted-foreground">Requested</span><span className="text-xs tabular">{formatDate(viewHandoff.createdAt)}</span></div>
               </div>
+
+              {viewHandoff.status === 'pending' && (
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setRejectId(viewHandoff._id); setViewHandoff(null); }}><XCircle className="h-4 w-4" /> Reject</Button>
+                  <Button variant="gradient" onClick={() => { acceptMutation.mutate(viewHandoff._id); setViewHandoff(null); }}><CheckCircle className="h-4 w-4" /> Accept handoff</Button>
+                </DialogFooter>
+              )}
             </div>
           )}
         </DialogContent>

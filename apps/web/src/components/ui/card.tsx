@@ -1,11 +1,22 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('rounded-lg border bg-card text-card-foreground shadow-sm', className)} {...props} />
-  ),
-);
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** Lift on hover - use for clickable cards */
+  interactive?: boolean;
+}
+
+const Card = React.forwardRef<HTMLDivElement, CardProps>(({ className, interactive, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'rounded-xl border bg-card text-card-foreground shadow-card transition-all duration-200 [&_[data-slot=table]]:rounded-none [&_[data-slot=table]]:border-0 [&_[data-slot=table]]:shadow-none',
+      interactive && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-card-hover hover:border-primary/30',
+      className,
+    )}
+    {...props}
+  />
+));
 Card.displayName = 'Card';
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -17,7 +28,7 @@ CardHeader.displayName = 'CardHeader';
 
 const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('text-2xl font-semibold leading-none tracking-tight', className)} {...props} />
+    <div ref={ref} className={cn('text-base font-semibold leading-none tracking-tight', className)} {...props} />
   ),
 );
 CardTitle.displayName = 'CardTitle';

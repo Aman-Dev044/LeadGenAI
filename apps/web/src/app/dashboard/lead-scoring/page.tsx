@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Target, Zap, Trash2, Pencil } from 'lucide-react';
+import { Plus, Target, Zap, Trash2, Pencil, Flame, Sun, Snowflake, ListChecks, Sigma, PlayCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { StatCard } from '@/components/shared/stat-card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +40,38 @@ interface RuleForm {
 }
 
 const emptyForm: RuleForm = { name: '', description: '', condition: 'has_email', conditionConfig: {}, points: 10, isActive: true };
+
+/** Temperature thresholds used by the backend scorer (hot >= 70, warm >= 40) */
+const TEMPS = [
+  { key: 'cold', label: 'Cold', range: '0 – 39', icon: Snowflake, bar: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400', width: 40 },
+  { key: 'warm', label: 'Warm', range: '40 – 69', icon: Sun, bar: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400', width: 30 },
+  { key: 'hot', label: 'Hot', range: '70 – 100', icon: Flame, bar: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400', width: 30 },
+];
+
+function PointsPill({ points }: { points: number }) {
+  const positive = points >= 0;
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-bold tabular ${positive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
+      {positive ? '+' : ''}{points} pts
+    </span>
+  );
+}
+
+function ConfigChips({ config }: { config?: Record<string, any> }) {
+  if (!config || Object.keys(config).length === 0) return null;
+  const chips: string[] = [];
+  if (config.field) chips.push(`${config.field} = ${config.value ?? ''}`);
+  if (config.min != null) chips.push(`min ${config.min}`);
+  if (config.keywords?.length) chips.push(...config.keywords.slice(0, 4).map((k: string) => `“${k}”`));
+  if (config.keywords?.length > 4) chips.push(`+${config.keywords.length - 4} more`);
+  if (config.url) chips.push(`url ∋ ${config.url}`);
+  if (config.expression) chips.push(config.expression);
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((c, i) => <span key={i} className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{c}</span>)}
+    </div>
+  );
+}
 
 export default function LeadScoringPage() {
   const queryClient = useQueryClient();
@@ -151,72 +184,114 @@ export default function LeadScoringPage() {
 
   if (isLoading) return <Loading />;
 
+  const activeRules = rules.filter((r: any) => r.isActive ?? true);
+  const maxScore = activeRules.reduce((n: number, r: any) => n + Math.max(0, r.points || 0), 0);
+
   return (
     <div>
       <PageHeader
         title="Lead Scoring"
-        description="Configure rules to automatically score leads"
+        description="Define the signals that make a lead valuable. Points add up to a 0–100 score that sets the lead's temperature."
+        icon={Target}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => scoreAllMutation.mutate()} disabled={scoreAllMutation.isPending}>
-              <Zap className="mr-2 h-4 w-4" /> {scoreAllMutation.isPending ? 'Scoring...' : 'Score All Leads'}
+              <Zap className="h-4 w-4" /> {scoreAllMutation.isPending ? 'Scoring...' : 'Re-score all leads'}
             </Button>
-            <Button onClick={() => setShowCreate(true)}><Plus className="mr-2 h-4 w-4" /> Add Rule</Button>
+            <Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Add Rule</Button>
           </div>
         }
       />
 
-      {rules.length === 0 ? (
-        <EmptyState icon={Target} title="No scoring rules" description="Add rules to automatically score and prioritize your leads" actionLabel="Add Rule" onAction={() => setShowCreate(true)} />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {rules.map((rule: any) => (
-            <Card key={rule._id}>
-              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                <div>
-                  <CardTitle className="text-base">{rule.name}</CardTitle>
-                  {rule.description && <p className="text-xs text-muted-foreground mt-1">{rule.description}</p>}
-                </div>
-                <Switch
-                  checked={rule.isActive ?? true}
-                  onCheckedChange={(checked) => toggleMutation.mutate({ id: rule._id, isActive: checked })}
-                />
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline">{getConditionLabel(rule.condition)}</Badge>
-                  <span className="text-sm font-semibold text-primary">+{rule.points} pts</span>
-                </div>
-                {rule.conditionConfig && Object.keys(rule.conditionConfig).length > 0 && (
-                  <div className="text-xs text-muted-foreground mb-2">
-                    {rule.conditionConfig.field && <span>Field: {rule.conditionConfig.field} = {rule.conditionConfig.value}</span>}
-                    {rule.conditionConfig.min != null && <span>Min: {rule.conditionConfig.min}</span>}
-                    {rule.conditionConfig.keywords && <span>Keywords: {rule.conditionConfig.keywords.join(', ')}</span>}
-                    {rule.conditionConfig.url && <span>URL: {rule.conditionConfig.url}</span>}
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <StatCard title="Rules" value={rules.length} icon={ListChecks} tone="primary" description="configured" />
+        <StatCard title="Active" value={activeRules.length} icon={PlayCircle} tone="success" description={`${rules.length - activeRules.length} disabled`} />
+        <StatCard title="Max possible score" value={maxScore} icon={Sigma} tone="violet" description="sum of positive active rules" />
+      </div>
+
+      {/* Temperature thresholds */}
+      <Card className="mb-6">
+        <CardHeader className="pb-4">
+          <CardTitle>Temperature thresholds</CardTitle>
+          <CardDescription>How a lead's total score maps to a temperature. Hot leads trigger instant alerts.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+            {TEMPS.map((t) => <div key={t.key} className={`${t.bar} h-full`} style={{ width: `${t.width}%` }} />)}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            {TEMPS.map((t) => {
+              const Icon = t.icon;
+              return (
+                <div key={t.key} className="flex items-center gap-2.5">
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-lg bg-muted ${t.text}`}><Icon className="h-4 w-4" /></span>
+                  <div className="leading-tight">
+                    <p className="text-sm font-semibold">{t.label}</p>
+                    <p className="text-xs text-muted-foreground tabular">{t.range} pts</p>
                   </div>
-                )}
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(rule)}>
-                    <Pencil className="mr-1 h-3 w-3" /> Edit
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(rule._id)}>
-                    <Trash2 className="mr-1 h-3 w-3" /> Delete
-                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {rules.length === 0 ? (
+        <EmptyState icon={Target} title="No scoring rules yet" description="Add rules like “has phone number” or “mentioned pricing” to automatically rank your hottest leads." actionLabel="Add Rule" onAction={() => setShowCreate(true)} />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {rules.map((rule: any) => {
+            const active = rule.isActive ?? true;
+            return (
+              <Card key={rule._id} className={`flex flex-col p-5 ${active ? '' : 'opacity-70'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    <Target className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-semibold leading-tight">{rule.name}</h3>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{rule.description || CONDITIONS.find((c) => c.value === rule.condition)?.desc || 'No description'}</p>
+                  </div>
+                  <Switch
+                    checked={active}
+                    onCheckedChange={(checked) => toggleMutation.mutate({ id: rule._id, isActive: checked })}
+                  />
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <Badge variant="outline">{getConditionLabel(rule.condition)}</Badge>
+                  <PointsPill points={rule.points} />
+                </div>
+                <div className="mt-2 min-h-[22px]">
+                  <ConfigChips config={rule.conditionConfig} />
+                </div>
+
+                <div className="mt-auto pt-4"><div className="flex items-center gap-1 border-t pt-3">
+                  <Button variant="ghost" size="xs" onClick={() => handleEdit(rule)}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => setDeleteId(rule._id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div></div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Add Scoring Rule</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add Scoring Rule</DialogTitle>
+            <DialogDescription>Award (or deduct) points when a lead matches this condition.</DialogDescription>
+          </DialogHeader>
           <RuleFormFields form={form} setForm={setForm} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+            <Button variant="gradient" onClick={handleCreate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -226,7 +301,10 @@ export default function LeadScoringPage() {
       {/* Edit Dialog */}
       <Dialog open={!!editRule} onOpenChange={() => setEditRule(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Edit Scoring Rule</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit Scoring Rule</DialogTitle>
+            <DialogDescription>Re-score leads afterwards to apply the change to existing records.</DialogDescription>
+          </DialogHeader>
           <RuleFormFields form={editForm} setForm={setEditForm} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditRule(null)}>Cancel</Button>
@@ -269,7 +347,10 @@ function RuleFormFields({ form, setForm }: { form: RuleForm; setForm: (f: RuleFo
         </div>
         <div className="space-y-2">
           <Label>Points *</Label>
-          <Input type="number" value={form.points} onChange={(e) => setForm({ ...form, points: parseInt(e.target.value) || 0 })} />
+          <div className="flex items-center gap-2">
+            <Input type="number" value={form.points} onChange={(e) => setForm({ ...form, points: parseInt(e.target.value) || 0 })} />
+            <PointsPill points={form.points} />
+          </div>
         </div>
       </div>
       <div className="space-y-2">
@@ -289,10 +370,10 @@ function RuleFormFields({ form, setForm }: { form: RuleForm; setForm: (f: RuleFo
         </div>
         <div className="space-y-2">
           <Label>Active</Label>
-          <div className="flex items-center h-9">
+          <label className="flex h-10 cursor-pointer items-center justify-between rounded-lg border bg-card px-3">
+            <span className="text-sm text-muted-foreground">{form.isActive ? 'Rule is live' : 'Rule is paused'}</span>
             <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
-            <span className="ml-2 text-sm text-muted-foreground">{form.isActive ? 'Active' : 'Inactive'}</span>
-          </div>
+          </label>
         </div>
       </div>
 

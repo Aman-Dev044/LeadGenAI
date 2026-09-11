@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: { email: string }) => {
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password', data);
+      await api.post('/auth/forgot-password', { email: data.email.trim().toLowerCase() });
       setSent(true);
       toast.success('Reset link sent to your email');
     } catch (err: any) {
@@ -35,13 +35,20 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="w-full">
+      <Card className="relative w-full shadow-float border-border/70">
+        <Link
+          href="/auth/login"
+          className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
+          aria-label="Back to login"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <Sparkles className="h-10 w-10 text-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gradient text-white shadow-md shadow-primary/30"><Sparkles className="h-6 w-6" /></div>
           </div>
-          <CardTitle className="text-2xl">Reset password</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Reset password</CardTitle>
           <CardDescription>
             {sent ? 'Check your email for a reset link' : 'Enter your email to receive a reset link'}
           </CardDescription>
@@ -56,7 +63,7 @@ export default function ForgotPasswordPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Send Reset Link
               </Button>

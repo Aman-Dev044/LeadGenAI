@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Search, Users, UserCheck, UserX, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserCheck, UserX, ShieldCheck, UserCog, Mail, Phone, Clock } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,16 +11,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatCard } from '@/components/shared/stat-card';
-import { formatDate } from '@/lib/utils';
+import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
+import { formatDate, getInitials } from '@/lib/utils';
 
 const ROLES = ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'];
 
-const roleColors: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  ADMIN: 'destructive', SALES_MANAGER: 'default', SALESPERSON: 'secondary', VIEWER: 'secondary',
+const roleColors: Record<string, 'violet' | 'info' | 'secondary' | 'outline'> = {
+  ADMIN: 'violet', SALES_MANAGER: 'info', SALESPERSON: 'secondary', VIEWER: 'outline',
 };
+
+const roleLabel = (r: string) => (r || '').toLowerCase().replace(/_/g, ' ');
 
 const emptyForm = { firstName: '', lastName: '', email: '', password: '', role: 'SALESPERSON', phone: '' };
 
@@ -162,35 +166,50 @@ export default function UsersPage() {
 
   const columns = [
     {
-      key: 'name', label: 'Name', render: (u: any) => (
-        <div>
-          <span className="font-medium">{u.firstName} {u.lastName}</span>
-          {u.phone && <p className="text-xs text-muted-foreground">{u.phone}</p>}
+      key: 'name', label: 'Member', render: (u: any) => (
+        <div className="flex items-center gap-3">
+          <Avatar className="h-9 w-9">
+            <AvatarFallback>{getInitials(`${u.firstName || ''} ${u.lastName || ''}`) || 'U'}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="font-semibold truncate">{u.firstName} {u.lastName}</p>
+            <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+              <Mail className="h-3 w-3" /> {u.email}
+            </p>
+          </div>
         </div>
       ),
     },
-    { key: 'email', label: 'Email', render: (u: any) => <span className="text-sm">{u.email}</span> },
-    { key: 'role', label: 'Role', render: (u: any) => <Badge variant={roleColors[u.role] || 'secondary'}>{u.role}</Badge> },
+    {
+      key: 'phone', label: 'Phone', render: (u: any) => u.phone
+        ? <span className="text-sm flex items-center gap-1.5 text-muted-foreground"><Phone className="h-3.5 w-3.5" />{u.phone}</span>
+        : <span className="text-muted-foreground/60 text-xs">—</span>,
+    },
+    { key: 'role', label: 'Role', render: (u: any) => <Badge variant={roleColors[u.role] || 'secondary'}>{roleLabel(u.role)}</Badge> },
     {
       key: 'isActive', label: 'Status', render: (u: any) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
           <Switch
             checked={u.isActive ?? true}
             onCheckedChange={() => handleToggleActive(u)}
           />
-          <span className="text-xs">{u.isActive ? 'Active' : 'Inactive'}</span>
+          <Badge variant={u.isActive ? 'success' : 'secondary'} dot>{u.isActive ? 'Active' : 'Inactive'}</Badge>
         </div>
       ),
     },
-    { key: 'lastLoginAt', label: 'Last Login', render: (u: any) => u.lastLoginAt ? formatDate(u.lastLoginAt) : <span className="text-muted-foreground text-xs">Never</span> },
     {
-      key: 'actions', label: '', render: (u: any) => (
-        <div className="flex gap-1">
-          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleEdit(u); }}>
-            <Pencil className="mr-1 h-3 w-3" /> Edit
+      key: 'lastLoginAt', label: 'Last Login', render: (u: any) => u.lastLoginAt
+        ? <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{formatDate(u.lastLoginAt)}</span>
+        : <span className="text-muted-foreground/60 text-xs">Never</span>,
+    },
+    {
+      key: 'actions', label: '', className: 'w-[90px]', render: (u: any) => (
+        <div className="flex justify-end gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(u); }}>
+            <Pencil className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="outline" className="text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteUser(u); }}>
-            <Trash2 className="h-3 w-3" />
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600 hover:text-rose-600 hover:bg-rose-500/10" aria-label="Delete" onClick={(e) => { e.stopPropagation(); setDeleteUser(u); }}>
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       ),
@@ -200,46 +219,59 @@ export default function UsersPage() {
   return (
     <div>
       <PageHeader
+        icon={UserCog}
         title="Users"
-        description="Manage team members"
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="mr-2 h-4 w-4" /> Add User</Button>}
+        description="Invite teammates, assign roles and control who can access the workspace."
+        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Add User</Button>}
       />
 
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <StatCard title="Total Users" value={total} icon={Users} />
-        <StatCard title="Active" value={activeCount} icon={UserCheck} />
-        <StatCard title="Inactive" value={inactiveCount} icon={UserX} />
-        <StatCard title="Admins" value={allUsers.filter((u: any) => u.role === 'ADMIN').length} icon={ShieldCheck} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
+        <StatCard title="Total Users" value={total} icon={Users} tone="primary" description="in this workspace" />
+        <StatCard title="Active" value={activeCount} icon={UserCheck} tone="success" description="can sign in" />
+        <StatCard title="Inactive" value={inactiveCount} icon={UserX} tone="warning" description="access paused" />
+        <StatCard title="Admins" value={allUsers.filter((u: any) => u.role === 'ADMIN').length} icon={ShieldCheck} tone="violet" description="full permissions" />
       </div>
 
-      <div className="flex gap-3 mb-4">
-        <div className="flex gap-2">
-          <Input
-            placeholder="Search users..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="w-[250px]"
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-          />
-          <Button variant="outline" size="icon" onClick={handleSearch}>
-            <Search className="h-4 w-4" />
-          </Button>
-        </div>
+      <Toolbar>
+        <SearchInput
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search by name or email…"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+        />
+        <Button variant="soft" size="sm" onClick={handleSearch}>Search</Button>
         <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Roles" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="All Roles" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
           </SelectContent>
         </Select>
-      </div>
+        <ToolbarSpacer />
+        <span className="text-xs text-muted-foreground tabular pr-1">{users.length} shown</span>
+      </Toolbar>
 
-      <DataTable columns={columns} data={users} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} />
+      <DataTable
+        columns={columns}
+        data={users}
+        total={total}
+        page={page}
+        limit={limit}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onLimitChange={(l) => { setLimit(l); setPage(1); }}
+        isLoading={isLoading}
+        emptyMessage="No users found"
+        emptyDescription="Try a different search or invite a new teammate."
+      />
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add User</DialogTitle>
+            <DialogDescription>Create an account for a teammate. They can sign in right away with this password.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -256,16 +288,16 @@ export default function UsersPage() {
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="john@example.com" />
             </div>
             <div className="space-y-2">
-              <Label>Password * (min 8 characters)</Label>
+              <Label>Password * <span className="text-muted-foreground font-normal">(min 8 characters)</span></Label>
               <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="********" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Role *</Label>
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -278,7 +310,7 @@ export default function UsersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button onClick={handleCreate} disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Creating...' : 'Create'}
+              {createMutation.isPending ? 'Creating...' : 'Create user'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -287,10 +319,21 @@ export default function UsersPage() {
       {/* Edit Dialog */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>Update the member's details and role.</DialogDescription>
+          </DialogHeader>
           {editUser && (
             <div className="space-y-4">
-              <div className="text-sm text-muted-foreground mb-2">Email: {editUser.email}</div>
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/40 p-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback>{getInitials(`${editUser.firstName || ''} ${editUser.lastName || ''}`) || 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{editUser.firstName} {editUser.lastName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{editUser.email}</p>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>First Name</Label>
@@ -305,9 +348,9 @@ export default function UsersPage() {
                 <div className="space-y-2">
                   <Label>Role</Label>
                   <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                      {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -321,7 +364,7 @@ export default function UsersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
             <Button onClick={handleEditSave} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? 'Saving...' : 'Save'}
+              {updateMutation.isPending ? 'Saving...' : 'Save changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

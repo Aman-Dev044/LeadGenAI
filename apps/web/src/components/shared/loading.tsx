@@ -1,9 +1,21 @@
-import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export function Loading() {
+interface LoadingProps {
+  label?: string;
+  className?: string;
+  /** Smaller inline spinner */
+  size?: 'sm' | 'md';
+}
+
+export function Loading({ label = 'Loading', className, size = 'md' }: LoadingProps) {
+  const dim = size === 'sm' ? 'h-6 w-6 border-2' : 'h-10 w-10 border-[3px]';
   return (
-    <div className="flex items-center justify-center py-16">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    <div className={cn('flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground', className)}>
+      <div className="relative">
+        <div className={cn('rounded-full border-primary/15', dim)} />
+        <div className={cn('absolute inset-0 animate-spin rounded-full border-transparent border-t-primary border-r-primary', dim)} />
+      </div>
+      {label && <p className="text-xs font-medium tracking-wide animate-pulse-soft">{label}…</p>}
     </div>
   );
 }

@@ -18,7 +18,7 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-full flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }
@@ -130,13 +130,13 @@ function VerifyEmailContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="w-full">
+      <Card className="w-full shadow-float border-border/70">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <Sparkles className="h-10 w-10 text-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gradient text-white shadow-md shadow-primary/30"><Sparkles className="h-6 w-6" /></div>
           </div>
-          <CardTitle className="text-2xl">Verify your email</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Verify your email</CardTitle>
           <CardDescription>
             {missingContext ? (
               'We could not find which account to verify. Please sign up or sign in again.'

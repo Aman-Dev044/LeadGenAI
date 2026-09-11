@@ -2,20 +2,20 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Save, Building2, Palette, Bot, Globe, Lock, Info, Bell } from 'lucide-react';
+import { Save, Building2, Palette, Bot, Lock, Info, Bell, Settings, Hash, CreditCard, CalendarClock, Sparkles, MessageSquare, KeyRound, type LucideIcon } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PageHeader } from '@/components/shared/page-header';
 import { Loading } from '@/components/shared/loading';
-import { formatDate } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 
 const AI_PROVIDERS = [
@@ -53,6 +53,40 @@ const LANGUAGES = [
   { value: 'zh', label: 'Chinese' },
   { value: 'ja', label: 'Japanese' },
 ];
+
+/** Card header with an icon tile - used by every settings section. */
+function SectionHeader({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
+  return (
+    <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription className="mt-0.5">{description}</CardDescription>
+      </div>
+    </CardHeader>
+  );
+}
+
+function SaveFooter({ onClick, pending, label }: { onClick: () => void; pending: boolean; label: string }) {
+  return (
+    <CardFooter className="justify-end border-t bg-muted/30 py-3 mt-2 rounded-b-xl">
+      <Button onClick={onClick} disabled={pending}>
+        <Save className="h-4 w-4" /> {pending ? 'Saving...' : label}
+      </Button>
+    </CardFooter>
+  );
+}
+
+function InfoNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+      <Info className="h-4 w-4 mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -204,41 +238,59 @@ export default function SettingsPage() {
     });
   };
 
-  if (isLoading) return <Loading />;
+  if (isLoading) return <Loading label="Loading settings" />;
 
   const tenant = originalTenant || {};
   const availableModels = AI_MODELS[aiForm.aiProvider] || AI_MODELS.openai;
+  const pending = updateTenantMutation.isPending;
 
   return (
     <div>
-      <PageHeader title="Settings" description="Manage your organization settings" />
+      <PageHeader
+        icon={Settings}
+        title="Settings"
+        description="Organization profile, widget branding, AI configuration, alerts and account security."
+      />
 
       {/* Tenant Info Banner */}
       {(tenant.slug || tenant.plan || tenant.status) && (
         <Card className="mb-6">
-          <CardContent className="flex items-center gap-6 py-4 flex-wrap">
+          <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3 py-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-md shadow-primary/25">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{tenant.name}</p>
+                <p className="text-xs text-muted-foreground">Workspace overview</p>
+              </div>
+            </div>
+            <div className="hidden sm:block h-8 w-px bg-border" />
             {tenant.slug && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Slug: </span>
-                <code className="font-mono bg-muted px-2 py-0.5 rounded">{tenant.slug}</code>
+              <div className="text-sm flex items-center gap-2">
+                <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Slug</span>
+                <code className="font-mono bg-muted px-2 py-0.5 rounded-md text-xs">{tenant.slug}</code>
               </div>
             )}
             {tenant.plan && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Plan: </span>
-                <Badge variant="outline" className="capitalize">{tenant.plan}</Badge>
+              <div className="text-sm flex items-center gap-2">
+                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Plan</span>
+                <Badge variant="default">{tenant.plan}</Badge>
               </div>
             )}
             {tenant.status && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Status: </span>
-                <Badge variant={tenant.status === 'active' ? 'success' : tenant.status === 'trial' ? 'warning' : 'secondary'} className="capitalize">{tenant.status}</Badge>
+              <div className="text-sm flex items-center gap-2">
+                <span className="text-muted-foreground">Status</span>
+                <Badge dot variant={tenant.status === 'active' ? 'success' : tenant.status === 'trial' ? 'warning' : 'secondary'}>{tenant.status}</Badge>
               </div>
             )}
             {tenant.trialEndsAt && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Trial Ends: </span>
-                <span>{formatDate(tenant.trialEndsAt)}</span>
+              <div className="text-sm flex items-center gap-2">
+                <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Trial ends</span>
+                <span className="font-medium">{formatDate(tenant.trialEndsAt)}</span>
               </div>
             )}
           </CardContent>
@@ -246,23 +298,20 @@ export default function SettingsPage() {
       )}
 
       <Tabs defaultValue="organization">
-        <TabsList>
-          <TabsTrigger value="organization"><Building2 className="mr-1.5 h-3.5 w-3.5" /> Organization</TabsTrigger>
-          <TabsTrigger value="branding"><Palette className="mr-1.5 h-3.5 w-3.5" /> Branding</TabsTrigger>
-          <TabsTrigger value="ai"><Bot className="mr-1.5 h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
-          <TabsTrigger value="notifications"><Bell className="mr-1.5 h-3.5 w-3.5" /> Notifications</TabsTrigger>
-          <TabsTrigger value="security"><Lock className="mr-1.5 h-3.5 w-3.5" /> Security</TabsTrigger>
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="organization"><Building2 className="h-3.5 w-3.5" /> Organization</TabsTrigger>
+          <TabsTrigger value="branding"><Palette className="h-3.5 w-3.5" /> Branding</TabsTrigger>
+          <TabsTrigger value="ai"><Bot className="h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
+          <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5" /> Notifications</TabsTrigger>
+          <TabsTrigger value="security"><Lock className="h-3.5 w-3.5" /> Security</TabsTrigger>
         </TabsList>
 
         {/* Organization Tab */}
-        <TabsContent value="organization" className="mt-4">
+        <TabsContent value="organization">
           <Card>
-            <CardHeader>
-              <CardTitle>Organization Details</CardTitle>
-              <CardDescription>Update your organization information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <SectionHeader icon={Building2} title="Organization Details" description="Name, domain and where your chat widget may be embedded." />
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Organization Name</Label>
                   <Input value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} />
@@ -274,34 +323,31 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Logo URL</Label>
-                <Input value={orgForm.logo} onChange={(e) => setOrgForm({ ...orgForm, logo: e.target.value })} placeholder="https://yourdomain.com/logo.png" />
-                {orgForm.logo && (
-                  <div className="mt-2 border rounded p-2 w-fit">
-                    <img src={orgForm.logo} alt="Logo preview" className="h-10 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                  </div>
-                )}
+                <div className="flex gap-3 items-start">
+                  <Input value={orgForm.logo} onChange={(e) => setOrgForm({ ...orgForm, logo: e.target.value })} placeholder="https://yourdomain.com/logo.png" className="flex-1" />
+                  {orgForm.logo && (
+                    <div className="flex h-10 items-center rounded-lg border bg-muted/40 px-3">
+                      <img src={orgForm.logo} alt="Logo preview" className="h-6 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Allowed Origins (comma-separated)</Label>
+                <Label>Allowed Origins <span className="text-muted-foreground font-normal">(comma-separated)</span></Label>
                 <Input value={orgForm.allowedOrigins} onChange={(e) => setOrgForm({ ...orgForm, allowedOrigins: e.target.value })} placeholder="https://yoursite.com, https://app.yoursite.com" />
-                <p className="text-xs text-muted-foreground">Domains where your chat widget is allowed to run</p>
+                <p className="text-xs text-muted-foreground">Domains where your chat widget is allowed to run.</p>
               </div>
-              <Button onClick={handleSaveOrg} disabled={updateTenantMutation.isPending}>
-                <Save className="mr-2 h-4 w-4" /> {updateTenantMutation.isPending ? 'Saving...' : 'Save Organization'}
-              </Button>
             </CardContent>
+            <SaveFooter onClick={handleSaveOrg} pending={pending} label="Save Organization" />
           </Card>
         </TabsContent>
 
         {/* Branding Tab */}
-        <TabsContent value="branding" className="mt-4">
+        <TabsContent value="branding">
           <Card>
-            <CardHeader>
-              <CardTitle>Branding</CardTitle>
-              <CardDescription>Customize your widget appearance</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <SectionHeader icon={Palette} title="Branding" description="Colours and typography used by the embedded chat widget." />
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Primary Color</Label>
                   <div className="flex gap-2">
@@ -315,7 +361,7 @@ export default function SettingsPage() {
                       value={brandForm.primaryColor}
                       onChange={(e) => setBrandForm({ ...brandForm, primaryColor: e.target.value })}
                       placeholder="#3b82f6"
-                      className="flex-1"
+                      className="flex-1 font-mono"
                     />
                   </div>
                 </div>
@@ -332,7 +378,7 @@ export default function SettingsPage() {
                       value={brandForm.secondaryColor}
                       onChange={(e) => setBrandForm({ ...brandForm, secondaryColor: e.target.value })}
                       placeholder="#64748b"
-                      className="flex-1"
+                      className="flex-1 font-mono"
                     />
                   </div>
                 </div>
@@ -343,33 +389,38 @@ export default function SettingsPage() {
               </div>
 
               {/* Preview */}
-              <div className="border rounded-lg p-4">
-                <Label className="text-xs text-muted-foreground mb-2 block">Preview</Label>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full" style={{ backgroundColor: brandForm.primaryColor }} />
-                  <div className="w-10 h-10 rounded-full" style={{ backgroundColor: brandForm.secondaryColor }} />
-                  <span style={{ fontFamily: brandForm.fontFamily || 'inherit' }} className="text-sm">
-                    Sample text in your font
-                  </span>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Live preview</p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-10 w-10 rounded-xl shadow-sm ring-1 ring-black/5" style={{ backgroundColor: brandForm.primaryColor }} />
+                    <div className="h-10 w-10 rounded-xl shadow-sm ring-1 ring-black/5" style={{ backgroundColor: brandForm.secondaryColor }} />
+                  </div>
+                  <div className="flex-1 min-w-[220px] rounded-xl border bg-card p-3 shadow-card" style={{ fontFamily: brandForm.fontFamily || 'inherit' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ backgroundColor: brandForm.primaryColor }}>
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-sm font-semibold">Chat with us</span>
+                    </div>
+                    <div className="inline-block rounded-2xl rounded-bl-md px-3 py-1.5 text-xs" style={{ backgroundColor: brandForm.secondaryColor, color: '#fff' }}>Hi! How can I help you today?</div>
+                    <div className="mt-1.5 flex justify-end">
+                      <div className="inline-block rounded-2xl rounded-br-md px-3 py-1.5 text-xs text-white" style={{ backgroundColor: brandForm.primaryColor }}>Sample text in your font</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <Button onClick={handleSaveBranding} disabled={updateTenantMutation.isPending}>
-                <Save className="mr-2 h-4 w-4" /> {updateTenantMutation.isPending ? 'Saving...' : 'Save Branding'}
-              </Button>
             </CardContent>
+            <SaveFooter onClick={handleSaveBranding} pending={pending} label="Save Branding" />
           </Card>
         </TabsContent>
 
         {/* AI & Preferences Tab */}
-        <TabsContent value="ai" className="mt-4 space-y-6">
+        <TabsContent value="ai" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>AI Configuration</CardTitle>
-              <CardDescription>Choose which AI provider and model powers your chatbot</CardDescription>
-            </CardHeader>
+            <SectionHeader icon={Sparkles} title="AI Configuration" description="Choose which AI provider and model powers your chatbot." />
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>AI Provider</Label>
                   <Select value={aiForm.aiProvider} onValueChange={(v) => {
@@ -392,20 +443,14 @@ export default function SettingsPage() {
                   </Select>
                 </div>
               </div>
-              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted p-3 rounded">
-                <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>This controls which AI generates chatbot responses. Make sure the corresponding API key is configured in your environment variables.</span>
-              </div>
+              <InfoNote>This controls which AI generates chatbot responses. Make sure the corresponding API key is configured in your environment variables.</InfoNote>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Preferences</CardTitle>
-              <CardDescription>Regional and language settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <SectionHeader icon={Bot} title="Preferences" description="Regional and language settings used across the workspace." />
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Timezone</Label>
                   <Select value={aiForm.timezone} onValueChange={(v) => setAiForm({ ...aiForm, timezone: v })}>
@@ -425,121 +470,127 @@ export default function SettingsPage() {
                   </Select>
                 </div>
               </div>
-              <Button onClick={handleSaveAI} disabled={updateTenantMutation.isPending}>
-                <Save className="mr-2 h-4 w-4" /> {updateTenantMutation.isPending ? 'Saving...' : 'Save AI & Preferences'}
-              </Button>
             </CardContent>
+            <SaveFooter onClick={handleSaveAI} pending={pending} label="Save AI & Preferences" />
           </Card>
         </TabsContent>
 
         {/* Notifications Tab */}
-        <TabsContent value="notifications" className="mt-4 space-y-6">
+        <TabsContent value="notifications" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Team Alerts</CardTitle>
-              <CardDescription>Who gets notified when the AI captures leads, flags hot leads or requests a human handoff</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
+            <SectionHeader icon={Bell} title="Team Alerts" description="Who gets notified when the AI captures leads, flags hot leads or requests a human handoff." />
+            <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>Notify these roles (when no salesperson is assigned)</Label>
-                <div className="flex flex-wrap gap-4">
+                <Label>Notify these roles <span className="text-muted-foreground font-normal">(when no salesperson is assigned)</span></Label>
+                <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'ADMIN', label: 'Admins' },
                     { value: 'SALES_MANAGER', label: 'Sales Managers' },
                     { value: 'SALESPERSON', label: 'Salespeople' },
-                  ].map((r) => (
-                    <label key={r.value} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <Checkbox
-                        checked={notifForm.notifyRoles.includes(r.value)}
-                        onCheckedChange={(c) => toggleNotifyRole(r.value, c === true)}
-                      />
-                      {r.label}
-                    </label>
-                  ))}
+                  ].map((r) => {
+                    const checked = notifForm.notifyRoles.includes(r.value);
+                    return (
+                      <label
+                        key={r.value}
+                        className={cn(
+                          'flex items-center gap-2 text-sm cursor-pointer rounded-lg border px-3 py-2 transition-colors',
+                          checked ? 'border-primary/40 bg-primary/5 text-primary font-medium' : 'hover:bg-accent',
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(c) => toggleNotifyRole(r.value, c === true)}
+                        />
+                        {r.label}
+                      </label>
+                    );
+                  })}
                 </div>
                 <p className="text-xs text-muted-foreground">In-app notifications are always sent. Assigned salespeople are always notified about their own leads.</p>
               </div>
 
               <div className="space-y-3">
                 <Label>Email alerts</Label>
-                {[
-                  { key: 'emailOnNewLead', label: 'New lead captured' },
-                  { key: 'emailOnHotLead', label: 'Lead becomes hot' },
-                  { key: 'emailOnHandoff', label: 'Human handoff requested' },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between rounded border px-3 py-2">
-                    <span className="text-sm">{item.label}</span>
-                    <Switch
-                      checked={(notifForm as any)[item.key]}
-                      onCheckedChange={(v) => setNotifForm({ ...notifForm, [item.key]: v })}
-                    />
-                  </div>
-                ))}
+                <div className="divide-y rounded-xl border">
+                  {[
+                    { key: 'emailOnNewLead', label: 'New lead captured', hint: 'Every time the widget or API creates a lead' },
+                    { key: 'emailOnHotLead', label: 'Lead becomes hot', hint: 'When scoring moves a lead into the hot bucket' },
+                    { key: 'emailOnHandoff', label: 'Human handoff requested', hint: 'A visitor asks for a person or the AI escalates' },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.hint}</p>
+                      </div>
+                      <Switch
+                        checked={(notifForm as any)[item.key]}
+                        onCheckedChange={(v) => setNotifForm({ ...notifForm, [item.key]: v })}
+                      />
+                    </div>
+                  ))}
+                </div>
                 <p className="text-xs text-muted-foreground">Emails go out through the configured email provider (RESEND_API_KEY / EMAIL_FROM).</p>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Channel Integrations</CardTitle>
-              <CardDescription>Post the same alerts to your team chat</CardDescription>
-            </CardHeader>
+            <SectionHeader icon={MessageSquare} title="Channel Integrations" description="Post the same alerts to your team chat." />
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Slack Incoming Webhook URL</Label>
-                <Input
-                  value={notifForm.slackWebhookUrl}
-                  onChange={(e) => setNotifForm({ ...notifForm, slackWebhookUrl: e.target.value })}
-                  placeholder="https://hooks.slack.com/services/..."
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Slack Incoming Webhook URL</Label>
+                  <Input
+                    value={notifForm.slackWebhookUrl}
+                    onChange={(e) => setNotifForm({ ...notifForm, slackWebhookUrl: e.target.value })}
+                    placeholder="https://hooks.slack.com/services/..."
+                    className="font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Microsoft Teams Webhook URL</Label>
+                  <Input
+                    value={notifForm.teamsWebhookUrl}
+                    onChange={(e) => setNotifForm({ ...notifForm, teamsWebhookUrl: e.target.value })}
+                    placeholder="https://outlook.office.com/webhook/..."
+                    className="font-mono text-xs"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Microsoft Teams Webhook URL</Label>
-                <Input
-                  value={notifForm.teamsWebhookUrl}
-                  onChange={(e) => setNotifForm({ ...notifForm, teamsWebhookUrl: e.target.value })}
-                  placeholder="https://outlook.office.com/webhook/..."
-                />
-              </div>
-              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted p-3 rounded">
-                <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>SMS and WhatsApp follow-ups to leads use the Twilio credentials configured in the API environment (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_WHATSAPP_NUMBER).</span>
-              </div>
-              <Button onClick={handleSaveNotifications} disabled={updateTenantMutation.isPending}>
-                <Save className="mr-2 h-4 w-4" /> {updateTenantMutation.isPending ? 'Saving...' : 'Save Notification Settings'}
-              </Button>
+              <InfoNote>SMS and WhatsApp follow-ups to leads use the Twilio credentials configured in the API environment (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, TWILIO_WHATSAPP_NUMBER).</InfoNote>
             </CardContent>
+            <SaveFooter onClick={handleSaveNotifications} pending={pending} label="Save Notification Settings" />
           </Card>
         </TabsContent>
 
         {/* Security Tab */}
-        <TabsContent value="security" className="mt-4">
+        <TabsContent value="security">
           <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your account password (min 8 characters)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 max-w-md">
-              <div className="space-y-2">
-                <Label>Current Password</Label>
-                <Input type="password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+            <SectionHeader icon={KeyRound} title="Change Password" description={`Update the password for ${user?.email || 'your account'}. Minimum 8 characters.`} />
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Current Password</Label>
+                  <Input type="password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <Input type="password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm New Password</Label>
+                  <Input type="password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>New Password (min 8 characters)</Label>
-                <Input type="password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Confirm New Password</Label>
-                <Input type="password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
-              </div>
+            </CardContent>
+            <CardFooter className="justify-end border-t bg-muted/30 py-3 mt-2 rounded-b-xl">
               <Button
                 onClick={handleChangePassword}
                 disabled={changePasswordMutation.isPending || !passwordForm.currentPassword || !passwordForm.newPassword}
               >
-                {changePasswordMutation.isPending ? 'Changing...' : 'Change Password'}
+                <Lock className="h-4 w-4" /> {changePasswordMutation.isPending ? 'Changing...' : 'Change Password'}
               </Button>
-            </CardContent>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>

@@ -33,6 +33,7 @@ export const useUIStore = create<UIState>((set) => ({
   setTheme: (theme) => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
+    try { localStorage.setItem('la_theme', theme); } catch {}
     set({ theme });
   },
   setUnreadNotificationsCount: (count) =>

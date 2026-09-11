@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock } from 'lucide-react';
+import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock, CalendarCheck, CalendarDays, CheckCircle2, Video, User } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,14 +12,30 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable } from '@/components/shared/data-table';
+import { StatCard } from '@/components/shared/stat-card';
+import { Toolbar, ToolbarSpacer } from '@/components/shared/toolbar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { PageHeader } from '@/components/shared/page-header';
-import { EmptyState } from '@/components/shared/empty-state';
 import type { Appointment } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getInitials } from '@/lib/utils';
 
-const statusColors: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-  scheduled: 'default', confirmed: 'success', cancelled: 'destructive', completed: 'secondary', no_show: 'warning',
+const statusColors: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'info'> = {
+  scheduled: 'info', confirmed: 'success', cancelled: 'destructive', completed: 'secondary', no_show: 'warning',
 };
+
+/** Rounded month/day tile used in the list */
+function DateTile({ date, muted }: { date: string; muted?: boolean }) {
+  const d = new Date(date);
+  const month = d.toLocaleString('en-US', { month: 'short' });
+  return (
+    <div className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-center leading-none ${muted ? 'bg-muted text-muted-foreground' : 'bg-primary/10 border-primary/20 text-primary'}`}>
+      <span className="text-[10px] font-semibold uppercase tracking-wider">{month}</span>
+      <span className="mt-0.5 text-lg font-bold tabular">{d.getDate()}</span>
+    </div>
+  );
+}
+
+const fmtTime = (d: string) => new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
 const STATUSES = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
 
@@ -230,38 +246,76 @@ export default function AppointmentsPage() {
     return u ? `${u.firstName} ${u.lastName}` : id || '-';
   };
 
+  const now = new Date();
+  const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const todayCount = appointments.filter((a: any) => isSameDay(new Date(a.startTime), now) && a.status !== 'cancelled').length;
+  const upcomingCount = appointments.filter((a: any) => new Date(a.startTime) > now && !['cancelled', 'completed', 'no_show'].includes(a.status)).length;
+  const completedCount = appointments.filter((a: any) => a.status === 'completed').length;
+
   const columns = [
-    { key: 'title', label: 'Title', render: (a: Appointment) => <span className="font-medium">{a.title}</span> },
     {
-      key: 'startTime', label: 'Date & Time', render: (a: any) => (
-        <div>
-          <div>{formatDate(a.startTime)}</div>
-          {a.rescheduledCount > 0 && (
-            <div className="text-[11px] text-muted-foreground">Rescheduled {a.rescheduledCount}x</div>
-          )}
+      key: 'title', label: 'Appointment', render: (a: any) => {
+        const past = new Date(a.endTime || a.startTime) < now;
+        return (
+          <div className="flex items-center gap-3">
+            <DateTile date={a.startTime} muted={past || a.status === 'cancelled'} />
+            <div className="min-w-0">
+              <div className="font-semibold truncate">{a.title}</div>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="tabular">{fmtTime(a.startTime)} – {fmtTime(a.endTime)}</span>
+                {a.meetingLink && (
+                  <a href={a.meetingLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-primary hover:underline">
+                    <Video className="h-3 w-3" /> Join
+                  </a>
+                )}
+                {a.rescheduledCount > 0 && <span className="rounded-full bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Rescheduled {a.rescheduledCount}x</span>}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    { key: 'status', label: 'Status', render: (a: Appointment) => <Badge variant={statusColors[a.status]} dot>{a.status.replace('_', ' ')}</Badge> },
+    {
+      key: 'attendee', label: 'Attendee', render: (a: any) => {
+        const name = a.attendee?.name || a.attendee?.email;
+        if (!name) return <span className="text-muted-foreground">-</span>;
+        return (
+          <div className="flex items-center gap-2.5">
+            <Avatar className="h-8 w-8"><AvatarFallback className="text-[11px]">{getInitials(name)}</AvatarFallback></Avatar>
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{a.attendee?.name || a.attendee?.email}</div>
+              {a.attendee?.name && a.attendee?.email && <div className="text-xs text-muted-foreground truncate">{a.attendee.email}</div>}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'assignedTo', label: 'Assigned To', render: (a: any) => (
+        <div className="flex items-center gap-2 text-sm">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground"><User className="h-3.5 w-3.5" /></div>
+          <span>{getUserName(a.assignedTo)}</span>
         </div>
       ),
     },
-    { key: 'status', label: 'Status', render: (a: Appointment) => <Badge variant={statusColors[a.status]}>{a.status.replace('_', ' ')}</Badge> },
-    { key: 'attendee', label: 'Attendee', render: (a: any) => a.attendee?.name || a.attendee?.email || '-' },
-    { key: 'assignedTo', label: 'Assigned To', render: (a: any) => getUserName(a.assignedTo) },
     {
-      key: 'actions', label: '', render: (a: any) => (
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleEdit(a); }}>
+      key: 'actions', label: '', className: 'text-right', render: (a: any) => (
+        <div className="flex justify-end gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(a); }}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           {a.status !== 'completed' && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700" title="Reschedule" onClick={(e) => { e.stopPropagation(); openReschedule(a); }}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:text-primary" title="Reschedule" onClick={(e) => { e.stopPropagation(); openReschedule(a); }}>
               <CalendarClock className="h-3.5 w-3.5" />
             </Button>
           )}
           {a.status !== 'cancelled' && a.status !== 'completed' && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title="Cancel appointment" onClick={(e) => { e.stopPropagation(); setCancelId(a._id); }}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700" title="Cancel appointment" onClick={(e) => { e.stopPropagation(); setCancelId(a._id); }}>
               <XCircle className="h-3.5 w-3.5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete permanently" onClick={(e) => { e.stopPropagation(); setDeleteId(a._id); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete permanently" onClick={(e) => { e.stopPropagation(); setDeleteId(a._id); }}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -273,26 +327,39 @@ export default function AppointmentsPage() {
     <div>
       <PageHeader
         title="Appointments"
-        description="Manage scheduled meetings"
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="mr-2 h-4 w-4" /> New Appointment</Button>}
+        description="Meetings booked by your AI agents and your team, all in one calendar."
+        icon={Calendar}
+        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Appointment</Button>}
       />
 
-      <div className="flex gap-4 mb-4">
-        <Select value={statusFilter || 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Total" value={total} icon={CalendarDays} tone="primary" description="all appointments" />
+        <StatCard title="Today" value={todayCount} icon={CalendarCheck} tone="violet" description="on this page" />
+        <StatCard title="Upcoming" value={upcomingCount} icon={CalendarClock} tone="info" description="scheduled ahead" />
+        <StatCard title="Completed" value={completedCount} icon={CheckCircle2} tone="success" description="on this page" />
       </div>
 
-      <DataTable columns={columns} data={appointments} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} />
+      <Toolbar>
+        <Select value={statusFilter || 'all'} onValueChange={(v) => { setStatusFilter(v === 'all' ? '' : v); setPage(1); }}>
+          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <ToolbarSpacer />
+        <span className="px-1 text-xs text-muted-foreground tabular">{total} appointment{total === 1 ? '' : 's'}</span>
+      </Toolbar>
+
+      <DataTable columns={columns} data={appointments} total={total} page={page} limit={limit} totalPages={totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1); }} isLoading={isLoading} emptyMessage="No appointments yet" emptyDescription="Create one manually or let your AI agent book meetings for you." />
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Create Appointment</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Appointment</DialogTitle>
+            <DialogDescription>Schedule a meeting and assign it to a team member.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Title *</Label>
@@ -338,7 +405,7 @@ export default function AppointmentsPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Attendee Info</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attendee Info</Label>
               <div className="grid grid-cols-3 gap-3">
                 <Input placeholder="Name" value={form.attendeeName} onChange={(e) => setForm({ ...form, attendeeName: e.target.value })} />
                 <Input placeholder="Email" value={form.attendeeEmail} onChange={(e) => setForm({ ...form, attendeeEmail: e.target.value })} />
@@ -352,7 +419,7 @@ export default function AppointmentsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+            <Button variant="gradient" onClick={handleCreate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -361,8 +428,11 @@ export default function AppointmentsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editAppt} onOpenChange={() => setEditAppt(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit Appointment</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Appointment</DialogTitle>
+            <DialogDescription>Update details, status or attendee information.</DialogDescription>
+          </DialogHeader>
           {editAppt && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -395,7 +465,7 @@ export default function AppointmentsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Attendee Info</Label>
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attendee Info</Label>
                 <div className="grid grid-cols-3 gap-3">
                   <Input placeholder="Name" value={editForm.attendeeName} onChange={(e) => setEditForm({ ...editForm, attendeeName: e.target.value })} />
                   <Input placeholder="Email" value={editForm.attendeeEmail} onChange={(e) => setEditForm({ ...editForm, attendeeEmail: e.target.value })} />
@@ -463,10 +533,15 @@ export default function AppointmentsPage() {
               <Textarea value={rescheduleForm.reason} onChange={(e) => setRescheduleForm({ ...rescheduleForm, reason: e.target.value })} rows={2} placeholder="Client requested a later slot..." />
             </div>
             {rescheduleAppt?.rescheduleHistory?.length > 0 && (
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div className="font-medium">History</div>
+              <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1.5">
+                <div className="font-semibold uppercase tracking-wider text-[10px]">Reschedule history</div>
                 {rescheduleAppt.rescheduleHistory.slice(-3).reverse().map((h: any, i: number) => (
-                  <div key={i}>{formatDate(h.fromStartTime)} → {formatDate(h.toStartTime)}{h.reason ? ` (${h.reason})` : ''}</div>
+                  <div key={i} className="flex flex-wrap items-center gap-1.5">
+                    <span className="tabular">{formatDate(h.fromStartTime)}</span>
+                    <span className="text-muted-foreground/60">→</span>
+                    <span className="tabular font-medium text-foreground">{formatDate(h.toStartTime)}</span>
+                    {h.reason && <span className="italic">({h.reason})</span>}
+                  </div>
                 ))}
               </div>
             )}

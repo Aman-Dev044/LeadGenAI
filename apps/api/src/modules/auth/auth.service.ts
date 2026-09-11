@@ -339,14 +339,75 @@ AI Lead Generation Platform`,
   }
 
   async login(dto: LoginDto, userAgent?: string, ip?: string) {
-    // Find tenant by slug
-    const tenant = await this.tenantModel.findOne({ slug: dto.tenantSlug.toLowerCase().trim(), deletedAt: null });
-    if (!tenant) {
-      throw new UnauthorizedException('Invalid credentials');
+    const isStaffLogin = dto.loginType === 'staff' || !dto.tenantSlug;
+    let tenant: any = null;
+    let user: any = null;
+
+    if (isStaffLogin) {
+      // Find active user candidates matching this email
+      const candidates = await this.userModel
+        .find({ email: dto.email.toLowerCase().trim(), deletedAt: null })
+        .select('+password');
+
+      if (!candidates || candidates.length === 0) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Check password match among candidates
+      for (const candidate of candidates) {
+        const isMatch = await bcrypt.compare(dto.password, candidate.password);
+        if (isMatch) {
+          user = candidate;
+          break;
+        }
+      }
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Role check for staff login: restricted to SALES_MANAGER, SALESPERSON, VIEWER
+      if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+        throw new UnauthorizedException('Admin accounts must sign in using the Admin tab');
+      }
+
+      if (user.role !== 'SALES_MANAGER' && user.role !== 'SALESPERSON' && user.role !== 'VIEWER') {
+        throw new UnauthorizedException('Access restricted to staff accounts only');
+      }
+
+      tenant = await this.tenantModel.findOne({ _id: user.tenantId, deletedAt: null });
+      if (!tenant) {
+        throw new UnauthorizedException('Workspace account not found');
+      }
+    } else {
+      // Admin login flow (requires tenantSlug)
+      if (!dto.tenantSlug?.trim()) {
+        throw new BadRequestException('Organization slug is required');
+      }
+
+      tenant = await this.tenantModel.findOne({ slug: dto.tenantSlug.toLowerCase().trim(), deletedAt: null });
+      if (!tenant) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      user = await this.userModel
+        .findOne({ tenantId: tenant._id.toString(), email: dto.email.toLowerCase().trim(), deletedAt: null })
+        .select('+password');
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      if (dto.loginType === 'admin' && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+        throw new UnauthorizedException('Staff accounts must sign in using the Staff tab');
+      }
     }
 
-    // Platform owners always sign in through the owner workspace, which can never be
-    // suspended, so a suspended/closed tenant blocks everyone.
     if (tenant.status === 'suspended') {
       throw new UnauthorizedException(
         tenant.suspendedReason
@@ -358,27 +419,10 @@ AI Lead Generation Platform`,
       throw new UnauthorizedException('Tenant account is closed');
     }
 
-    // Find user (emails are stored lower-cased)
-    const user = await this.userModel
-      .findOne({ tenantId: tenant._id.toString(), email: dto.email.toLowerCase().trim(), deletedAt: null })
-      .select('+password');
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Self-service signups must confirm the emailed code first. Password was correct, so it is
-    // safe to say why and to push a fresh code when the previous one has expired.
     if (user.pendingEmailVerification) {
       const sentAt = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
       const expired = !user.emailVerificationExpires || new Date(user.emailVerificationExpires) < new Date();
@@ -536,19 +580,32 @@ AI Lead Generation Platform`,
     return { message: 'Password changed successfully' };
   }
 
-  async forgotPassword(email: string, tenantSlug: string) {
-    const tenant = await this.tenantModel.findOne({ slug: tenantSlug });
-    if (!tenant) {
-      // Don't reveal tenant existence
-      return { message: 'If the account exists, a reset link has been sent' };
+  async forgotPassword(email: string, tenantSlug?: string) {
+    const normalizedEmail = email.toLowerCase().trim();
+    let tenant: any = null;
+    let user: any = null;
+
+    if (tenantSlug?.trim()) {
+      tenant = await this.tenantModel.findOne({ slug: tenantSlug.toLowerCase().trim(), deletedAt: null });
+      if (tenant) {
+        user = await this.userModel.findOne({
+          tenantId: tenant._id.toString(),
+          email: normalizedEmail,
+          deletedAt: null,
+        });
+      }
+    } else {
+      user = await this.userModel.findOne({
+        email: normalizedEmail,
+        deletedAt: null,
+      });
+      if (user) {
+        tenant = await this.tenantModel.findOne({ _id: user.tenantId, deletedAt: null });
+      }
     }
 
-    const user = await this.userModel.findOne({
-      tenantId: tenant._id.toString(),
-      email,
-    });
-
-    if (!user) {
+    if (!tenant || !user) {
+      // Don't reveal account existence
       return { message: 'If the account exists, a reset link has been sent' };
     }
 
@@ -562,7 +619,7 @@ AI Lead Generation Platform`,
 
     // Send email with reset link
     const appUrl = this.configService.get<string>('app.url') || 'http://localhost:3000';
-    const resetLink = `${appUrl}/auth/reset-password?token=${resetToken}&tenant=${tenantSlug}`;
+    const resetLink = `${appUrl}/auth/reset-password?token=${resetToken}&tenant=${tenant.slug}`;
 
     try {
       await this.emailProvider.sendEmail({

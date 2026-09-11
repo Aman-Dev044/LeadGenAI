@@ -3,15 +3,16 @@ import { use, useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Send, Bot, User, ArrowLeftRight, Wifi, WifiOff, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Bot, User, ArrowLeftRight, WifiOff, FileText, Loader2, Sparkles, XCircle, MapPin, ArrowRight, MessageSquare } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loading } from '@/components/shared/loading';
+import { EmptyState } from '@/components/shared/empty-state';
 import { formatDate, cn } from '@/lib/utils';
 import { useChatSocket } from '@/hooks/use-chat-socket';
 
@@ -191,109 +192,154 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
     typingTimeoutRef.current = setTimeout(() => emitTyping(false), 2000);
   };
 
-  if (isLoading) return <Loading />;
-  if (!conversation) return <div>Conversation not found</div>;
+  if (isLoading) return <Loading label="Opening conversation" />;
+  if (!conversation) {
+    return (
+      <EmptyState
+        icon={MessageSquare}
+        title="Conversation not found"
+        description="It may have been archived or you don't have access to it."
+        actionLabel="Back to conversations"
+        onAction={() => router.push('/dashboard/conversations')}
+      />
+    );
+  }
 
   const isLiveChat = (conversation.mode === 'human' || conversation.mode === 'hybrid') && conversation.status !== 'ended';
   const canSend = isLiveChat && conversation.status !== 'ended';
+  const visitorId: string = conversation.visitorId || '';
+  const visitorLabel = `Visitor ${visitorId.slice(0, 8)}`;
+  const location = [conversation.visitorInfo?.city, conversation.visitorInfo?.country].filter(Boolean).join(', ');
+  const statusVariant: Record<string, 'success' | 'secondary' | 'warning' | 'info'> = { active: 'success', ended: 'secondary', handed_off: 'warning', archived: 'info' };
+  const modeMeta: Record<string, { label: string; icon: any; cls: string }> = {
+    bot: { label: 'AI bot', icon: Bot, cls: 'bg-primary/10 text-primary' },
+    human: { label: 'Human', icon: User, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+    hybrid: { label: 'Hybrid', icon: Sparkles, cls: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+  };
+  const mode = modeMeta[conversation.mode] || modeMeta.bot;
+  const ModeIcon = mode.icon;
+
+  const senderAvatar = (sender: string) =>
+    sender === 'bot' ? (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white shadow-sm">
+        <Bot className="h-4 w-4" />
+      </div>
+    ) : sender === 'agent' ? (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/30">
+        <User className="h-4 w-4" />
+      </div>
+    ) : (
+      <Avatar className="h-8 w-8">
+        <AvatarFallback className="bg-gradient-to-br from-slate-400 to-slate-600 text-[11px]">{visitorId.slice(0, 2).toUpperCase() || 'V'}</AvatarFallback>
+      </Avatar>
+    );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <Button variant="ghost" onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+    <div className="space-y-5">
+      {/* Top bar */}
+      <div className="flex items-center justify-between gap-3">
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <div className="flex items-center gap-2">
           {isConnected ? (
-            <Badge variant="success" className="gap-1"><Wifi className="h-3 w-3" /> Live</Badge>
+            <Badge variant="success" className="gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              Live
+            </Badge>
           ) : (
             <Badge variant="secondary" className="gap-1"><WifiOff className="h-3 w-3" /> Polling</Badge>
           )}
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Chat Panel */}
-        <div className="md:col-span-2">
-          <Card className="h-[650px] flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between py-3">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">
-                  {isLiveChat ? 'Live Chat' : 'Chat'}
-                </CardTitle>
-                <Badge>{conversation.status}</Badge>
-                <Badge variant="outline">{conversation.mode}</Badge>
+        <div className="lg:col-span-2">
+          <Card className="flex h-[calc(100vh-13rem)] min-h-[560px] flex-col overflow-hidden">
+            {/* Chat header */}
+            <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar className="h-10 w-10 ring-2 ring-card">
+                  <AvatarFallback className="bg-gradient-to-br from-slate-400 to-slate-600">{visitorId.slice(0, 2).toUpperCase() || 'V'}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold truncate">{visitorLabel}</p>
+                    <Badge variant={statusVariant[conversation.status] || 'secondary'} dot>{conversation.status.replace('_', ' ')}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    <ModeIcon className="h-3 w-3" /> {isLiveChat ? 'Live chat · ' : ''}{mode.label}{location ? ` · ${location}` : ''}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {conversation.status === 'active' && conversation.mode === 'bot' && (
-                  <Button variant="outline" size="sm" onClick={() => handoffMutation.mutate()}>
-                    <ArrowLeftRight className="mr-2 h-3 w-3" /> Take Over
+                  <Button variant="gradient" size="sm" onClick={() => handoffMutation.mutate()}>
+                    <ArrowLeftRight className="h-3.5 w-3.5" /> Take Over
                   </Button>
                 )}
                 {conversation.status !== 'ended' && (
                   <Button variant="outline" size="sm" onClick={() => endMutation.mutate()}>
-                    End Chat
+                    <XCircle className="h-3.5 w-3.5" /> End Chat
                   </Button>
                 )}
               </div>
-            </CardHeader>
-            <Separator />
-            <ScrollArea className="flex-1 p-4">
-              <div className="space-y-4">
-                {messages.map((msg: any) => (
-                  <div
-                    key={msg._id}
-                    className={cn(
-                      'flex gap-3',
-                      msg.sender === 'visitor' ? '' : 'flex-row-reverse',
-                      msg._optimistic && 'opacity-60',
-                    )}
-                  >
-                    <div className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-                      msg.sender === 'visitor' ? 'bg-secondary' : msg.sender === 'bot' ? 'bg-primary/10' : 'bg-green-100',
-                    )}>
-                      {msg.sender === 'bot' ? (
-                        <Bot className="h-4 w-4" />
-                      ) : msg.sender === 'agent' ? (
-                        <User className="h-4 w-4 text-green-700" />
-                      ) : (
-                        <User className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className={cn(
-                      'max-w-[70%] rounded-lg px-4 py-2',
-                      msg.sender === 'visitor' ? 'bg-secondary' :
-                      msg.sender === 'agent' ? 'bg-green-50 border border-green-200' :
-                      'bg-primary/10',
-                      msg.type === 'tool_result' && 'bg-amber-50 border border-amber-200 text-xs font-mono',
-                    )}>
-                      {msg.type === 'tool_result' ? (
-                        <p className="text-xs text-amber-700">{msg.content}</p>
-                      ) : (
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</p>
-                        {msg.sender === 'agent' && (
-                          <span className="text-xs text-green-600 font-medium">Agent</span>
-                        )}
+            </div>
+
+            {/* Messages */}
+            <ScrollArea className="flex-1 min-h-0 bg-[radial-gradient(circle_at_1px_1px,color-mix(in_srgb,var(--color-foreground)_5%,transparent)_1px,transparent_0)] [background-size:18px_18px]">
+              <div className="space-y-4 p-4 md:p-5">
+                {messages.length === 0 && (
+                  <div className="py-16 text-center text-sm text-muted-foreground">No messages yet.</div>
+                )}
+                {messages.map((msg: any) => {
+                  const isVisitor = msg.sender === 'visitor';
+                  const isTool = msg.type === 'tool_result';
+                  return (
+                    <div
+                      key={msg._id}
+                      className={cn('flex items-end gap-2.5', !isVisitor && 'flex-row-reverse', msg._optimistic && 'opacity-60')}
+                    >
+                      {senderAvatar(msg.sender)}
+                      <div className={cn('flex max-w-[76%] flex-col gap-1', !isVisitor && 'items-end')}>
+                        <div
+                          className={cn(
+                            'px-4 py-2.5 text-sm shadow-sm',
+                            isTool
+                              ? 'rounded-xl border border-amber-500/30 bg-amber-500/10 font-mono text-[11px] text-amber-700 dark:text-amber-300'
+                              : isVisitor
+                                ? 'rounded-2xl rounded-bl-md bg-card border'
+                                : msg.sender === 'agent'
+                                  ? 'rounded-2xl rounded-br-md bg-emerald-600 text-white'
+                                  : 'rounded-2xl rounded-br-md bg-primary text-primary-foreground',
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-muted-foreground">
+                          {msg.sender === 'agent' && <span className="font-semibold text-emerald-600 dark:text-emerald-400">Agent</span>}
+                          {msg.sender === 'bot' && <span className="font-semibold text-primary">AI</span>}
+                          {isTool && <span className="font-semibold text-amber-600">Tool</span>}
+                          <span>{formatDate(msg.createdAt)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Typing Indicator */}
                 {isVisitorTyping && (
-                  <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                      <User className="h-4 w-4" />
-                    </div>
-                    <div className="bg-secondary rounded-lg px-4 py-2">
+                  <div className="flex items-end gap-2.5">
+                    {senderAvatar('visitor')}
+                    <div className="rounded-2xl rounded-bl-md border bg-card px-4 py-3 shadow-sm">
                       <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                     </div>
                   </div>
@@ -302,14 +348,13 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
               </div>
             </ScrollArea>
 
-            {/* Message Input - Visible for live chat */}
+            {/* Composer - Visible for live chat */}
             {canSend && (
-              <>
-                <Separator />
-                <div className="p-4 flex gap-2">
+              <div className="border-t bg-card p-3">
+                <div className="flex items-center gap-2 rounded-xl border bg-background px-2 py-1.5 shadow-xs transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
                   <Input
                     ref={inputRef}
-                    placeholder="Type a message..."
+                    placeholder="Type a reply… (Enter to send)"
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -322,67 +367,103 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                       }
                     }}
                     autoFocus
+                    className="h-9 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-0"
                   />
                   <Button
                     size="icon"
+                    variant="gradient"
+                    className="h-9 w-9 shrink-0 rounded-lg"
                     onClick={handleSend}
                     disabled={!message.trim() || sendMutation.isPending}
+                    aria-label="Send"
                   >
-                    {sendMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
+                    {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* Show notice for bot mode */}
             {conversation.mode === 'bot' && conversation.status === 'active' && (
-              <>
-                <Separator />
-                <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
-                  Bot is handling this conversation. Click &quot;Take Over&quot; to start live chat.
-                </div>
-              </>
+              <div className="flex items-center justify-center gap-2 border-t bg-primary/[0.04] px-4 py-3 text-center text-sm text-muted-foreground">
+                <Bot className="h-4 w-4 text-primary" />
+                AI is handling this conversation. Click <span className="font-semibold text-foreground">Take Over</span> to start a live chat.
+              </div>
             )}
 
             {conversation.status === 'ended' && (
-              <>
-                <Separator />
-                <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
-                  This conversation has ended.
-                </div>
-              </>
+              <div className="flex items-center justify-center gap-2 border-t bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
+                <XCircle className="h-4 w-4" /> This conversation has ended.
+              </div>
             )}
           </Card>
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* Visitor card */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Details</CardTitle></CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <div className="flex justify-between"><span className="text-muted-foreground">Visitor</span><span className="font-mono">{conversation.visitorId?.slice(0, 12)}</span></div>
-              <Separator />
-              <div className="flex justify-between"><span className="text-muted-foreground">Messages</span><span>{conversation.messageCount}</span></div>
-              <Separator />
-              <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><Badge variant="outline">{conversation.mode}</Badge></div>
-              <Separator />
-              <div className="flex justify-between"><span className="text-muted-foreground">Sentiment</span><span>{conversation.sentiment || 'N/A'}</span></div>
-              <Separator />
-              <div className="flex justify-between"><span className="text-muted-foreground">Started</span><span>{formatDate(conversation.createdAt)}</span></div>
+            <CardHeader className="pb-3">
+              <CardTitle>Visitor</CardTitle>
+              <CardDescription>Who you are talking to.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 flex items-center gap-3">
+                <Avatar className="h-11 w-11">
+                  <AvatarFallback className="bg-gradient-to-br from-slate-400 to-slate-600">{visitorId.slice(0, 2).toUpperCase() || 'V'}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{visitorLabel}</p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">{visitorId.slice(0, 16)}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-b py-2.5 text-sm">
+                <span className="text-muted-foreground">Handled by</span>
+                <span className="inline-flex items-center gap-1.5 font-medium">
+                  <span className={cn('flex h-6 w-6 items-center justify-center rounded-md', mode.cls)}><ModeIcon className="h-3.5 w-3.5" /></span>
+                  {mode.label}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-b py-2.5 text-sm">
+                <span className="text-muted-foreground">Messages</span>
+                <span className="font-medium tabular">{conversation.messageCount}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-b py-2.5 text-sm">
+                <span className="text-muted-foreground">Sentiment</span>
+                <span className="font-medium capitalize">{conversation.sentiment || 'N/A'}</span>
+              </div>
+              {location && (
+                <div className="flex items-center justify-between gap-3 border-b py-2.5 text-sm">
+                  <span className="text-muted-foreground">Location</span>
+                  <span className="inline-flex items-center gap-1 font-medium"><MapPin className="h-3.5 w-3.5 text-muted-foreground" /> {location}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3 border-b py-2.5 text-sm">
+                <span className="text-muted-foreground">Started</span>
+                <span className="font-medium text-right">{formatDate(conversation.createdAt)}</span>
+              </div>
               {conversation.endedAt && (
-                <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Ended</span><span>{formatDate(conversation.endedAt)}</span></div></>
+                <div className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Ended</span>
+                  <span className="font-medium text-right">{formatDate(conversation.endedAt)}</span>
+                </div>
+              )}
+              {conversation.leadId && (
+                <Button variant="soft" className="mt-4 w-full" onClick={() => router.push(`/dashboard/leads/${conversation.leadId}`)}>
+                  <User className="h-4 w-4" /> View linked lead <ArrowRight className="h-4 w-4" />
+                </Button>
               )}
             </CardContent>
           </Card>
 
           {/* AI Summary Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between py-3">
-              <CardTitle className="text-base">AI Summary</CardTitle>
+          <Card className="relative overflow-hidden">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/20 to-transparent blur-2xl" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-violet-500" /> AI summary</CardTitle>
+                <CardDescription>Key points from the transcript.</CardDescription>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -390,28 +471,22 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 disabled={summaryMutation.isPending || messages.length < 2}
               >
                 {summaryMutation.isPending ? (
-                  <><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Generating...</>
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
                 ) : (
-                  <><FileText className="mr-1 h-3 w-3" /> {conversation.summary ? 'Regenerate' : 'Generate'}</>
+                  <><FileText className="h-3.5 w-3.5" /> {conversation.summary ? 'Regenerate' : 'Generate'}</>
                 )}
               </Button>
             </CardHeader>
             <CardContent>
               {conversation.summary ? (
-                <p className="text-sm text-muted-foreground leading-relaxed">{conversation.summary}</p>
+                <p className="rounded-xl border-l-4 border-violet-400 bg-violet-500/[0.06] p-3 text-sm leading-relaxed">{conversation.summary}</p>
               ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  No summary yet. Click &quot;Generate&quot; to create an AI summary of this conversation.
+                <p className="text-sm text-muted-foreground">
+                  No summary yet. Generate one to get a quick recap of what the visitor wanted.
                 </p>
               )}
             </CardContent>
           </Card>
-
-          {conversation.leadId && (
-            <Button variant="outline" className="w-full" onClick={() => router.push(`/dashboard/leads/${conversation.leadId}`)}>
-              View Lead
-            </Button>
-          )}
         </div>
       </div>
     </div>

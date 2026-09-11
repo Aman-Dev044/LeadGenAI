@@ -14,6 +14,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (hasHydrated && !allowed) router.replace('/dashboard');
   }, [hasHydrated, allowed, router]);
 
-  if (!hasHydrated || !allowed) return <Loading />;
+  if (!hasHydrated || !allowed) return <Loading label="Opening the owner console" />;
   return <>{children}</>;
 }

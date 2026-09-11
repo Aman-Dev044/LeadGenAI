@@ -2,11 +2,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Workflow, Trash2, Pencil, X, History, ArrowDown, GripVertical } from 'lucide-react';
+import { Plus, Workflow, Trash2, Pencil, X, History, Zap, Mail, MessageSquare, Phone, Bell, Tag, UserPlus, Clock, PlayCircle, Layers, type LucideIcon } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { StatCard } from '@/components/shared/stat-card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +19,7 @@ import { Separator } from '@/components/ui/separator';
 import { PageHeader } from '@/components/shared/page-header';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Loading } from '@/components/shared/loading';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDate } from '@/lib/utils';
 
 const TRIGGERS = [
@@ -37,6 +40,25 @@ const ACTIONS = [
 ];
 
 const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'];
+
+const ACTION_ICONS: Record<string, LucideIcon> = {
+  send_email: Mail, send_sms: Phone, send_whatsapp: MessageSquare,
+  notify_salesperson: Bell, change_status: Tag, assign_lead: UserPlus,
+};
+const ACTION_TONES: Record<string, string> = {
+  send_email: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  send_sms: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  send_whatsapp: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  notify_salesperson: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  change_status: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+  assign_lead: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+};
+const fmtDelay = (m: number) => (m === 0 ? 'Immediately' : m >= 1440 ? `${(m / 1440).toFixed(m % 1440 ? 1 : 0)}d` : m >= 60 ? `${(m / 60).toFixed(m % 60 ? 1 : 0)}h` : `${m}m`);
+
+function ActionIcon({ action, className = 'h-4 w-4' }: { action: string; className?: string }) {
+  const Icon = ACTION_ICONS[action] || Zap;
+  return <Icon className={className} />;
+}
 
 interface StepForm {
   order: number;
@@ -200,59 +222,83 @@ export default function FollowUpsPage() {
 
   if (isLoading) return <Loading />;
 
+  const activeCount = workflows.filter((w: any) => w.isActive).length;
+  const totalSteps = workflows.reduce((n: number, w: any) => n + (w.steps?.length || 0), 0);
+
   return (
     <div>
       <PageHeader
         title="Follow-up Workflows"
-        description="Automate lead follow-up sequences"
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="mr-2 h-4 w-4" /> Create Workflow</Button>}
+        description="Automate multi-step nurture sequences that fire on lead events — email, SMS, WhatsApp and internal actions."
+        icon={Workflow}
+        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Create Workflow</Button>}
       />
 
+      {workflows.length > 0 && (
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <StatCard title="Workflows" value={workflows.length} icon={Workflow} tone="primary" description="total sequences" />
+          <StatCard title="Active" value={activeCount} icon={PlayCircle} tone="success" description={`${workflows.length - activeCount} paused`} />
+          <StatCard title="Automated steps" value={totalSteps} icon={Layers} tone="violet" description="across all workflows" />
+        </div>
+      )}
+
       {workflows.length === 0 ? (
-        <EmptyState icon={Workflow} title="No workflows" description="Create automated follow-up workflows to nurture your leads" actionLabel="Create Workflow" onAction={() => setShowCreate(true)} />
+        <EmptyState icon={Workflow} title="No workflows yet" description="Create automated follow-up sequences that nurture leads while your team sleeps." actionLabel="Create Workflow" onAction={() => setShowCreate(true)} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {workflows.map((wf: any) => (
-            <Card key={wf._id}>
-              <CardHeader className="flex flex-row items-start justify-between space-y-0">
-                <div>
-                  <CardTitle className="text-base">{wf.name}</CardTitle>
-                  <CardDescription>{wf.description || 'No description'}</CardDescription>
+            <Card key={wf._id} className="group flex flex-col p-5">
+              <div className="flex items-start gap-3">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${wf.isActive ? 'bg-brand-gradient text-white shadow-md shadow-primary/25' : 'bg-muted text-muted-foreground'}`}>
+                  <Workflow className="h-5 w-5" />
                 </div>
-                <Switch
-                  checked={wf.isActive}
-                  onCheckedChange={(checked) => toggleMutation.mutate({ id: wf._id, isActive: checked })}
-                />
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2 mb-3">
-                  <Badge variant={wf.isActive ? 'success' : 'secondary'}>{wf.isActive ? 'Active' : 'Inactive'}</Badge>
-                  <Badge variant="outline">{getTriggerLabel(wf.trigger)}</Badge>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate font-semibold leading-tight">{wf.name}</h3>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{wf.description || 'No description'}</p>
                 </div>
-                <p className="text-sm text-muted-foreground mb-1">{wf.steps?.length || 0} step(s)</p>
-                {(wf.steps || []).length > 0 && (
-                  <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
-                    {wf.steps.slice(0, 3).map((s: any, i: number) => (
-                      <p key={i}>
-                        {i + 1}. {getActionLabel(s.action)}
-                        {s.delayMinutes > 0 && <span className="ml-1">(after {s.delayMinutes}m)</span>}
-                      </p>
-                    ))}
-                    {wf.steps.length > 3 && <p>...and {wf.steps.length - 3} more</p>}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(wf)}>
-                    <Pencil className="mr-1 h-3 w-3" /> Edit
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => { setLogsWfId(wf._id); setLogsWfName(wf.name); }}>
-                    <History className="mr-1 h-3 w-3" /> Logs
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(wf._id)}>
-                    <Trash2 className="mr-1 h-3 w-3" /> Delete
-                  </Button>
-                </div>
-              </CardContent>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <Switch checked={wf.isActive} onCheckedChange={(checked) => toggleMutation.mutate({ id: wf._id, isActive: checked })} />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>{wf.isActive ? 'Pause workflow' : 'Activate workflow'}</TooltipContent>
+                </Tooltip>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                <Badge variant={wf.isActive ? 'success' : 'secondary'} dot>{wf.isActive ? 'Active' : 'Paused'}</Badge>
+                <Badge variant="violet"><Zap className="h-3 w-3" />{getTriggerLabel(wf.trigger)}</Badge>
+                <Badge variant="outline">{wf.steps?.length || 0} step{(wf.steps?.length || 0) === 1 ? '' : 's'}</Badge>
+              </div>
+
+              {(wf.steps || []).length > 0 && (
+                <ol className="mt-4 space-y-1.5">
+                  {wf.steps.slice(0, 3).map((st: any, i: number) => (
+                    <li key={i} className="flex items-center gap-2.5 text-xs">
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${ACTION_TONES[st.action] || 'bg-muted text-muted-foreground'}`}>
+                        <ActionIcon action={st.action} className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="flex-1 truncate font-medium">{getActionLabel(st.action)}</span>
+                      <span className="inline-flex items-center gap-1 text-muted-foreground tabular"><Clock className="h-3 w-3" />{fmtDelay(st.delayMinutes || 0)}</span>
+                    </li>
+                  ))}
+                  {wf.steps.length > 3 && <li className="pl-8 text-[11px] text-muted-foreground">+{wf.steps.length - 3} more step{wf.steps.length - 3 === 1 ? '' : 's'}</li>}
+                </ol>
+              )}
+
+              <div className="mt-auto pt-4"><div className="flex items-center gap-1 border-t pt-3">
+                <Button variant="ghost" size="xs" onClick={() => handleEdit(wf)}>
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+                <Button variant="ghost" size="xs" onClick={() => { setLogsWfId(wf._id); setLogsWfName(wf.name); }}>
+                  <History className="h-3.5 w-3.5" /> Logs
+                </Button>
+                <div className="flex-1" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => setDeleteId(wf._id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div></div>
             </Card>
           ))}
         </div>
@@ -260,8 +306,11 @@ export default function FollowUpsPage() {
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Create Workflow</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Workflow</DialogTitle>
+            <DialogDescription>Pick a trigger, then chain the steps that should run after it.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -288,7 +337,7 @@ export default function FollowUpsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+            <Button variant="gradient" onClick={handleCreate} disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Creating...' : 'Create Workflow'}
             </Button>
           </DialogFooter>
@@ -297,8 +346,11 @@ export default function FollowUpsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editWf} onOpenChange={() => setEditWf(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Edit Workflow</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Workflow</DialogTitle>
+            <DialogDescription>Changes apply to future runs only; in-flight follow-ups are not affected.</DialogDescription>
+          </DialogHeader>
           {editWf && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -352,35 +404,52 @@ export default function FollowUpsPage() {
 
       {/* Logs Dialog */}
       <Dialog open={!!logsWfId} onOpenChange={() => setLogsWfId(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Execution Logs - {logsWfName}</DialogTitle>
+            <DialogTitle>Execution Logs</DialogTitle>
+            <DialogDescription>Every step run for <span className="font-medium text-foreground">{logsWfName}</span>, newest first.</DialogDescription>
           </DialogHeader>
           {logs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No execution logs yet</p>
+            <EmptyState compact icon={History} title="No executions yet" description="Logs appear here once the trigger fires for a lead." />
           ) : (
-            <div className="space-y-2">
-              {logs.map((log: any, i: number) => (
-                <div key={log._id || i} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={log.status === 'executed' ? 'success' : log.status === 'failed' ? 'destructive' : log.status === 'skipped' ? 'secondary' : 'default'}>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Step</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Scheduled</TableHead>
+                  <TableHead>Executed</TableHead>
+                  <TableHead className="text-right">Lead</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log: any, i: number) => (
+                  <TableRow key={log._id || i}>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${ACTION_TONES[log.action] || 'bg-muted text-muted-foreground'}`}>
+                          <ActionIcon action={log.action} className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">{getActionLabel(log.action)}</div>
+                          <div className="text-[11px] text-muted-foreground">Step #{(log.stepOrder || 0) + 1}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge dot variant={log.status === 'executed' ? 'success' : log.status === 'failed' ? 'destructive' : log.status === 'skipped' ? 'secondary' : log.status === 'processing' ? 'info' : 'warning'}>
                         {log.status}
                       </Badge>
-                      <span className="text-sm font-medium">{getActionLabel(log.action)}</span>
-                      <span className="text-xs text-muted-foreground">Step #{(log.stepOrder || 0) + 1}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {log.scheduledAt && <span>Scheduled: {formatDate(log.scheduledAt)}</span>}
-                      {log.executedAt && <span className="ml-3">Executed: {formatDate(log.executedAt)}</span>}
-                    </div>
-                    {log.errorMessage && <p className="text-xs text-destructive mt-1">{log.errorMessage}</p>}
-                    {log.skipReason && <p className="text-xs text-muted-foreground mt-1">Skipped: {log.skipReason}</p>}
-                  </div>
-                  <code className="text-xs text-muted-foreground">{log.leadId?.slice(-6)}</code>
-                </div>
-              ))}
-            </div>
+                      {log.errorMessage && <p className="mt-1 max-w-[220px] text-[11px] text-destructive line-clamp-2">{log.errorMessage}</p>}
+                      {log.skipReason && <p className="mt-1 max-w-[220px] text-[11px] text-muted-foreground line-clamp-2">Skipped: {log.skipReason}</p>}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular">{log.scheduledAt ? formatDate(log.scheduledAt) : '-'}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular">{log.executedAt ? formatDate(log.executedAt) : '-'}</TableCell>
+                    <TableCell className="text-right"><code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{log.leadId?.slice(-6) || '-'}</code></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </DialogContent>
       </Dialog>
@@ -388,7 +457,7 @@ export default function FollowUpsPage() {
   );
 }
 
-// Step Builder Component
+// Step Builder Component - vertical stepper
 function StepBuilder({
   steps, setSteps, users, addStep, removeStep, updateStep,
 }: {
@@ -402,58 +471,70 @@ function StepBuilder({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Steps ({steps.length})</Label>
-        <Button type="button" variant="outline" size="sm" onClick={() => addStep(steps, setSteps)}>
-          <Plus className="mr-1 h-3 w-3" /> Add Step
+        <div>
+          <p className="text-sm font-semibold">Steps <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground tabular">{steps.length}</span></p>
+          <p className="text-xs text-muted-foreground">Runs top to bottom. Delay is counted from the previous step.</p>
+        </div>
+        <Button type="button" variant="soft" size="sm" onClick={() => addStep(steps, setSteps)}>
+          <Plus className="h-3.5 w-3.5" /> Add Step
         </Button>
       </div>
 
       {steps.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
-          No steps yet. Add at least one step to define the workflow.
-        </p>
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-8 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"><Layers className="h-5 w-5" /></div>
+          <p className="text-sm font-medium">No steps yet</p>
+          <p className="text-xs text-muted-foreground">Add at least one step to define what happens after the trigger.</p>
+        </div>
       )}
 
-      {steps.map((step, i) => (
-        <div key={i}>
-          {i > 0 && (
-            <div className="flex justify-center py-1">
-              <ArrowDown className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Step {i + 1}</span>
-              </div>
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeStep(steps, setSteps, i)}>
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+      {steps.length > 0 && (
+        <ol className="relative space-y-4 pl-10">
+          <span className="pointer-events-none absolute left-[15px] top-4 bottom-4 w-px bg-gradient-to-b from-primary/60 via-border to-border" />
+          {steps.map((step, i) => (
+            <li key={i} className="relative">
+              <span className="absolute -left-10 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-white shadow-md shadow-primary/30 ring-4 ring-card">
+                {i + 1}
+              </span>
+              <div className="rounded-xl border bg-card p-4 shadow-xs space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${ACTION_TONES[step.action] || 'bg-muted text-muted-foreground'}`}>
+                      <ActionIcon action={step.action} className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="truncate text-sm font-semibold">{ACTIONS.find((a) => a.value === step.action)?.label || 'Step'}</span>
+                    <Badge variant="outline" className="normal-case"><Clock className="h-3 w-3" />{fmtDelay(step.delayMinutes || 0)}</Badge>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove step" onClick={() => removeStep(steps, setSteps, i)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Action</Label>
-                <Select value={step.action} onValueChange={(v) => updateStep(steps, setSteps, i, 'action', v)}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {ACTIONS.map((a) => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Delay (minutes)</Label>
-                <Input type="number" min={0} className="h-9" value={step.delayMinutes} onChange={(e) => updateStep(steps, setSteps, i, 'delayMinutes', parseInt(e.target.value) || 0)} />
-                <p className="text-xs text-muted-foreground">{step.delayMinutes === 0 ? 'Immediate' : step.delayMinutes >= 60 ? `${(step.delayMinutes / 60).toFixed(1)} hours` : `${step.delayMinutes} min`}</p>
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Action</Label>
+                    <Select value={step.action} onValueChange={(v) => updateStep(steps, setSteps, i, 'action', v)}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ACTIONS.map((a) => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">{ACTIONS.find((a) => a.value === step.action)?.desc}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Delay (minutes)</Label>
+                    <Input type="number" min={0} className="h-9" value={step.delayMinutes} onChange={(e) => updateStep(steps, setSteps, i, 'delayMinutes', parseInt(e.target.value) || 0)} />
+                    <p className="text-[11px] text-muted-foreground">{step.delayMinutes === 0 ? 'Runs immediately' : step.delayMinutes >= 60 ? `Waits ${(step.delayMinutes / 60).toFixed(1)} hours` : `Waits ${step.delayMinutes} min`}</p>
+                  </div>
+                </div>
 
-            {/* Action-specific config */}
-            <ActionConfigFields step={step} index={i} steps={steps} setSteps={setSteps} users={users} updateStep={updateStep} />
-          </div>
-        </div>
-      ))}
+                {/* Action-specific config */}
+                <ActionConfigFields step={step} index={i} steps={steps} setSteps={setSteps} users={users} updateStep={updateStep} />
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

@@ -59,13 +59,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="w-full">
+      <Card className="w-full shadow-float border-border/70">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <Sparkles className="h-10 w-10 text-primary" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-gradient text-white shadow-md shadow-primary/30"><Sparkles className="h-6 w-6" /></div>
           </div>
-          <CardTitle className="text-2xl">Create your account</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Create your account</CardTitle>
           <CardDescription>Start capturing leads with AI in minutes</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -103,7 +103,7 @@ export default function RegisterPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Account
             </Button>

@@ -2,28 +2,57 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, FileText, Globe, Type, RefreshCw, Trash2, BookOpen, Search, Pencil, Eye, Map, Upload } from 'lucide-react';
+import {
+  Plus, FileText, Globe, Type, RefreshCw, Trash2, BookOpen, Search, Pencil, Eye, Map, Upload,
+  Layers, CheckCircle2, AlertTriangle, Loader2, MoreHorizontal, ExternalLink, Calendar, Sparkles,
+} from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PageHeader } from '@/components/shared/page-header';
-import { Loading } from '@/components/shared/loading';
+import { StatCard } from '@/components/shared/stat-card';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
 import type { KnowledgeSource } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 const statusColors: Record<string, 'default' | 'warning' | 'success' | 'destructive'> = {
   pending: 'default', processing: 'warning', completed: 'success', failed: 'destructive',
 };
 
 const typeIcons: Record<string, any> = { file: Upload, url: Globe, text: Type, sitemap: Map };
+const typeTile: Record<string, string> = {
+  file: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  url: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  text: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  sitemap: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+};
+const TYPE_OPTIONS = [
+  { value: 'text', label: 'Text', icon: Type, hint: 'Paste FAQs, policies or product notes' },
+  { value: 'url', label: 'URL', icon: Globe, hint: 'Extract content from a single page' },
+  { value: 'sitemap', label: 'Sitemap', icon: Map, hint: 'Crawl up to 20 pages' },
+  { value: 'file', label: 'Document', icon: Upload, hint: 'PDF, DOCX, TXT, CSV, MD' },
+];
+
+function StatusBadge({ status }: { status: string }) {
+  const busy = status === 'processing' || status === 'pending';
+  return (
+    <Badge variant={statusColors[status] || 'default'}>
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : status === 'completed' ? <CheckCircle2 className="h-3 w-3" /> : status === 'failed' ? <AlertTriangle className="h-3 w-3" /> : null}
+      {status}
+    </Badge>
+  );
+}
 
 export default function KnowledgeBasePage() {
   const queryClient = useQueryClient();
@@ -47,6 +76,11 @@ export default function KnowledgeBasePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // List filters (client-side, presentation only)
+  const [filter, setFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const { data, isLoading } = useQuery({
     queryKey: ['knowledge-sources'],
@@ -167,104 +201,232 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  if (isLoading) return <Loading />;
+  const totalChunks = sources.reduce((s, x) => s + (x.chunkCount || 0), 0);
+  const readyCount = sources.filter((s) => s.status === 'completed').length;
+  const processingCount = sources.filter((s) => s.status === 'processing' || s.status === 'pending').length;
+  const failedCount = sources.filter((s) => s.status === 'failed').length;
+
+  const visible = sources.filter((s) => {
+    if (typeFilter !== 'all' && s.type !== typeFilter) return false;
+    if (statusFilter !== 'all' && s.status !== statusFilter) return false;
+    if (filter.trim()) {
+      const q = filter.toLowerCase();
+      return s.name.toLowerCase().includes(q) || (s.sourceUrl || '').toLowerCase().includes(q) || (s.fileName || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const fmtSize = (bytes?: number) => (bytes ? `${(bytes / 1024).toFixed(1)} KB` : null);
 
   return (
     <div>
       <PageHeader
+        icon={BookOpen}
         title="Knowledge Base"
-        description="Train your AI agents with custom knowledge"
+        description="Everything your agents know. Add documents, pages and notes and they are chunked, embedded and searchable within seconds."
         actions={
-          <div className="flex gap-2">
+          <>
             <Button variant="outline" onClick={() => setShowSearch(true)}>
-              <Search className="mr-2 h-4 w-4" /> Test Search
+              <Search className="h-4 w-4" /> Test Search
             </Button>
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="mr-2 h-4 w-4" /> Add Source
+            <Button variant="gradient" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" /> Add Source
             </Button>
-          </div>
+          </>
         }
       />
 
-      {hasProcessing && (
-        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 animate-spin text-yellow-600" />
-          <span className="text-sm text-yellow-700 dark:text-yellow-400">Processing sources... Auto-refreshing every 5 seconds.</span>
+      {isLoading ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[112px]" />)}
+          </div>
+          <Skeleton className="h-14" />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[180px]" />)}
+          </div>
         </div>
-      )}
-
-      {sources.length === 0 ? (
-        <EmptyState icon={BookOpen} title="No knowledge sources" description="Add documents, URLs, or text to train your AI agents" actionLabel="Add Source" onAction={() => setShowCreate(true)} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {sources.map((source) => {
-            const Icon = typeIcons[source.type] || FileText;
-            return (
-              <Card key={source._id}>
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle className="text-base">{source.name}</CardTitle>
-                      <CardDescription className="text-xs capitalize">{source.type}</CardDescription>
-                    </div>
-                  </div>
-                  <Badge variant={statusColors[source.status]}>{source.status}</Badge>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-muted-foreground space-y-1 mb-3">
-                    {source.chunkCount != null && <p>Chunks: {source.chunkCount}</p>}
-                    {source.fileName && <p>File: {source.fileName}</p>}
-                    {source.sourceUrl && <p className="truncate">URL: {source.sourceUrl}</p>}
-                    <p>Added: {formatDate(source.createdAt)}</p>
-                    {source.errorMessage && <p className="text-destructive text-xs">{source.errorMessage}</p>}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setViewSource(source)}>
-                      <Eye className="mr-1 h-3 w-3" /> View
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(source)}>
-                      <Pencil className="mr-1 h-3 w-3" /> Edit
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => reprocessMutation.mutate(source._id)}>
-                      <RefreshCw className="mr-1 h-3 w-3" /> Reprocess
-                    </Button>
-                    <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteId(source._id)}>
-                      <Trash2 className="mr-1 h-3 w-3" /> Delete
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard title="Sources" value={sources.length} icon={BookOpen} tone="primary" description="documents, pages & notes" />
+            <StatCard title="Ready" value={readyCount} icon={CheckCircle2} tone="success" description="indexed and searchable" />
+            <StatCard title="Chunks Indexed" value={totalChunks} icon={Layers} tone="violet" description="vector embeddings" />
+            <StatCard
+              title={failedCount > 0 ? 'Needs Attention' : 'Processing'}
+              value={failedCount > 0 ? failedCount : processingCount}
+              icon={failedCount > 0 ? AlertTriangle : RefreshCw}
+              tone={failedCount > 0 ? 'danger' : 'warning'}
+              description={failedCount > 0 ? 'failed to process' : 'being embedded'}
+            />
+          </div>
+
+          {hasProcessing && (
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+              <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+              <span className="flex-1">Processing {processingCount} source{processingCount === 1 ? '' : 's'}… this list refreshes automatically every 5 seconds.</span>
+            </div>
+          )}
+
+          {sources.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              title="No knowledge sources"
+              description="Add documents, URLs, or text to train your AI agents. The more they know, the better they answer."
+              actionLabel="Add Source"
+              onAction={() => setShowCreate(true)}
+            />
+          ) : (
+            <>
+              <Toolbar>
+                <SearchInput value={filter} onChange={setFilter} placeholder="Search sources…" />
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="url">URL</SelectItem>
+                    <SelectItem value="sitemap">Sitemap</SelectItem>
+                    <SelectItem value="file">Document</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <ToolbarSpacer />
+                <span className="px-1 text-xs text-muted-foreground tabular">{visible.length} of {sources.length}</span>
+              </Toolbar>
+
+              {visible.length === 0 ? (
+                <EmptyState compact icon={Search} title="No matching sources" description="Try a different search or clear the filters." />
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visible.map((source) => {
+                    const Icon = typeIcons[source.type] || FileText;
+                    const busy = source.status === 'processing' || source.status === 'pending';
+                    return (
+                      <Card key={source._id} className="group flex flex-col p-5 transition-all hover:shadow-card-hover hover:border-primary/30">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', typeTile[source.type] || 'bg-primary/10 text-primary')}>
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold leading-tight" title={source.name}>{source.name}</p>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground capitalize">
+                                {source.type}{source.fileName ? ` · ${source.fileName}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 -mr-1 -mt-1">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setViewSource(source)}><Eye className="mr-2 h-4 w-4" /> View details</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEdit(source)}><Pencil className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => reprocessMutation.mutate(source._id)}><RefreshCw className="mr-2 h-4 w-4" /> Reprocess</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-rose-600 focus:text-rose-600 focus:bg-rose-500/10" onClick={() => setDeleteId(source._id)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <StatusBadge status={source.status} />
+                          {source.chunkCount != null && (
+                            <Badge variant="outline" className="normal-case"><Layers className="h-3 w-3" /> {source.chunkCount} chunks</Badge>
+                          )}
+                          {fmtSize(source.fileSize) && <Badge variant="outline" className="normal-case">{fmtSize(source.fileSize)}</Badge>}
+                        </div>
+
+                        {busy && <Progress value={source.status === 'processing' ? 66 : 20} tone="warning" className="mt-3 h-1.5 animate-pulse-soft" />}
+
+                        {source.sourceUrl && (
+                          <a
+                            href={source.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-3 inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <ExternalLink className="h-3 w-3 shrink-0" /> <span className="truncate">{source.sourceUrl}</span>
+                          </a>
+                        )}
+                        {source.errorMessage && (
+                          <p className="mt-3 line-clamp-2 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-600 dark:text-rose-400">{source.errorMessage}</p>
+                        )}
+
+                        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {formatDate(source.createdAt)}</span>
+                          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="View" onClick={() => setViewSource(source)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => handleEdit(source)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Reprocess" onClick={() => reprocessMutation.mutate(source._id)}><RefreshCw className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Add Knowledge Source</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Add Knowledge Source</DialogTitle>
+            <DialogDescription>Choose where the content comes from. It will be processed and embedded automatically.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {TYPE_OPTIONS.map((t) => {
+                  const on = sourceType === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => { setSourceType(t.value); setForm({ ...form, type: t.value }); setSelectedFile(null); }}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all cursor-pointer',
+                        on ? 'border-primary bg-primary/5 shadow-glow' : 'hover:border-muted-foreground/40 hover:bg-accent/40',
+                      )}
+                    >
+                      <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', on ? 'bg-primary/15 text-primary' : typeTile[t.value])}>
+                        <t.icon className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-medium">{t.label}</span>
+                      <span className="text-[11px] leading-snug text-muted-foreground">{t.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Name</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product FAQ" />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={sourceType} onValueChange={(v) => { setSourceType(v); setForm({ ...form, type: v }); setSelectedFile(null); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="url">URL</SelectItem>
-                  <SelectItem value="sitemap">Sitemap</SelectItem>
-                  <SelectItem value="file">Document</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             {sourceType === 'text' && (
               <div className="space-y-2">
                 <Label>Content</Label>
                 <Textarea value={form.rawContent} onChange={(e) => setForm({ ...form, rawContent: e.target.value })} rows={8} placeholder="Paste your knowledge content here..." />
+                <p className="text-xs text-muted-foreground tabular">{form.rawContent.length.toLocaleString()} characters</p>
               </div>
             )}
             {sourceType === 'url' && (
@@ -284,28 +446,40 @@ export default function KnowledgeBasePage() {
             {sourceType === 'file' && (
               <div className="space-y-2">
                 <Label>Upload Document</Label>
-                <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <label
+                  className={cn(
+                    'relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+                    selectedFile ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/40 hover:bg-accent/40',
+                  )}
+                >
                   <Input
                     type="file"
                     accept=".pdf,.docx,.txt,.csv,.md"
-                    className="max-w-xs mx-auto"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   />
-                  {selectedFile && (
-                    <p className="text-sm mt-2 text-muted-foreground">
-                      {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-                    </p>
+                  <div className={cn('flex h-12 w-12 items-center justify-center rounded-2xl', selectedFile ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}>
+                    {selectedFile ? <FileText className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
+                  </div>
+                  {selectedFile ? (
+                    <>
+                      <p className="text-sm font-medium">{selectedFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB · click to change</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium">Click to choose a file <span className="text-muted-foreground font-normal">or drag it here</span></p>
+                      <p className="text-xs text-muted-foreground">PDF, DOCX, TXT, CSV, Markdown · max 10MB</p>
+                    </>
                   )}
-                </div>
-                <p className="text-xs text-muted-foreground">Supported: PDF, DOCX, TXT, CSV, Markdown (max 10MB)</p>
+                </label>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending || uploadMutation.isPending}>
-              {(createMutation.isPending || uploadMutation.isPending) ? 'Adding...' : 'Add Source'}
+            <Button variant="gradient" onClick={handleCreate} disabled={createMutation.isPending || uploadMutation.isPending}>
+              {(createMutation.isPending || uploadMutation.isPending) ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : 'Add Source'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -314,7 +488,10 @@ export default function KnowledgeBasePage() {
       {/* Edit Dialog */}
       <Dialog open={!!editSource} onOpenChange={() => setEditSource(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Edit Source</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit Source</DialogTitle>
+            <DialogDescription>Rename the source or update its content.</DialogDescription>
+          </DialogHeader>
           {editSource && (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -338,12 +515,12 @@ export default function KnowledgeBasePage() {
               {editSource.type === 'file' && (
                 <div className="space-y-2">
                   <Label>Document</Label>
-                  <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{editSource.fileName || 'Uploaded file'}</span>
-                    {editSource.fileSize && (
-                      <span className="text-xs text-muted-foreground">({(editSource.fileSize / 1024).toFixed(1)} KB)</span>
-                    )}
+                  <div className="flex items-center gap-3 rounded-xl border bg-muted/40 p-3">
+                    <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg', typeTile.file)}><FileText className="h-4 w-4" /></div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{editSource.fileName || 'Uploaded file'}</p>
+                      {editSource.fileSize && <p className="text-xs text-muted-foreground">{(editSource.fileSize / 1024).toFixed(1)} KB</p>}
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">To change the document, delete this source and upload a new one</p>
                 </div>
@@ -377,65 +554,69 @@ export default function KnowledgeBasePage() {
 
       {/* View Source Detail Dialog */}
       <Dialog open={!!viewSource} onOpenChange={() => setViewSource(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Source Details</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Source Details</DialogTitle>
+            <DialogDescription>Processing status and a preview of the indexed content.</DialogDescription>
+          </DialogHeader>
           {viewSource && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Name</p>
-                  <p className="font-medium">{viewSource.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Type</p>
-                  <p className="font-medium capitalize">{viewSource.type}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <Badge variant={statusColors[viewSource.status]}>{viewSource.status}</Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Chunks</p>
-                  <p className="font-medium">{viewSource.chunkCount ?? 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Created</p>
-                  <p className="font-medium">{formatDate(viewSource.createdAt)}</p>
-                </div>
-                {viewSource.lastProcessedAt && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">Last Processed</p>
-                    <p className="font-medium">{formatDate(viewSource.lastProcessedAt)}</p>
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                {(() => { const Icon = typeIcons[viewSource.type] || FileText; return (
+                  <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', typeTile[viewSource.type] || 'bg-primary/10 text-primary')}>
+                    <Icon className="h-5 w-5" />
                   </div>
-                )}
+                ); })()}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{viewSource.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{viewSource.type}</p>
+                </div>
+                <StatusBadge status={viewSource.status} />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border p-3">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Chunks</p>
+                  <p className="mt-1 text-lg font-bold tabular">{viewSource.chunkCount ?? '—'}</p>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Created</p>
+                  <p className="mt-1 text-sm font-medium">{formatDate(viewSource.createdAt)}</p>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Last Processed</p>
+                  <p className="mt-1 text-sm font-medium">{viewSource.lastProcessedAt ? formatDate(viewSource.lastProcessedAt) : '—'}</p>
+                </div>
               </div>
 
               {viewSource.sourceUrl && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Source URL</p>
-                  <a href={viewSource.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline break-all">{viewSource.sourceUrl}</a>
+                <div className="text-sm">
+                  <p className="mb-1 text-xs text-muted-foreground">Source URL</p>
+                  <a href={viewSource.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 break-all text-primary hover:underline">
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" /> {viewSource.sourceUrl}
+                  </a>
                 </div>
               )}
 
               {viewSource.fileName && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">File</p>
-                  <p className="text-sm">{viewSource.fileName}</p>
+                <div className="text-sm">
+                  <p className="mb-1 text-xs text-muted-foreground">File</p>
+                  <p>{viewSource.fileName}{viewSource.fileSize ? <span className="text-muted-foreground"> · {(viewSource.fileSize / 1024).toFixed(1)} KB</span> : null}</p>
                 </div>
               )}
 
               {viewSource.errorMessage && (
-                <div className="p-3 bg-destructive/10 rounded-md">
-                  <p className="text-xs text-muted-foreground mb-1">Error</p>
-                  <p className="text-sm text-destructive">{viewSource.errorMessage}</p>
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400"><AlertTriangle className="h-3.5 w-3.5" /> Error</p>
+                  <p className="text-sm text-rose-700 dark:text-rose-300">{viewSource.errorMessage}</p>
                 </div>
               )}
 
               {viewSource.rawContent && (
                 <div>
                   <Separator />
-                  <p className="text-xs text-muted-foreground mb-2 mt-3">Content Preview</p>
-                  <pre className="text-xs bg-muted p-4 rounded-md max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
+                  <p className="mb-2 mt-3 text-xs text-muted-foreground">Content Preview</p>
+                  <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border bg-muted/40 p-4 text-xs leading-relaxed scrollbar-thin">
                     {viewSource.rawContent.length > 3000
                       ? viewSource.rawContent.substring(0, 3000) + '\n\n... (truncated)'
                       : viewSource.rawContent}
@@ -444,7 +625,7 @@ export default function KnowledgeBasePage() {
               )}
 
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Source ID</p>
+                <p className="mb-1 text-xs text-muted-foreground">Source ID</p>
                 <code className="text-xs text-muted-foreground">{viewSource._id}</code>
               </div>
             </div>
@@ -454,49 +635,55 @@ export default function KnowledgeBasePage() {
 
       {/* Search Test Dialog */}
       <Dialog open={showSearch} onOpenChange={(v) => { setShowSearch(v); if (!v) { setSearchQuery(''); setSearchResults([]); } }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Test Knowledge Search</DialogTitle>
             <DialogDescription>Test semantic search against your knowledge base to see what results your AI agents will use</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Ask a question..."
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
+              <div className="relative flex-1">
+                <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Ask a question..."
+                  className="pl-9"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
               <Button onClick={handleSearch} disabled={searching || !searchQuery.trim()}>
-                {searching ? 'Searching...' : 'Search'}
+                {searching ? <><Loader2 className="h-4 w-4 animate-spin" /> Searching...</> : <><Search className="h-4 w-4" /> Search</>}
               </Button>
             </div>
 
             {searchResults.length > 0 && (
               <div className="space-y-3">
                 <p className="text-sm font-medium">{searchResults.length} result(s) found</p>
-                {searchResults.map((result: any, i: number) => (
-                  <Card key={i}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge variant="outline" className="text-xs">
-                          {result.metadata?.sourceName || 'Unknown source'}
+                {searchResults.map((result: any, i: number) => {
+                  const pct = result.score != null ? Math.round(result.score * 100) : null;
+                  return (
+                    <div key={i} className="rounded-xl border bg-card p-4 shadow-card">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <Badge variant="outline" className="normal-case">
+                          <BookOpen className="h-3 w-3" /> {result.metadata?.sourceName || 'Unknown source'}
                         </Badge>
-                        {result.score != null && (
-                          <span className="text-xs text-muted-foreground">
-                            Score: {(result.score * 100).toFixed(1)}%
-                          </span>
+                        {pct != null && (
+                          <div className="flex items-center gap-2">
+                            <Progress value={pct} className="h-1.5 w-20" tone={pct >= 70 ? 'success' : pct >= 40 ? 'warning' : 'danger'} />
+                            <span className="text-xs font-semibold tabular text-muted-foreground">{(result.score * 100).toFixed(1)}%</span>
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{result.content}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{result.content}</p>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {searchResults.length === 0 && searchQuery && !searching && (
-              <p className="text-sm text-muted-foreground text-center py-4">No results. Try a different query or add more knowledge sources.</p>
+              <EmptyState compact icon={Search} title="No results" description="Try a different query or add more knowledge sources." />
             )}
           </div>
         </DialogContent>
