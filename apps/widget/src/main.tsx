@@ -272,47 +272,132 @@ function getStyles(): string {
       40% { transform: scale(1); }
     }
 
-    .widget-input {
+    .widget-input,
+    .widget-input-area {
       display: flex;
-      padding: 12px;
+      align-items: center;
+      padding: 10px 14px;
       gap: 8px;
       border-top: 1px solid #e2e8f0;
-      background: white;
+      background: #ffffff;
+      box-sizing: border-box;
+      width: 100%;
     }
 
-    .widget-input input {
+    .widget-input input,
+    .widget-input-area input {
       flex: 1;
+      min-width: 0;
+      height: 40px;
       border: 1px solid #e2e8f0;
-      border-radius: 24px;
-      padding: 8px 16px;
-      font-size: 14px;
+      border-radius: 20px;
+      padding: 0 16px;
+      font-size: 13.5px;
+      font-family: inherit;
+      color: #1e293b;
+      background: #f8fafc;
       outline: none;
-      transition: border-color 0.2s;
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
     }
 
-    .widget-input input:focus {
+    .widget-input input:focus,
+    .widget-input-area input:focus {
+      background: #ffffff;
       border-color: var(--primary, #3b82f6);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
     }
 
+    .widget-input input:disabled,
+    .widget-input-area input:disabled {
+      background: #f1f5f9;
+      color: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    .widget-input input::placeholder,
+    .widget-input-area input::placeholder {
+      color: #94a3b8;
+    }
+
+    .widget-voice-btn {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #64748b;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: all 0.18s ease;
+      box-sizing: border-box;
+    }
+
+    .widget-voice-btn:hover:not(:disabled) {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #cbd5e1;
+      transform: scale(1.05);
+    }
+
+    .widget-voice-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .widget-voice-btn svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .widget-voice-btn.listening {
+      background: #ef4444 !important;
+      border-color: #dc2626 !important;
+      color: #ffffff !important;
+      animation: pulse-red 1.2s infinite;
+    }
+
+    .widget-send-btn,
     .widget-input button {
       width: 36px;
       height: 36px;
+      min-width: 36px;
+      flex-shrink: 0;
       border-radius: 50%;
       background: var(--primary, #3b82f6);
       color: white;
       border: none;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      transition: opacity 0.2s;
+      padding: 0;
+      transition: all 0.18s ease;
+      box-sizing: border-box;
     }
 
+    .widget-send-btn:hover:not(:disabled),
+    .widget-input button:hover:not(:disabled) {
+      opacity: 0.92;
+      transform: scale(1.05);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .widget-send-btn:disabled,
     .widget-input button:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
+    .widget-send-btn svg,
     .widget-input button svg {
       width: 16px;
       height: 16px;

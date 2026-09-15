@@ -1514,7 +1514,7 @@ export function Widget({ agentId, apiUrl, position }: WidgetProps) {
                 </div>
               )}
 
-              <div class="widget-input-area">
+              <div class="widget-input widget-input-area">
                 <input
                   ref={inputRef}
                   type="text"
