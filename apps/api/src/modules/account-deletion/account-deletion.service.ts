@@ -73,6 +73,8 @@ export class AccountDeletionService {
     }
 
     const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+    const isOrgAdmin = user.role === 'ADMIN';
+    const targetAudience = isOrgAdmin ? 'SUPER_ADMIN' : 'TENANT_ADMIN';
 
     const request = await this.deletionRequestModel.create({
       tenantId: String(user.tenantId),
@@ -82,62 +84,115 @@ export class AccountDeletionService {
       userRole: user.role,
       tenantName: tenant.name,
       reason: dto.reason,
-      description: dto.description || '',
+      description: dto.description.trim(),
       status: 'pending',
-      cascadeTenantDeletion: user.role === 'ADMIN',
+      targetAudience,
+      cascadeTenantDeletion: isOrgAdmin,
       affectedUsersCount,
     });
 
-    // Notify Super Admins in real-time
-    try {
-      const superAdmins = await this.userModel.find({
-        role: 'SUPER_ADMIN',
-        deletedAt: null,
-        isActive: true,
-      });
+    if (isOrgAdmin) {
+      // 1. Notify Platform Super Admins in real-time
+      try {
+        const superAdmins = await this.userModel.find({
+          role: 'SUPER_ADMIN',
+          deletedAt: null,
+          isActive: true,
+        });
 
-      const notificationTitle = user.role === 'ADMIN'
-        ? `Organization Deletion Request: ${tenant.name}`
-        : `Account Deletion Request: ${userName}`;
+        const notificationTitle = `Organization Deletion Request: ${tenant.name}`;
+        const notificationBody = `Admin ${userName} requested deletion for organization "${tenant.name}" (${affectedUsersCount} users affected). Reason: ${dto.reason}`;
 
-      const notificationBody = user.role === 'ADMIN'
-        ? `Admin ${userName} requested deletion for organization "${tenant.name}" (${affectedUsersCount} users affected). Reason: ${dto.reason}`
-        : `Salesperson ${userName} requested account deletion from "${tenant.name}". Reason: ${dto.reason}`;
-
-      for (const sa of superAdmins) {
-        await this.notificationModel.create({
-          tenantId: String(sa.tenantId),
-          userId: String(sa._id),
-          title: notificationTitle,
-          body: notificationBody,
-          type: 'deletion_request',
-          status: 'pending',
-          channel: 'in_app',
-          recipient: sa.email,
-          data: {
+        for (const sa of superAdmins) {
+          await this.notificationModel.create({
+            tenantId: String(sa.tenantId),
+            userId: String(sa._id),
+            title: notificationTitle,
+            body: notificationBody,
+            type: 'deletion_request',
+            status: 'pending',
+            channel: 'in_app',
+            recipient: sa.email,
+            data: {
+              requestId: String(request._id),
+              userRole: user.role,
+              tenantName: tenant.name,
+              reason: dto.reason,
+              description: dto.description,
+            },
+          });
+          this.notificationGateway.sendToUser(String(sa._id), 'notification', {
+            title: notificationTitle,
+            body: notificationBody,
             requestId: String(request._id),
-            userRole: user.role,
-            tenantName: tenant.name,
-            reason: dto.reason,
-          },
-        });
-        this.notificationGateway.sendToUser(String(sa._id), 'notification', {
-          title: notificationTitle,
-          body: notificationBody,
-          requestId: String(request._id),
-        });
-      }
+          });
+        }
 
-      // Also broadcast global superadmin event
-      this.notificationGateway.server?.emit('superadmin:deletion-request', {
-        requestId: String(request._id),
-        userName,
-        userRole: user.role,
-        tenantName: tenant.name,
-        reason: dto.reason,
-      });
-    } catch (err) {
-      this.logger.warn(`Failed to dispatch superadmin notifications: ${err.message}`);
+        // Broadcast global superadmin event
+        this.notificationGateway.server?.emit('superadmin:deletion-request', {
+          requestId: String(request._id),
+          userName,
+          userRole: user.role,
+          tenantName: tenant.name,
+          reason: dto.reason,
+          description: dto.description,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to dispatch superadmin notifications: ${err.message}`);
+      }
+    } else {
+      // 2. Notify Tenant Admin(s) in real-time
+      try {
+        const tenantAdmins = await this.userModel.find({
+          tenantId: String(user.tenantId),
+          role: 'ADMIN',
+          deletedAt: null,
+          isActive: true,
+        });
+
+        const notificationTitle = `Staff Deletion Request: ${userName}`;
+        const notificationBody = `Staff member ${userName} (${user.role}) has requested account deletion. Reason: ${dto.reason}`;
+
+        for (const admin of tenantAdmins) {
+          await this.notificationModel.create({
+            tenantId: String(user.tenantId),
+            userId: String(admin._id),
+            title: notificationTitle,
+            body: notificationBody,
+            type: 'deletion_request',
+            status: 'pending',
+            channel: 'in_app',
+            recipient: admin.email,
+            data: {
+              requestId: String(request._id),
+              userId: request.userId,
+              userName,
+              userEmail: user.email,
+              userRole: user.role,
+              reason: dto.reason,
+              description: dto.description,
+            },
+          });
+          this.notificationGateway.sendToUser(String(admin._id), 'notification', {
+            title: notificationTitle,
+            body: notificationBody,
+            requestId: String(request._id),
+          });
+        }
+
+        // Emit to tenant room so admin dashboard refreshes in real-time
+        this.notificationGateway.sendToTenant(String(user.tenantId), 'admin:staff-deletion-request', {
+          requestId: String(request._id),
+          userId: request.userId,
+          userName,
+          userEmail: user.email,
+          userRole: user.role,
+          reason: dto.reason,
+          description: dto.description,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to dispatch tenant admin notifications: ${err.message}`);
+      }
     }
 
     return request;
@@ -514,6 +569,35 @@ export class AccountDeletionService {
     request.reviewedAt = new Date();
     await request.save();
 
+    // Real-time socket dispatches
+    if (request.userRole === 'ADMIN' && tenant) {
+      // Notify all users in the tenant that the workspace has been deleted
+      this.notificationGateway.sendToTenant(String(tenant._id), 'tenant:deleted', {
+        message: `Organization ${tenant.name} has been permanently deleted by platform administration.`,
+      });
+      // Global event for superadmin dashboards
+      this.notificationGateway.server?.emit('superadmin:deletion-processed', {
+        requestId: String(request._id),
+        tenantId: String(tenant._id),
+        status: 'approved',
+      });
+    } else {
+      // Single user deleted
+      this.notificationGateway.sendToUser(request.userId, 'user:account-deleted', {
+        message: 'Your account has been deleted by platform administration.',
+      });
+      this.notificationGateway.sendToTenant(String(request.tenantId), 'staff:deletion-processed', {
+        requestId: String(request._id),
+        userId: request.userId,
+        status: 'approved',
+      });
+      this.notificationGateway.server?.emit('superadmin:deletion-processed', {
+        requestId: String(request._id),
+        tenantId: String(request.tenantId),
+        status: 'approved',
+      });
+    }
+
     // 3. Send professional confirmation email to requester
     try {
       const isOrgDeletion = request.userRole === 'ADMIN';
@@ -616,6 +700,20 @@ export class AccountDeletionService {
     request.reviewedAt = new Date();
     await request.save();
 
+    // Real-time notification to user & tenant
+    this.notificationGateway.sendToUser(request.userId, 'deletion-request:rejected', {
+      requestId: String(request._id),
+      reason: request.rejectionReason,
+    });
+    this.notificationGateway.sendToTenant(String(request.tenantId), 'deletion-request:rejected', {
+      requestId: String(request._id),
+      reason: request.rejectionReason,
+    });
+    this.notificationGateway.server?.emit('superadmin:deletion-processed', {
+      requestId: String(request._id),
+      status: 'rejected',
+    });
+
     // Send notification email to requester explaining why request was rejected
     try {
       await this.emailProvider.sendEmail({
@@ -645,6 +743,219 @@ export class AccountDeletionService {
     return {
       success: true,
       message: 'Deletion request rejected.',
+      request,
+    };
+  }
+
+  // =========================================================================
+  // Tenant Admin Handlers (Staff Deletion Requests)
+  // =========================================================================
+
+  /**
+   * List deletion requests submitted by staff members in the tenant.
+   */
+  async listStaffRequests(tenantId: string, query: QueryDeletionRequestsDto) {
+    const filter: Record<string, any> = {
+      tenantId: String(tenantId),
+      targetAudience: 'TENANT_ADMIN',
+    };
+
+    if (query.status && query.status !== 'all') {
+      filter.status = query.status;
+    }
+    if (query.role && query.role !== 'all') {
+      filter.userRole = query.role;
+    }
+
+    const page = Math.max(1, parseInt(query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+
+    const [requests, total, pendingCount] = await Promise.all([
+      this.deletionRequestModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      this.deletionRequestModel.countDocuments(filter),
+      this.deletionRequestModel.countDocuments({ tenantId: String(tenantId), targetAudience: 'TENANT_ADMIN', status: 'pending' }),
+    ]);
+
+    return {
+      requests,
+      total,
+      pendingCount,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Approve a staff member's deletion request (Tenant Admin only).
+   * Soft-deletes the user, revokes sessions, sends real-time socket events and confirmation email.
+   */
+  async approveStaffRequest(requestId: string, adminUser: any) {
+    const request = await this.deletionRequestModel.findOne({
+      _id: requestId,
+      tenantId: String(adminUser.tenantId),
+      targetAudience: 'TENANT_ADMIN',
+    });
+
+    if (!request) {
+      throw new NotFoundException('Staff deletion request not found.');
+    }
+    if (request.status !== 'pending') {
+      throw new BadRequestException(`Request is already ${request.status}.`);
+    }
+
+    // 1. Soft-delete staff member in the tenant
+    await this.userModel.updateOne(
+      { _id: request.userId, tenantId: String(adminUser.tenantId) },
+      { $set: { isActive: false, deletedAt: new Date() } },
+    );
+
+    // 2. Revoke all active sessions for this user
+    await this.refreshTokenModel.deleteMany({ userId: request.userId });
+
+    // 3. Mark request as approved
+    request.status = 'approved';
+    request.reviewedBy = String(adminUser._id || adminUser.id);
+    request.reviewedAt = new Date();
+    await request.save();
+
+    // 4. Real-time socket dispatches
+    // Instantly terminate user session on their active client
+    this.notificationGateway.sendToUser(request.userId, 'user:account-deleted', {
+      message: 'Your account has been deleted by your organization administrator.',
+    });
+    // Inform all admin clients in tenant to refresh their UI
+    this.notificationGateway.sendToTenant(String(adminUser.tenantId), 'staff:deletion-processed', {
+      requestId: String(request._id),
+      userId: request.userId,
+      status: 'approved',
+    });
+
+    // 5. Send confirmation email to staff member
+    try {
+      const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 36px 24px; text-align: center;">
+            <div style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; background-color: #ef4444; border-radius: 50%; margin-bottom: 16px;">
+              <span style="font-size: 28px; color: #ffffff;">✓</span>
+            </div>
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Account Deleted Successfully</h1>
+            <p style="color: #94a3b8; margin: 8px 0 0; font-size: 14px;">Organization: ${request.tenantName}</p>
+          </div>
+          <div style="padding: 32px 24px; color: #1e293b; line-height: 1.6;">
+            <p style="font-size: 15px; margin-top: 0;">Hello <strong>${request.userName}</strong>,</p>
+            <p style="font-size: 14px; color: #475569;">
+              Your request to delete your account from <strong>${request.tenantName}</strong> has been approved by your organization administrator.
+            </p>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin: 24px 0;">
+              <h3 style="margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #64748b;">Deletion Details</h3>
+              <table style="width: 100%; font-size: 14px; color: #334155; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b;">Account:</td>
+                  <td style="padding: 4px 0; font-weight: 600; text-align: right;">${request.userEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b;">Role:</td>
+                  <td style="padding: 4px 0; font-weight: 600; text-align: right;">${request.userRole}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b;">Organization:</td>
+                  <td style="padding: 4px 0; font-weight: 600; text-align: right;">${request.tenantName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #64748b;">Date:</td>
+                  <td style="padding: 4px 0; font-weight: 600; text-align: right;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                </tr>
+              </table>
+            </div>
+            <p style="font-size: 14px; color: #475569; margin-bottom: 0;">
+              All active sessions have been revoked. Thank you for your contributions to ${request.tenantName}.
+            </p>
+          </div>
+        </div>
+      `;
+
+      await this.emailProvider.sendEmail({
+        to: request.userEmail,
+        subject: `Account Deletion Approved - ${request.tenantName}`,
+        html,
+        text: `Your account in ${request.tenantName} has been successfully deleted by your organization administrator.`,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to send staff deletion confirmation email to ${request.userEmail}: ${err.message}`);
+    }
+
+    return {
+      success: true,
+      message: 'Staff account deletion approved and processed successfully.',
+      request,
+    };
+  }
+
+  /**
+   * Reject a staff member's deletion request (Tenant Admin only).
+   */
+  async rejectStaffRequest(requestId: string, adminUser: any, dto: RejectDeletionRequestDto) {
+    const request = await this.deletionRequestModel.findOne({
+      _id: requestId,
+      tenantId: String(adminUser.tenantId),
+      targetAudience: 'TENANT_ADMIN',
+    });
+
+    if (!request) {
+      throw new NotFoundException('Staff deletion request not found.');
+    }
+    if (request.status !== 'pending') {
+      throw new BadRequestException(`Request is already ${request.status}.`);
+    }
+
+    request.status = 'rejected';
+    request.rejectionReason = dto.reason || 'Request declined by organization administrator.';
+    request.reviewedBy = String(adminUser._id || adminUser.id);
+    request.reviewedAt = new Date();
+    await request.save();
+
+    // Real-time socket dispatches
+    this.notificationGateway.sendToUser(request.userId, 'deletion-request:rejected', {
+      requestId: String(request._id),
+      reason: request.rejectionReason,
+    });
+    this.notificationGateway.sendToTenant(String(adminUser.tenantId), 'staff:deletion-processed', {
+      requestId: String(request._id),
+      userId: request.userId,
+      status: 'rejected',
+    });
+
+    // Send email to staff member
+    try {
+      await this.emailProvider.sendEmail({
+        to: request.userEmail,
+        subject: `Update on your Account Deletion Request - ${request.tenantName}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background: #3b82f6; padding: 24px; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0; font-size: 20px;">Deletion Request Update</h2>
+            </div>
+            <div style="padding: 24px; color: #1e293b; line-height: 1.6;">
+              <p>Hello <strong>${request.userName}</strong>,</p>
+              <p>Your account deletion request in <strong>${request.tenantName}</strong> was <strong>not approved</strong> by your organization administrator.</p>
+              <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 16px 0;">
+                <p style="margin: 0; font-size: 14px; color: #1e293b;"><strong>Note from Admin:</strong> ${request.rejectionReason}</p>
+              </div>
+              <p style="font-size: 14px; color: #64748b;">Your account remains active. Please reach out to your administrator for questions.</p>
+            </div>
+          </div>
+        `,
+        text: `Your account deletion request was not approved: ${request.rejectionReason}`,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to send staff rejection email to ${request.userEmail}: ${err.message}`);
+    }
+
+    return {
+      success: true,
+      message: 'Staff deletion request rejected.',
       request,
     };
   }

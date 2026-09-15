@@ -122,7 +122,11 @@ export function AccountDeletionCard({
       return res?.data || res;
     },
     onSuccess: () => {
-      toast.success('Deletion request submitted to SuperAdmin. You will be notified upon review.');
+      toast.success(
+        isAdmin
+          ? 'Organization deletion request submitted to Platform SuperAdmin. You will be notified upon review.'
+          : 'Account deletion request submitted to your Organization Administrator. You will be notified upon review.'
+      );
       setReason('');
       setDescription('');
       setConfirmed(false);
@@ -195,6 +199,10 @@ export function AccountDeletionCard({
       toast.error('Please select a reason for deletion.');
       return;
     }
+    if (!description.trim()) {
+      toast.error('Please provide a short description / feedback (required, up to 100 words).');
+      return;
+    }
     if (wordCount > 100) {
       toast.error('Description must be 100 words or fewer.');
       return;
@@ -265,10 +273,14 @@ export function AccountDeletionCard({
                   </span>
                 </div>
                 <h4 className="font-semibold text-foreground text-sm pt-1">
-                  Your request has been dispatched to SuperAdmin
+                  {isAdmin
+                    ? 'Your request has been dispatched to Platform SuperAdmin'
+                    : 'Your request has been dispatched to your Organization Administrator'}
                 </h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  SuperAdmin has received your request. Once reviewed and approved, your account will be processed and you will receive a confirmation email.
+                  {isAdmin
+                    ? 'SuperAdmin has received your organization deletion request. Once reviewed and approved, your workspace will be permanently deleted and you will receive a confirmation email.'
+                    : 'Your Organization Administrator has received your account deletion request. Once reviewed and approved, your individual profile will be removed and you will receive a confirmation email.'}
                 </p>
               </div>
 
@@ -511,12 +523,14 @@ export function AccountDeletionCard({
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold">
-                          Feedback & Description <span className="text-muted-foreground font-normal">(Max 100 words)</span>
+                          Feedback & Description <span className="text-rose-500">*</span>{' '}
+                          <span className="text-muted-foreground font-normal">(Required, Max 100 words)</span>
                         </Label>
                         <span
                           className={cn(
                             'text-[11px]',
-                            wordCount > 100 ? 'text-rose-600 font-bold' : 'text-muted-foreground'
+                            wordCount > 100 || (!description.trim() && 'text-muted-foreground'),
+                            wordCount > 100 && 'text-rose-600 font-bold'
                           )}
                         >
                           {wordCount} / 100 words
@@ -525,7 +539,7 @@ export function AccountDeletionCard({
                       <Textarea
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Please tell us what went wrong or how we could have helped you better..."
+                        placeholder="Please tell us what went wrong or how we could have helped you better (required, up to 100 words)..."
                         rows={3}
                       />
                     </div>
@@ -549,7 +563,13 @@ export function AccountDeletionCard({
                       <Button
                         variant="destructive"
                         onClick={handleSubmitRequest}
-                        disabled={submitRequestMutation.isPending || !reason || !confirmed || wordCount > 100}
+                        disabled={
+                          submitRequestMutation.isPending ||
+                          !reason ||
+                          !description.trim() ||
+                          !confirmed ||
+                          wordCount > 100
+                        }
                         className="gap-2"
                       >
                         {submitRequestMutation.isPending ? (
@@ -574,10 +594,10 @@ export function AccountDeletionCard({
                 <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 space-y-2 text-xs text-sky-900 dark:text-sky-200">
                   <p className="font-semibold flex items-center gap-1.5 text-sm text-sky-700 dark:text-sky-300">
                     <UserX className="h-4 w-4" />
-                    Salesperson Profile Deletion
+                    Sales Staff Profile Deletion
                   </p>
                   <p className="leading-relaxed">
-                    You can request deletion of your salesperson account. Upon platform SuperAdmin review and approval, your individual user account and login will be removed. The workspace organization <strong>({tenantName})</strong> and other team members will remain active.
+                    You can request deletion of your salesperson account. Submitting this request will notify your <strong>Organization Administrator</strong> for review and approval. Upon approval, your individual user account and login will be removed in real-time, while the organization <strong>({tenantName})</strong> and other team members remain active.
                   </p>
                 </div>
 
@@ -603,7 +623,8 @@ export function AccountDeletionCard({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold">
-                        Feedback / Details <span className="text-muted-foreground font-normal">(Max 100 words)</span>
+                        Feedback & Description <span className="text-rose-500">*</span>{' '}
+                        <span className="text-muted-foreground font-normal">(Required, Max 100 words)</span>
                       </Label>
                       <span
                         className={cn(
@@ -617,7 +638,7 @@ export function AccountDeletionCard({
                     <Textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Please share any feedback or the reason for deleting your salesperson profile..."
+                      placeholder="Please share feedback or the reason for requesting account deletion (required, up to 100 words)..."
                       rows={3}
                     />
                   </div>
@@ -641,7 +662,13 @@ export function AccountDeletionCard({
                     <Button
                       variant="destructive"
                       onClick={handleSubmitRequest}
-                      disabled={submitRequestMutation.isPending || !reason || !confirmed || wordCount > 100}
+                      disabled={
+                        submitRequestMutation.isPending ||
+                        !reason ||
+                        !description.trim() ||
+                        !confirmed ||
+                        wordCount > 100
+                      }
                       className="gap-2"
                     >
                       {submitRequestMutation.isPending ? (

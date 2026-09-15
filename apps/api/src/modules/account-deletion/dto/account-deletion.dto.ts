@@ -14,9 +14,9 @@ export class SubmitDeletionRequestDto {
   reason: string;
 
   @IsString()
-  @IsOptional()
+  @IsNotEmpty({ message: 'Please provide a short description/feedback (up to 100 words)' })
   @MaxLength(1000, { message: 'Description should not exceed 1000 characters (approx 100 words)' })
-  description?: string;
+  description: string;
 }
 
 export class RequestOwnershipTransferOtpDto {

@@ -40,6 +40,14 @@ export class AccountDeletionRequest {
   @Prop({ default: false })
   cascadeTenantDeletion: boolean;
 
+  @Prop({
+    type: String,
+    enum: ['SUPER_ADMIN', 'TENANT_ADMIN'],
+    default: 'SUPER_ADMIN',
+    index: true,
+  })
+  targetAudience: string;
+
   @Prop({ default: 0 })
   affectedUsersCount: number;
 

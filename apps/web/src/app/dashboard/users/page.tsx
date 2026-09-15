@@ -2,7 +2,25 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Users, UserCheck, UserX, ShieldCheck, UserCog, Mail, Phone, Clock } from 'lucide-react';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Users,
+  UserCheck,
+  UserX,
+  ShieldCheck,
+  UserCog,
+  Mail,
+  Phone,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ShieldAlert,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { Button } from '@/components/ui/button';
@@ -11,13 +29,17 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatCard } from '@/components/shared/stat-card';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
-import { formatDate, getInitials } from '@/lib/utils';
+import { formatDate, getInitials, cn } from '@/lib/utils';
 
 const ROLES = ['ADMIN', 'SALESPERSON'];
 
@@ -31,6 +53,10 @@ const emptyForm = { firstName: '', lastName: '', email: '', password: '', role: 
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  const [activeTab, setActiveTab] = useState<'members' | 'deletion_requests'>('members');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState('');
@@ -48,11 +74,53 @@ export default function UsersPage() {
   // Delete
   const [deleteUser, setDeleteUser] = useState<any>(null);
 
+  // Staff Deletion Requests review state
+  const [approveTarget, setApproveTarget] = useState<any>(null);
+  const [rejectTarget, setRejectTarget] = useState<any>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+
   const activeTenantId = useAuthStore((s) => s.activeTenantId);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', activeTenantId, page, limit, search],
     queryFn: () => api.get<any>('/users', { page, limit, search: search || undefined }),
+  });
+
+  const {
+    data: staffRequestsRaw,
+    isLoading: isLoadingStaffRequests,
+    refetch: refetchStaffRequests,
+    isFetching: isFetchingStaffRequests,
+  } = useQuery({
+    queryKey: ['staff-deletion-requests'],
+    queryFn: async () => {
+      const res = await api.get<any>('/account-deletion/staff/requests');
+      return (res as any)?.data || res;
+    },
+    enabled: !!isAdmin,
+  });
+
+  const approveStaffMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/account-deletion/staff/requests/${id}/approve`),
+    onSuccess: () => {
+      toast.success('Staff account deletion approved. User has been removed.');
+      setApproveTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['staff-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to approve request'),
+  });
+
+  const rejectStaffMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.post(`/account-deletion/staff/requests/${id}/reject`, { reason }),
+    onSuccess: () => {
+      toast.success('Staff deletion request rejected.');
+      setRejectTarget(null);
+      setRejectionReason('');
+      queryClient.invalidateQueries({ queryKey: ['staff-deletion-requests'] });
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to reject request'),
   });
 
   const createMutation = useMutation({
@@ -219,54 +287,272 @@ export default function UsersPage() {
     },
   ];
 
+  const staffPayload = staffRequestsRaw || {};
+  const staffRequests: any[] = Array.isArray(staffPayload?.requests)
+    ? staffPayload.requests
+    : Array.isArray(staffPayload)
+    ? staffPayload
+    : [];
+  const pendingStaffRequests = staffRequests.filter((r) => r.status === 'pending');
+  const pendingStaffCount = staffPayload?.pendingCount ?? pendingStaffRequests.length;
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         icon={UserCog}
         title="Users"
         description="Invite teammates, assign roles and control who can access the workspace."
-        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Add User</Button>}
+        actions={
+          <Button variant="gradient" onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" /> Add User
+          </Button>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
-        <StatCard title="Total Users" value={total} icon={Users} tone="primary" description="in this workspace" />
-        <StatCard title="Active" value={activeCount} icon={UserCheck} tone="success" description="can sign in" />
-        <StatCard title="Inactive" value={inactiveCount} icon={UserX} tone="warning" description="access paused" />
-        <StatCard title="Admins" value={allUsers.filter((u: any) => u.role === 'ADMIN').length} icon={ShieldCheck} tone="violet" description="full permissions" />
-      </div>
+      {isAdmin ? (
+        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="members" className="gap-2">
+              <Users className="h-4 w-4" />
+              <span>Team Members</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                {total}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="deletion_requests" className="gap-2">
+              <UserX className="h-4 w-4" />
+              <span>Staff Deletion Requests</span>
+              {pendingStaffCount > 0 && (
+                <Badge variant="destructive" className="ml-1 text-[10px] px-1.5 py-0">
+                  {pendingStaffCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-      <Toolbar>
-        <SearchInput
-          value={searchInput}
-          onChange={setSearchInput}
-          placeholder="Search by name or email…"
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-        />
-        <Button variant="soft" size="sm" onClick={handleSearch}>Search</Button>
-        <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="All Roles" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <ToolbarSpacer />
-        <span className="text-xs text-muted-foreground tabular pr-1">{users.length} shown</span>
-      </Toolbar>
+          <TabsContent value="members" className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard title="Total Users" value={total} icon={Users} tone="primary" description="in this workspace" />
+              <StatCard title="Active" value={activeCount} icon={UserCheck} tone="success" description="can sign in" />
+              <StatCard title="Inactive" value={inactiveCount} icon={UserX} tone="warning" description="access paused" />
+              <StatCard title="Admins" value={allUsers.filter((u: any) => u.role === 'ADMIN').length} icon={ShieldCheck} tone="violet" description="full permissions" />
+            </div>
 
-      <DataTable
-        columns={columns}
-        data={users}
-        total={total}
-        page={page}
-        limit={limit}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        onLimitChange={(l) => { setLimit(l); setPage(1); }}
-        isLoading={isLoading}
-        emptyMessage="No users found"
-        emptyDescription="Try a different search or invite a new teammate."
-      />
+            <Toolbar>
+              <SearchInput
+                value={searchInput}
+                onChange={setSearchInput}
+                placeholder="Search by name or email…"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              />
+              <Button variant="soft" size="sm" onClick={handleSearch}>Search</Button>
+              <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
+                <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="All Roles" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <ToolbarSpacer />
+              <span className="text-xs text-muted-foreground tabular pr-1">{users.length} shown</span>
+            </Toolbar>
+
+            <DataTable
+              columns={columns}
+              data={users}
+              total={total}
+              page={page}
+              limit={limit}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              onLimitChange={(l) => { setLimit(l); setPage(1); }}
+              isLoading={isLoading}
+              emptyMessage="No users found"
+              emptyDescription="Try a different search or invite a new teammate."
+            />
+          </TabsContent>
+
+          <TabsContent value="deletion_requests" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Staff Account Deletion Requests</h3>
+                <p className="text-xs text-muted-foreground">
+                  Review account deletion requests submitted by your staff. Approving a request deactivates their account in real-time.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchStaffRequests()}
+                disabled={isFetchingStaffRequests}
+                className="gap-1.5"
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', isFetchingStaffRequests && 'animate-spin')} />
+                Refresh
+              </Button>
+            </div>
+
+            {isLoadingStaffRequests ? (
+              <div className="py-12 flex flex-col items-center justify-center text-muted-foreground gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-sm">Loading deletion requests...</p>
+              </div>
+            ) : staffRequests.length === 0 ? (
+              <EmptyState
+                icon={UserX}
+                title="No staff deletion requests"
+                description="No team members have submitted account deletion requests."
+              />
+            ) : (
+              <div className="space-y-4">
+                {staffRequests.map((req) => {
+                  const isPending = req.status === 'pending';
+                  return (
+                    <Card
+                      key={req._id}
+                      className={cn(
+                        'transition-all border',
+                        isPending ? 'border-amber-500/40 bg-amber-500/[0.02]' : 'opacity-85'
+                      )}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-base">{req.userName}</span>
+                              <Badge variant="secondary" className="text-[11px] uppercase tracking-wider font-semibold">
+                                {roleLabel(req.userRole)}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  req.status === 'pending'
+                                    ? 'warning'
+                                    : req.status === 'approved'
+                                    ? 'destructive'
+                                    : req.status === 'rejected'
+                                    ? 'outline'
+                                    : 'secondary'
+                                }
+                                className="capitalize text-[11px]"
+                              >
+                                {req.status === 'pending' ? 'Pending Review' : req.status}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                              <span className="flex items-center gap-1 font-mono">
+                                <Mail className="h-3 w-3" /> {req.userEmail}
+                              </span>
+                              <span>&bull;</span>
+                              <span>Requested {formatDate(req.createdAt)}</span>
+                            </div>
+                          </div>
+
+                          {/* Action buttons for pending requests */}
+                          {isPending && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setApproveTarget(req)}
+                                className="gap-1.5"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Approve & Delete
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setRejectTarget(req);
+                                  setRejectionReason('');
+                                }}
+                                className="gap-1.5"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-muted-foreground">Reason:</span>
+                            <Badge variant="outline" className="text-xs font-medium">
+                              {req.reason}
+                            </Badge>
+                          </div>
+                          {req.description && (
+                            <div className="space-y-1 mt-1">
+                              <span className="text-[11px] font-semibold text-muted-foreground">Feedback & Description (Required):</span>
+                              <div className="text-xs text-foreground/90 pl-2 italic border-l-2 border-primary/40">
+                                &ldquo;{req.description}&rdquo;
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {!isPending && req.reviewedAt && (
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 pt-1 border-t">
+                            <span>Reviewed on {formatDate(req.reviewedAt)}</span>
+                            {req.rejectionReason && (
+                              <span>&bull; Note: <em>{req.rejectionReason}</em></span>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
+            <StatCard title="Total Users" value={total} icon={Users} tone="primary" description="in this workspace" />
+            <StatCard title="Active" value={activeCount} icon={UserCheck} tone="success" description="can sign in" />
+            <StatCard title="Inactive" value={inactiveCount} icon={UserX} tone="warning" description="access paused" />
+            <StatCard title="Admins" value={allUsers.filter((u: any) => u.role === 'ADMIN').length} icon={ShieldCheck} tone="violet" description="full permissions" />
+          </div>
+
+          <Toolbar>
+            <SearchInput
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="Search by name or email…"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+            />
+            <Button variant="soft" size="sm" onClick={handleSearch}>Search</Button>
+            <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
+              <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="All Roles" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <ToolbarSpacer />
+            <span className="text-xs text-muted-foreground tabular pr-1">{users.length} shown</span>
+          </Toolbar>
+
+          <DataTable
+            columns={columns}
+            data={users}
+            total={total}
+            page={page}
+            limit={limit}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+            isLoading={isLoading}
+            emptyMessage="No users found"
+            emptyDescription="Try a different search or invite a new teammate."
+          />
+        </>
+      )}
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -386,6 +672,111 @@ export default function UsersPage() {
             <Button variant="outline" onClick={() => setDeleteUser(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => deleteUser && deleteMutation.mutate(deleteUser._id)} disabled={deleteMutation.isPending}>
               {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve Staff Deletion Dialog */}
+      <Dialog open={!!approveTarget} onOpenChange={(open) => !open && setApproveTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <ShieldAlert className="h-5 w-5" />
+              <DialogTitle>Confirm Staff Account Deletion</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2 text-left">
+              Are you sure you want to approve the deletion request for <strong>{approveTarget?.userName}</strong> ({approveTarget?.userEmail})?
+            </DialogDescription>
+          </DialogHeader>
+
+          {approveTarget && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-semibold">⚡ Real-Time Deletion Effect:</p>
+              <p>
+                The user account will be deactivated immediately. Their active dashboard session will be revoked in real-time, and a confirmation email will be sent.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setApproveTarget(null)}
+              disabled={approveStaffMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => approveStaffMutation.mutate(approveTarget._id)}
+              disabled={approveStaffMutation.isPending}
+              className="gap-1.5"
+            >
+              {approveStaffMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve & Delete User
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Staff Deletion Dialog */}
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Staff Deletion Request</DialogTitle>
+            <DialogDescription>
+              Provide an optional explanation to <strong>{rejectTarget?.userName}</strong>. They will receive an email update.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Rejection Reason / Note</Label>
+              <Textarea
+                placeholder="e.g. Please wrap up pending lead handoffs before leaving the workspace."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRejectTarget(null)}
+              disabled={rejectStaffMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                rejectStaffMutation.mutate({
+                  id: rejectTarget._id,
+                  reason: rejectionReason,
+                })
+              }
+              disabled={rejectStaffMutation.isPending}
+              className="gap-1.5"
+            >
+              {rejectStaffMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                'Reject Request'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -79,11 +79,93 @@ export function useRealtimeNotifications() {
     // Request initial unread count
     socket.emit('notification:get-unread-count');
 
+    // Real-time deletion events
+    const handleAccountDeleted = (data: any) => {
+      toast.error('Account Deleted', {
+        description: data?.message || 'Your account has been deleted by administration. Signing you out...',
+        duration: 5000,
+      });
+      setTimeout(() => {
+        try {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('la_platform_tenant');
+        } catch {}
+        if (typeof document !== 'undefined') {
+          document.cookie = 'la_auth=; Path=/; Max-Age=0; SameSite=Lax';
+        }
+        window.location.href = '/auth/login';
+      }, 1000);
+    };
+
+    const handleTenantDeleted = (data: any) => {
+      toast.error('Organization Deleted', {
+        description: data?.message || 'Your organization workspace has been deleted by platform administration. Signing you out...',
+        duration: 5000,
+      });
+      setTimeout(() => {
+        try {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('la_platform_tenant');
+        } catch {}
+        if (typeof document !== 'undefined') {
+          document.cookie = 'la_auth=; Path=/; Max-Age=0; SameSite=Lax';
+        }
+        window.location.href = '/auth/login';
+      }, 1000);
+    };
+
+    const handleStaffDeletionRequest = (data: any) => {
+      toast.warning('Staff Deletion Request', {
+        description: `${data.userName} (${data.userRole}) has requested account deletion.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['staff-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    };
+
+    const handleStaffDeletionProcessed = (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['staff-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['my-deletion-request'] });
+    };
+
+    const handleSuperAdminDeletionProcessed = () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['my-deletion-request'] });
+    };
+
+    const handleSuperAdminDeletionRequest = () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
+    };
+
+    const handleDeletionRejected = (data: any) => {
+      toast.info('Deletion Request Update', {
+        description: data?.reason ? `Request was not approved: ${data.reason}` : 'Your deletion request was reviewed.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['my-deletion-request'] });
+    };
+
+    socket.on('user:account-deleted', handleAccountDeleted);
+    socket.on('tenant:deleted', handleTenantDeleted);
+    socket.on('admin:staff-deletion-request', handleStaffDeletionRequest);
+    socket.on('staff:deletion-processed', handleStaffDeletionProcessed);
+    socket.on('superadmin:deletion-request', handleSuperAdminDeletionRequest);
+    socket.on('superadmin:deletion-processed', handleSuperAdminDeletionProcessed);
+    socket.on('deletion-request:rejected', handleDeletionRejected);
+
     return () => {
       socket.off('notification:new', handleNewNotification);
       socket.off('notification:unread-count', handleUnreadCount);
+      socket.off('user:account-deleted', handleAccountDeleted);
+      socket.off('tenant:deleted', handleTenantDeleted);
+      socket.off('admin:staff-deletion-request', handleStaffDeletionRequest);
+      socket.off('staff:deletion-processed', handleStaffDeletionProcessed);
+      socket.off('superadmin:deletion-request', handleSuperAdminDeletionRequest);
+      socket.off('superadmin:deletion-processed', handleSuperAdminDeletionProcessed);
+      socket.off('deletion-request:rejected', handleDeletionRejected);
     };
-  }, [socket, isConnected, handleNewNotification, handleUnreadCount]);
+  }, [socket, isConnected, handleNewNotification, handleUnreadCount, queryClient]);
 
   return {
     unreadCount: unreadNotificationsCount,

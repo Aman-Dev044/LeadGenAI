@@ -77,6 +77,47 @@ export class AccountDeletionController {
   }
 
   // =========================================================================
+  // Tenant Admin Endpoints (Staff Deletion Requests)
+  // =========================================================================
+
+  /**
+   * List staff deletion requests within the organization (Tenant Admin only).
+   */
+  @Get('staff/requests')
+  @Roles('ADMIN')
+  async listStaffRequests(
+    @CurrentUser() user: any,
+    @Query() query: QueryDeletionRequestsDto,
+  ) {
+    return this.deletionService.listStaffRequests(user.tenantId, query);
+  }
+
+  /**
+   * Approve a staff member's deletion request (Tenant Admin only).
+   */
+  @Post('staff/requests/:id/approve')
+  @Roles('ADMIN')
+  async approveStaffRequest(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.deletionService.approveStaffRequest(id, user);
+  }
+
+  /**
+   * Reject a staff member's deletion request (Tenant Admin only).
+   */
+  @Post('staff/requests/:id/reject')
+  @Roles('ADMIN')
+  async rejectStaffRequest(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() dto: RejectDeletionRequestDto,
+  ) {
+    return this.deletionService.rejectStaffRequest(id, user, dto);
+  }
+
+  // =========================================================================
   // SuperAdmin Console Endpoints
   // =========================================================================
 
