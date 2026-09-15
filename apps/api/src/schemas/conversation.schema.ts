@@ -41,7 +41,10 @@ export class Conversation {
       userAgent: String,
       ip: String,
       country: String,
+      countryCode: String,
+      region: String,
       city: String,
+      timezone: String,
       device: String,
       utmSource: String,
       utmMedium: String,
@@ -63,7 +66,10 @@ export class Conversation {
     userAgent?: string;
     ip?: string;
     country?: string;
+    countryCode?: string;
+    region?: string;
     city?: string;
+    timezone?: string;
     device?: string;
     utmSource?: string;
     utmMedium?: string;

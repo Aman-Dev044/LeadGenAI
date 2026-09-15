@@ -65,6 +65,32 @@ export class User {
   @Prop()
   passwordResetExpires: Date;
 
+  /** Email change fields */
+  @Prop({ select: false })
+  emailChangeCurrentOtpHash: string;
+
+  @Prop()
+  emailChangeCurrentOtpExpires: Date;
+
+  @Prop({ default: false })
+  emailChangeCurrentVerified: boolean;
+
+  @Prop({ lowercase: true, trim: true })
+  emailChangePendingEmail: string;
+
+  @Prop({ select: false })
+  emailChangeNewOtpHash: string;
+
+  @Prop()
+  emailChangeNewOtpExpires: Date;
+
+  /** Ownership transfer OTP fields */
+  @Prop({ select: false })
+  ownershipTransferOtpHash: string;
+
+  @Prop()
+  ownershipTransferOtpExpires: Date;
+
   @Prop()
   deletedAt: Date;
 }

@@ -65,11 +65,18 @@ describe('RolesGuard', () => {
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
-  it('should allow VIEWER for GET requests', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(['ADMIN', 'SALESPERSON']);
+  it('should allow VIEWER for GET requests on endpoints that list VIEWER', () => {
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(['ADMIN', 'VIEWER']);
     const context = createMockContext('VIEWER', 'GET');
 
     expect(guard.canActivate(context)).toBe(true);
+  });
+
+  it('should deny VIEWER for GET requests on endpoints that do not list VIEWER', () => {
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(['ADMIN', 'SALESPERSON']);
+    const context = createMockContext('VIEWER', 'GET');
+
+    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
   it('should deny VIEWER for non-GET requests', () => {

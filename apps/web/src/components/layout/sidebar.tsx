@@ -7,11 +7,12 @@ import {
   Bell, Settings, CreditCard, Ticket, ArrowLeftRight, Calendar,
   Workflow, Globe, Key, Webhook, Target, UserCog, ChevronLeft,
   ChevronRight, Sparkles, Crown, Building2, Gauge, ScrollText,
-  Megaphone, SlidersHorizontal, Activity, ShieldCheck, type LucideIcon,
+  Megaphone, SlidersHorizontal, Activity, ShieldCheck, Plug, UserX, type LucideIcon,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useUIStore } from '@/store/ui-store';
 import { useAuthStore } from '@/store/auth-store';
+import { PAGE_ACCESS } from '@/lib/permissions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -35,50 +36,51 @@ export const navGroups: NavGroup[] = [
         href: '/dashboard',
         icon: LayoutDashboard,
         exact: true,
-        roles: ['ADMIN', 'SALES_MANAGER', 'VIEWER'],
+        roles: PAGE_ACCESS['/dashboard'],
       },
     ],
   },
   {
     title: 'Pipeline',
     items: [
-      { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
-      { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
-      { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] },
-      { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
+      { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads', roles: PAGE_ACCESS['/dashboard/leads'] },
+      { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare, roles: PAGE_ACCESS['/dashboard/conversations'] },
+      { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs', roles: PAGE_ACCESS['/dashboard/handoffs'] },
+      { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar, roles: PAGE_ACCESS['/dashboard/appointments'] },
     ],
   },
   {
     title: 'AI Engine',
     items: [
-      { label: 'Agents', href: '/dashboard/agents', icon: Bot, roles: ['ADMIN', 'SALES_MANAGER'] },
-      { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: BookOpen, roles: ['ADMIN', 'SALES_MANAGER'] },
-      { label: 'Lead Scoring', href: '/dashboard/lead-scoring', icon: Target, roles: ['ADMIN', 'SALES_MANAGER'] },
+      { label: 'Agents', href: '/dashboard/agents', icon: Bot, roles: PAGE_ACCESS['/dashboard/agents'] },
+      { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: BookOpen, roles: PAGE_ACCESS['/dashboard/knowledge-base'] },
+      { label: 'Lead Scoring', href: '/dashboard/lead-scoring', icon: Target, roles: PAGE_ACCESS['/dashboard/lead-scoring'] },
     ],
   },
   {
     title: 'Automation',
     items: [
-      { label: 'Follow-ups', href: '/dashboard/follow-ups', icon: Workflow, roles: ['ADMIN', 'SALES_MANAGER'] },
-      { label: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, roles: ['ADMIN'] },
-      { label: 'API Keys', href: '/dashboard/api-keys', icon: Key, roles: ['ADMIN'] },
+      { label: 'Follow-ups', href: '/dashboard/follow-ups', icon: Workflow, roles: PAGE_ACCESS['/dashboard/follow-ups'] },
+      { label: 'Integrations', href: '/dashboard/integrations', icon: Plug, roles: PAGE_ACCESS['/dashboard/integrations'] },
+      { label: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, roles: PAGE_ACCESS['/dashboard/webhooks'] },
+      { label: 'API Keys', href: '/dashboard/api-keys', icon: Key, roles: PAGE_ACCESS['/dashboard/api-keys'] },
     ],
   },
   {
     title: 'Insights',
     items: [
-      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER', 'VIEWER'] },
-      { label: 'Visitor Tracking', href: '/dashboard/visitor-tracking', icon: Globe, roles: ['ADMIN', 'SALES_MANAGER'] },
-      { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badgeKey: 'notifications', roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] },
+      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, roles: PAGE_ACCESS['/dashboard/analytics'] },
+      { label: 'Visitor Tracking', href: '/dashboard/visitor-tracking', icon: Globe, roles: PAGE_ACCESS['/dashboard/visitor-tracking'] },
+      { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badgeKey: 'notifications', roles: PAGE_ACCESS['/dashboard/notifications'] },
     ],
   },
   {
     title: 'Workspace',
     items: [
-      { label: 'Users', href: '/dashboard/users', icon: UserCog, roles: ['ADMIN'] },
-      { label: 'Support Tickets', href: '/dashboard/support-tickets', icon: Ticket, roles: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] },
-      { label: 'Billing', href: '/dashboard/billing', icon: CreditCard, roles: ['ADMIN'] },
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['ADMIN'] },
+      { label: 'Users', href: '/dashboard/users', icon: UserCog, roles: PAGE_ACCESS['/dashboard/users'] },
+      { label: 'Support Tickets', href: '/dashboard/support-tickets', icon: Ticket, roles: PAGE_ACCESS['/dashboard/support-tickets'] },
+      { label: 'Billing', href: '/dashboard/billing', icon: CreditCard, roles: PAGE_ACCESS['/dashboard/billing'] },
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, roles: PAGE_ACCESS['/dashboard/settings'] },
     ],
   },
 ];
@@ -91,6 +93,7 @@ export const ownerNavItems: NavItem[] = [
   { label: 'Usage & Limits', href: '/dashboard/admin/usage', icon: Gauge },
   { label: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: ScrollText },
   { label: 'Announcements', href: '/dashboard/admin/announcements', icon: Megaphone },
+  { label: 'Deletion Requests', href: '/dashboard/admin/deletion-requests', icon: UserX },
   { label: 'Platform Settings', href: '/dashboard/admin/settings', icon: SlidersHorizontal },
   { label: 'System Health', href: '/dashboard/admin/system', icon: Activity },
 ];
@@ -291,23 +294,32 @@ export function Sidebar() {
       {/* User + collapse */}
       <div className={cn('border-t p-3', !sidebarOpen && 'px-2')}>
         {sidebarOpen ? (
-          <div className="flex items-center gap-2.5 rounded-xl border bg-card/70 p-2 shadow-xs">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.avatar} alt={user?.firstName} />
-              <AvatarFallback>{user ? getInitials(`${user.firstName} ${user.lastName}`) : 'U'}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-[13px] font-semibold">{user?.firstName} {user?.lastName}</p>
-              <p className="truncate text-[11px] text-muted-foreground capitalize">{user?.role?.toLowerCase().replace('_', ' ')}</p>
+          <>
+            <div className="flex items-center gap-2.5 rounded-xl border bg-card/70 p-2 shadow-xs">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.avatar} alt={user?.firstName} />
+                <AvatarFallback>{user ? getInitials(`${user.firstName} ${user.lastName}`) : 'U'}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="truncate text-[13px] font-semibold">{user?.firstName} {user?.lastName}</p>
+                <p className="truncate text-[11px] text-muted-foreground capitalize">{user?.role?.toLowerCase().replace('_', ' ')}</p>
+              </div>
+              <button
+                onClick={toggleSidebar}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={toggleSidebar}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
-              aria-label="Collapse sidebar"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          </div>
+            <div className="mt-2 flex items-center justify-between px-1.5 text-[11px] text-muted-foreground/75">
+              <Link href="/privacy" target="_blank" className="hover:text-foreground hover:underline transition-colors">
+                Privacy Policy
+              </Link>
+              <span>·</span>
+              <span className="font-mono text-[10px]">LeadAI Secure</span>
+            </div>
+          </>
         ) : (
           <button
             onClick={toggleSidebar}

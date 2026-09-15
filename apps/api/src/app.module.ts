@@ -49,6 +49,8 @@ import { VisitorTrackingModule } from './modules/visitor-tracking/visitor-tracki
 import { BillingModule } from './modules/billing/billing.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { AccountDeletionModule } from './modules/account-deletion/account-deletion.module';
 
 // Gateways (WebSocket)
 import { GatewayModule } from './gateways/gateway.module';
@@ -139,6 +141,8 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     FollowUpModule,
     VisitorTrackingModule,
     BillingModule,
+    IntegrationsModule,
+    AccountDeletionModule,
 
     // Owner console (SUPER_ADMIN only, cross-tenant)
     SuperAdminModule,

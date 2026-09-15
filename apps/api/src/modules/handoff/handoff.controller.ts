@@ -16,13 +16,16 @@ export class HandoffController {
   constructor(private readonly handoffService: HandoffService) {}
 
   @Get()
-  @Roles('ADMIN', 'SALES_MANAGER')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
   async findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string; role: string },
     @Query() paginationDto: PaginationDto,
     @Query('status') status?: string,
   ) {
-    return this.handoffService.findAll(tenantId, paginationDto, status);
+    // A salesperson sees the open queue plus handoffs they own; managers see everything
+    const forUserId = user.role === 'SALESPERSON' ? user.userId : undefined;
+    return this.handoffService.findAll(tenantId, paginationDto, status, forUserId);
   }
 
   @Get('pending-count')

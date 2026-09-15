@@ -260,6 +260,12 @@ export class EventsListenerService implements OnModuleInit {
     if (when) parts.push('at ' + when);
     if (plain.attendee?.name) parts.push('with ' + plain.attendee.name);
 
+    // 1. Emit realtime socket events so UI updates instantly without refresh
+    await this.safe('socket appointment_created', async () =>
+      this.chatGateway.emitAppointmentCreated(tenantId, plain),
+    );
+
+    // 2. In-app notification for salesperson and tenant
     await this.safe('notify appointment', () =>
       this.notifications.notifyTenant(
         tenantId,
@@ -273,14 +279,48 @@ export class EventsListenerService implements OnModuleInit {
       ),
     );
 
+    // 3. Outbound webhook
     await this.safe('webhook appointment.created', () =>
       this.queue.run(() => this.webhooks.dispatch(tenantId, 'appointment.created', plain)),
     );
   }
 
   private async onAppointmentUpdated({ tenantId, appointment }: AppointmentPayload) {
+    const plain = this.toPlain(appointment);
+    const when = plain.startTime ? new Date(plain.startTime).toLocaleString() : '';
+    const isRescheduled = plain.status === 'scheduled' && (plain.rescheduledCount || 0) > 0;
+    const isCancelled = plain.status === 'cancelled';
+
+    // 1. Emit realtime socket events so UI updates instantly without refresh
+    await this.safe('socket appointment_updated', async () =>
+      this.chatGateway.emitAppointmentUpdated(tenantId, plain),
+    );
+
+    // 2. In-app notification for reschedule / cancel / update
+    const title = isRescheduled
+      ? 'Appointment Rescheduled'
+      : isCancelled
+        ? 'Appointment Cancelled'
+        : 'Appointment Updated';
+
+    const body = `${plain.title || 'Appointment'} ${isRescheduled ? 'rescheduled to ' + when : isCancelled ? 'was cancelled' : 'updated'}${plain.attendee?.name ? ' (with ' + plain.attendee.name + ')' : ''}`;
+
+    await this.safe('notify appointment update', () =>
+      this.notifications.notifyTenant(
+        tenantId,
+        {
+          title,
+          body,
+          type: 'appointment',
+          data: { appointmentId: String(plain._id) },
+        },
+        { assignedTo: this.looksLikeUserId(plain.assignedTo) ? plain.assignedTo : undefined },
+      ),
+    );
+
+    // 3. Outbound webhook
     await this.safe('webhook appointment.updated', () =>
-      this.queue.run(() => this.webhooks.dispatch(tenantId, 'appointment.updated', this.toPlain(appointment))),
+      this.queue.run(() => this.webhooks.dispatch(tenantId, 'appointment.updated', plain)),
     );
   }
 

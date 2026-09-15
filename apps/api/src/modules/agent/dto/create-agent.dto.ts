@@ -41,6 +41,17 @@ export class CreateAgentDto {
     placeholder?: string;
     position?: string;
     avatarUrl?: string;
+    whatsappEnabled?: boolean;
+    whatsappNumber?: string;
+    whatsappDefaultMessage?: string;
+    proactivePromptEnabled?: boolean;
+    proactiveDelaySeconds?: number;
+    proactiveMessage?: string;
+    exitIntentEnabled?: boolean;
+    exitIntentMessage?: string;
+    defaultVoiceName?: string;
+    defaultVoiceRate?: number;
+    defaultVoicePitch?: number;
   };
 
   @IsOptional()

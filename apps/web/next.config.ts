@@ -1,7 +1,8 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  ...(process.env.BUILD_STANDALONE === 'true' ? { output: 'standalone' } : {}),
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

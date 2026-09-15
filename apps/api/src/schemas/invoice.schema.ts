@@ -17,7 +17,7 @@ export class Invoice {
   @Prop({ required: true })
   amount: number;
 
-  @Prop({ type: String, default: 'INR' })
+  @Prop({ type: String, default: 'USD' })
   currency: string;
 
   @Prop({

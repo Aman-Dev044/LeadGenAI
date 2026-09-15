@@ -19,6 +19,10 @@ import { CreateLeadDto, UpdateLeadDto } from './dto';
 import { CurrentTenant, CurrentUser, Roles } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
+type Actor = { userId: string; role: string };
+/** Salespeople are scoped to the leads assigned to them; every other role sees the whole tenant. */
+const ownerScope = (user: Actor) => (user?.role === 'SALESPERSON' ? user.userId : undefined);
+
 @Controller('leads')
 export class LeadController {
   constructor(private readonly leadService: LeadService) {}
@@ -28,14 +32,16 @@ export class LeadController {
   async create(
     @CurrentTenant() tenantId: string,
     @Body() dto: CreateLeadDto,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: Actor,
   ) {
-    return this.leadService.create(tenantId, dto, userId);
+    return this.leadService.create(tenantId, dto, user.userId, ownerScope(user));
   }
 
   @Get()
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
   async findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: Actor,
     @Query() paginationDto: PaginationDto,
     @Query('status') status?: string,
     @Query('temperature') temperature?: string,
@@ -43,13 +49,12 @@ export class LeadController {
     @Query('source') source?: string,
     @Query('tags') tags?: string,
   ) {
-    return this.leadService.findAll(tenantId, paginationDto, {
-      status,
-      temperature,
-      assignedTo,
-      source,
-      tags,
-    });
+    return this.leadService.findAll(
+      tenantId,
+      paginationDto,
+      { status, temperature, assignedTo, source, tags },
+      ownerScope(user),
+    );
   }
 
   // Static routes MUST come before :id routes
@@ -103,11 +108,13 @@ export class LeadController {
 
   // Dynamic :id routes come AFTER static routes
   @Get(':id')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
   async findById(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
+    @CurrentUser() user: Actor,
   ) {
-    return this.leadService.findById(tenantId, id);
+    return this.leadService.findById(tenantId, id, ownerScope(user));
   }
 
   @Patch(':id')
@@ -116,9 +123,9 @@ export class LeadController {
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
     @Body() dto: UpdateLeadDto,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: Actor,
   ) {
-    return this.leadService.update(tenantId, id, dto, userId);
+    return this.leadService.update(tenantId, id, dto, user.userId, ownerScope(user));
   }
 
   @Delete(':id')
@@ -131,11 +138,13 @@ export class LeadController {
   }
 
   @Get(':id/activities')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
   async getActivities(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
+    @CurrentUser() user: Actor,
   ) {
-    return this.leadService.getActivities(tenantId, id);
+    return this.leadService.getActivities(tenantId, id, ownerScope(user));
   }
 
   @Post(':id/notes')
@@ -144,8 +153,28 @@ export class LeadController {
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
     @Body('note') note: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: Actor,
   ) {
-    return this.leadService.addNote(tenantId, id, note, userId);
+    return this.leadService.addNote(tenantId, id, note, user.userId, ownerScope(user));
+  }
+
+  @Post(':id/dossier')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  async generateDossier(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.leadService.generateLeadDossier(tenantId, id, ownerScope(user));
+  }
+
+  @Post(':id/voice-note')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  async generateVoiceNote(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: Actor,
+  ) {
+    return this.leadService.generateVoiceNoteScript(tenantId, id, ownerScope(user));
   }
 }

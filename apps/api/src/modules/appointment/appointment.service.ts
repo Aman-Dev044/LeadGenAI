@@ -7,19 +7,47 @@ import { paginate } from '../../common/utils/paginate';
 import { EventBusService, PlatformEvents } from '../../common/events';
 import { AppointmentEmailService } from './appointment-email.service';
 
+function cleanAttendeeName(name?: string): string {
+  if (!name) return 'Visitor';
+  const trimmed = name.trim();
+  const words = trimmed.split(/\s+/);
+  const cleaned: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    if (i > 0 && words[i].toLowerCase() === words[i - 1].toLowerCase()) {
+      continue;
+    }
+    cleaned.push(words[i]);
+  }
+  return cleaned.join(' ');
+}
+
 @Injectable()
 export class AppointmentService {
   constructor(
     @InjectModel('Appointment') private readonly appointmentModel: Model<any>,
+    @InjectModel('User') private readonly userModel: Model<any>,
     private readonly bus: EventBusService,
     private readonly emails: AppointmentEmailService,
   ) {}
 
   async create(tenantId: string, dto: CreateAppointmentDto) {
+    // Resolve assignedTo if missing or set to tenantId
+    let assignedTo = dto.assignedTo;
+    if (!assignedTo || assignedTo === tenantId) {
+      const salesperson: any = await this.userModel.findOne({
+        tenantId,
+        isActive: true,
+        role: { $in: ['SALESPERSON', 'SALES_MANAGER', 'ADMIN'] },
+      }).sort({ role: 1 }).lean();
+      if (salesperson?._id) {
+        assignedTo = salesperson._id.toString();
+      }
+    }
+
     // Check for double-booking
     const conflict = await this.appointmentModel.findOne({
       tenantId,
-      assignedTo: dto.assignedTo,
+      assignedTo,
       status: { $in: ['scheduled', 'confirmed'] },
       $or: [
         {
@@ -33,9 +61,21 @@ export class AppointmentService {
       throw new BadRequestException('Time slot conflicts with an existing appointment');
     }
 
+    const cleanedAttendee = dto.attendee ? {
+      ...dto.attendee,
+      name: cleanAttendeeName(dto.attendee.name),
+    } : undefined;
+
+    const title = dto.title
+      ? dto.title.replace(/Meeting with (.+)/i, (_, n) => `Meeting with ${cleanAttendeeName(n)}`)
+      : `Meeting with ${cleanedAttendee?.name || 'Visitor'}`;
+
     const appointment = await this.appointmentModel.create({
       tenantId,
       ...dto,
+      title,
+      assignedTo: assignedTo || dto.assignedTo,
+      attendee: cleanedAttendee,
       startTime: new Date(dto.startTime),
       endTime: new Date(dto.endTime),
     });
@@ -45,7 +85,10 @@ export class AppointmentService {
   }
 
   async findAll(tenantId: string, paginationDto: PaginationDto, filters?: any) {
-    const query: any = { tenantId };
+    const query: any = {};
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     if (filters?.status) query.status = filters.status;
     if (filters?.assignedTo) query.assignedTo = filters.assignedTo;
     if (filters?.from) query.startTime = { $gte: new Date(filters.from) };
@@ -53,18 +96,32 @@ export class AppointmentService {
       query.startTime = { ...query.startTime, $lte: new Date(filters.to) };
     }
 
-    return paginate(this.appointmentModel, query, {
+    const paginated = await paginate(this.appointmentModel, query, {
       ...paginationDto,
       sortBy: 'startTime',
       sortOrder: 'asc',
     });
+
+    const userIds = [...new Set((paginated.data || []).map((a: any) => a.assignedTo).filter(Boolean))];
+    if (userIds.length > 0) {
+      const users = await this.userModel.find({ _id: { $in: userIds } }).select('firstName lastName email role').lean();
+      const userMap = new Map(users.map((u: any) => [u._id.toString(), u]));
+      paginated.data = (paginated.data || []).map((a: any) => {
+        const plain = typeof a.toObject === 'function' ? a.toObject() : a;
+        return {
+          ...plain,
+          assignedUser: userMap.get(String(plain.assignedTo)) || null,
+        };
+      });
+    }
+
+    return paginated;
   }
 
   async findById(tenantId: string, appointmentId: string) {
-    const appointment = await this.appointmentModel.findOne({
-      _id: appointmentId,
-      tenantId,
-    });
+    const filter: any = { _id: appointmentId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+    const appointment = await this.appointmentModel.findOne(filter);
     if (!appointment) throw new NotFoundException('Appointment not found');
     return appointment;
   }
@@ -74,19 +131,25 @@ export class AppointmentService {
     if (dto.startTime) updateData.startTime = new Date(dto.startTime);
     if (dto.endTime) updateData.endTime = new Date(dto.endTime);
 
+    const filter: any = { _id: appointmentId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+
     const appointment = await this.appointmentModel.findOneAndUpdate(
-      { _id: appointmentId, tenantId },
+      filter,
       { $set: updateData },
       { new: true },
     );
     if (!appointment) throw new NotFoundException('Appointment not found');
-    this.bus.emit(PlatformEvents.APPOINTMENT_UPDATED, { tenantId, appointment });
+    this.bus.emit(PlatformEvents.APPOINTMENT_UPDATED, { tenantId: appointment.tenantId || tenantId, appointment });
     return appointment;
   }
 
   async cancel(tenantId: string, appointmentId: string, reason?: string) {
+    const filter: any = { _id: appointmentId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+
     const appointment = await this.appointmentModel.findOneAndUpdate(
-      { _id: appointmentId, tenantId },
+      filter,
       {
         $set: {
           status: 'cancelled',
@@ -97,8 +160,9 @@ export class AppointmentService {
       { new: true },
     );
     if (!appointment) throw new NotFoundException('Appointment not found');
-    this.bus.emit(PlatformEvents.APPOINTMENT_UPDATED, { tenantId, appointment });
-    this.emails.notify('cancellation', tenantId, appointment, { reason });
+    const targetTenant = appointment.tenantId || tenantId;
+    this.bus.emit(PlatformEvents.APPOINTMENT_UPDATED, { tenantId: targetTenant, appointment });
+    this.emails.notify('cancellation', targetTenant, appointment, { reason });
     return appointment;
   }
 
@@ -107,7 +171,9 @@ export class AppointmentService {
    * no-show appointments (a cancelled one becomes scheduled again). Completed ones cannot move.
    */
   async reschedule(tenantId: string, appointmentId: string, dto: RescheduleAppointmentDto) {
-    const appointment = await this.appointmentModel.findOne({ _id: appointmentId, tenantId });
+    const filter: any = { _id: appointmentId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+    const appointment = await this.appointmentModel.findOne(filter);
     if (!appointment) throw new NotFoundException('Appointment not found');
     if (appointment.status === 'completed') {
       throw new BadRequestException('A completed appointment cannot be rescheduled');
@@ -219,12 +285,16 @@ export class AppointmentService {
       conversationId?: string;
     },
   ) {
+    const cleanedName = cleanAttendeeName(data.attendee?.name);
     return this.create(tenantId, {
-      title: `Meeting with ${data.attendee.name || 'Visitor'}`,
+      title: `Meeting with ${cleanedName}`,
       assignedTo: data.assignedTo,
       startTime: data.startTime,
       endTime: data.endTime,
-      attendee: data.attendee,
+      attendee: {
+        ...data.attendee,
+        name: cleanedName,
+      },
       leadId: data.leadId,
       conversationId: data.conversationId,
     });

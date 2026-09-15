@@ -111,6 +111,14 @@ export default function RegisterPage() {
               Already have an account?{' '}
               <Link href="/auth/login" className="text-primary hover:underline">Sign in</Link>
             </p>
+
+            <p className="text-[11px] text-muted-foreground text-center pt-2 border-t border-border/50">
+              By creating an account, you agree to LeadAI's{' '}
+              <Link href="/privacy" className="text-primary font-medium underline-offset-2 hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </CardFooter>
         </form>
       </Card>

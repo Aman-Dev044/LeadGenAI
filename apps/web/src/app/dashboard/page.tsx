@@ -33,36 +33,43 @@ const TEMP_STYLES: Record<string, { bar: string; label: string; icon: React.Reac
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, tenant, impersonation } = useAuthStore();
+  const { user, tenant, impersonation, activeTenantId } = useAuthStore();
   const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+  const isSalesperson = user?.role === 'SALESPERSON';
 
-  // The owner's home is the console; salesperson lands on their leads pipeline
+  // Platform owner defaults to owner console when viewing all tenants
   useEffect(() => {
-    if (isOwner) router.replace('/dashboard/admin');
-    if (user?.role === 'SALESPERSON') router.replace('/dashboard/leads');
-  }, [isOwner, user?.role, router]);
+    if (isOwner && (!activeTenantId || activeTenantId === 'all')) {
+      router.replace('/dashboard/admin');
+    }
+  }, [isOwner, activeTenantId, router]);
+
+  const canView = Boolean(user && (!isOwner || (activeTenantId && activeTenantId !== 'all')));
 
   const { data: overview, isLoading } = useQuery({
-    queryKey: ['dashboard', 'overview'],
+    queryKey: ['dashboard', 'overview', activeTenantId],
     queryFn: () => api.get<any>('/dashboard/overview'),
     refetchInterval: 10000,
+    enabled: canView,
   });
 
   const { data: leadStats } = useQuery({
-    queryKey: ['dashboard', 'lead-stats'],
+    queryKey: ['dashboard', 'lead-stats', activeTenantId],
     queryFn: () => api.get<any>('/dashboard/leads/stats'),
     refetchInterval: 15000,
+    enabled: canView,
   });
 
   const { data: convStats } = useQuery({
-    queryKey: ['dashboard', 'conversation-stats'],
+    queryKey: ['dashboard', 'conversation-stats', activeTenantId],
     queryFn: () => api.get<any>('/dashboard/conversations/stats'),
     refetchInterval: 15000,
+    enabled: canView,
   });
 
-  if (isLoading || isOwner) return <Loading label="Loading your dashboard" />;
+  if (isLoading || !canView) return <Loading label="Loading your dashboard" />;
 
-  // Backend overview returns: totalLeads, totalConversations, activeAgents, totalUsers, leadsByStatus (object), leadsByTemperature (object)
+  // Backend overview returns: totalLeads, totalConversations, activeAgents, totalUsers, totalAppointments, isScoped, leadsByStatus (object), leadsByTemperature (object)
   const raw = (overview as any)?.data || {};
   const leadsByTemp = raw.leadsByTemperature || {};
   const leadsByStatus = raw.leadsByStatus || {};
@@ -101,7 +108,7 @@ export default function DashboardPage() {
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider backdrop-blur">
-              <Sparkles className="h-3 w-3" /> {tenant?.name || 'Your workspace'}
+              <Sparkles className="h-3 w-3" /> {isSalesperson ? 'My Sales Workspace' : (tenant?.name || 'Your workspace')}
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
               {greeting()}, {user?.firstName || 'there'} 👋
@@ -129,34 +136,99 @@ export default function DashboardPage() {
       </div>
 
       <PageHeader
-        title="Overview"
-        description="A live snapshot of your lead generation performance."
+        title={isSalesperson ? 'My Performance' : 'Overview'}
+        description={isSalesperson ? 'A live snapshot of your assigned leads and sales activity.' : 'A live snapshot of your organization-wide lead generation performance.'}
         icon={Gauge}
         className="mb-0"
       />
 
       {/* KPI row 1 */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Leads" value={raw.totalLeads || 0} icon={Users} description="all time" tone="primary" onClick={() => router.push('/dashboard/leads')} />
-        <StatCard title="Conversations" value={raw.totalConversations || 0} icon={MessageSquare} description="total chats" tone="info" onClick={() => router.push('/dashboard/conversations')} />
-        <StatCard title="Hot Leads" value={hotLeads} icon={Flame} description="high intent" tone="danger" />
-        <StatCard title="Conversion Rate" value={`${conversionRate.toFixed(1)}%`} icon={TrendingUp} description="leads → converted" tone="success" />
+        <StatCard
+          title={isSalesperson ? 'My Assigned Leads' : 'Total Leads (Org-wide)'}
+          value={raw.totalLeads || 0}
+          icon={Users}
+          description={isSalesperson ? 'assigned to you' : 'all bot & channel leads'}
+          tone="primary"
+          onClick={() => router.push('/dashboard/leads')}
+        />
+        <StatCard
+          title={isSalesperson ? 'My Conversations' : 'Conversations'}
+          value={raw.totalConversations || 0}
+          icon={MessageSquare}
+          description={isSalesperson ? 'your chats & handoffs' : 'total chats across team'}
+          tone="info"
+          onClick={() => router.push('/dashboard/conversations')}
+        />
+        <StatCard
+          title={isSalesperson ? 'My Hot Leads' : 'Hot Leads'}
+          value={hotLeads}
+          icon={Flame}
+          description="high intent"
+          tone="danger"
+        />
+        <StatCard
+          title={isSalesperson ? 'My Conversion Rate' : 'Conversion Rate'}
+          value={`${conversionRate.toFixed(1)}%`}
+          icon={TrendingUp}
+          description={isSalesperson ? 'assigned → converted' : 'leads → converted'}
+          tone="success"
+        />
       </div>
 
       {/* KPI row 2 */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Avg. Lead Score" value={averageScore} icon={Target} description="out of 100" tone="violet" />
-        <StatCard title="Active Agents" value={raw.activeAgents || 0} icon={Bot} description="AI agents live" tone="info" onClick={() => router.push('/dashboard/agents')} />
-        <StatCard title="Team Members" value={raw.totalUsers || 0} icon={UserCheck} description="workspace users" tone="neutral" onClick={() => router.push('/dashboard/users')} />
-        <StatCard title="Qualified Leads" value={qualifiedLeads} icon={TrendingUp} description="ready for sales" tone="success" />
+        <StatCard
+          title="Avg. Lead Score"
+          value={averageScore}
+          icon={Target}
+          description="out of 100"
+          tone="violet"
+        />
+        {isSalesperson ? (
+          <StatCard
+            title="My Appointments"
+            value={raw.totalAppointments || 0}
+            icon={CalendarDays}
+            description="upcoming scheduled meetings"
+            tone="info"
+            onClick={() => router.push('/dashboard/appointments')}
+          />
+        ) : (
+          <StatCard
+            title="Active Agents"
+            value={raw.activeAgents || 0}
+            icon={Bot}
+            description="AI agents live"
+            tone="info"
+            onClick={() => router.push('/dashboard/agents')}
+          />
+        )}
+        <StatCard
+          title={isSalesperson ? 'Team Colleagues' : 'Team Members'}
+          value={raw.totalUsers || 0}
+          icon={UserCheck}
+          description={isSalesperson ? 'active salespeople' : 'workspace users'}
+          tone="neutral"
+          onClick={isSalesperson ? undefined : () => router.push('/dashboard/users')}
+        />
+        <StatCard
+          title={isSalesperson ? 'My Qualified Leads' : 'Qualified Leads'}
+          value={qualifiedLeads}
+          icon={TrendingUp}
+          description={isSalesperson ? 'ready to close' : 'ready for sales'}
+          tone="success"
+        />
       </div>
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Leads by status</CardTitle>
-            <CardDescription>How your pipeline is distributed right now.</CardDescription>
+            <CardTitle>{isSalesperson ? 'My leads by status' : 'Leads by status'}</CardTitle>
+            <CardDescription>
+              {isSalesperson ? 'How your assigned pipeline is distributed right now.' : 'How your pipeline is distributed right now.'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <LeadsByStatusChart data={statusChartData} height={260} />
@@ -164,8 +236,10 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Conversations trend</CardTitle>
-            <CardDescription>New conversations started per day.</CardDescription>
+            <CardTitle>{isSalesperson ? 'My conversations trend' : 'Conversations trend'}</CardTitle>
+            <CardDescription>
+              {isSalesperson ? 'Conversations handled over time.' : 'New conversations started per day.'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ConversationTrendChart data={dailyConversations} height={260} />
@@ -177,8 +251,8 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Leads by temperature</CardTitle>
-            <CardDescription>Intent split across hot, warm and cold leads.</CardDescription>
+            <CardTitle>{isSalesperson ? 'My leads by temperature' : 'Leads by temperature'}</CardTitle>
+            <CardDescription>{isSalesperson ? 'Intent split across your assigned leads.' : 'Intent split across hot, warm and cold leads.'}</CardDescription>
           </CardHeader>
           <CardContent>
             {tempTotal === 0 ? (
@@ -215,8 +289,8 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Top sources</CardTitle>
-            <CardDescription>Where your leads are coming from.</CardDescription>
+            <CardTitle>{isSalesperson ? 'My top sources' : 'Top sources'}</CardTitle>
+            <CardDescription>{isSalesperson ? 'Where your assigned leads are coming from.' : 'Where your leads are coming from.'}</CardDescription>
           </CardHeader>
           <CardContent>
             {topSources.length === 0 ? (

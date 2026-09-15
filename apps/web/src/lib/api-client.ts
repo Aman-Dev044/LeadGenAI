@@ -19,19 +19,37 @@ class ApiError extends Error {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, params } = options;
+  const { method = 'GET', body, headers = {}, params, ...rest } = options as any;
+
+  // Merge explicitly provided params with any top-level key-values passed to GET/DELETE requests
+  const queryParams: Record<string, any> = {
+    ...(params || {}),
+    ...(method === 'GET' || method === 'DELETE' ? rest : {}),
+  };
 
   let url = `${API_BASE}${endpoint}`;
-  if (params) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) searchParams.set(key, String(value));
-    });
-    const qs = searchParams.toString();
-    if (qs) url += `?${qs}`;
+  const searchParams = new URLSearchParams();
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && key !== 'headers' && key !== 'body' && key !== 'method') {
+      searchParams.set(key, String(value));
+    }
+  });
+  const qs = searchParams.toString();
+  if (qs) {
+    url += (url.includes('?') ? '&' : '?') + qs;
   }
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const platformTenant = typeof window !== 'undefined' ? localStorage.getItem('la_platform_tenant') : null;
+
+  // Platform admin routes manage all tenants globally, so don't auto-restrict them to a single tenant header
+  const isPlatformAdminRoute =
+    endpoint.startsWith('/admin') ||
+    endpoint.startsWith('/account-deletion/admin') ||
+    endpoint.startsWith('/platform');
+
+  const includeTenantOverride =
+    platformTenant && platformTenant !== 'all' && !isPlatformAdminRoute && !headers['x-tenant-id'];
 
   let res: Response | null = null;
   const maxRetries = 2;
@@ -44,6 +62,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(includeTenantOverride ? { 'x-tenant-id': platformTenant } : {}),
           ...headers,
         },
         ...(body ? { body: JSON.stringify(body) } : {}),

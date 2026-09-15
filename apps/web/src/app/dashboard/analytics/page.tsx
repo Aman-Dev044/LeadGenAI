@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import { PageHeader } from '@/components/shared/page-header';
 import { Loading } from '@/components/shared/loading';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,27 +44,28 @@ function RankedList({ items, total, colorAt }: { items: { name: string; value: n
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState('30d');
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
 
   const { data: overview, isLoading } = useQuery({
-    queryKey: ['analytics', 'overview', period],
+    queryKey: ['analytics', activeTenantId, 'overview', period],
     queryFn: () => api.get<any>('/analytics/overview', { period }),
     refetchInterval: 15000,
   });
 
   const { data: leadAnalytics } = useQuery({
-    queryKey: ['analytics', 'leads', period],
+    queryKey: ['analytics', activeTenantId, 'leads', period],
     queryFn: () => api.get<any>('/analytics/leads', { period }),
     refetchInterval: 15000,
   });
 
   const { data: trends } = useQuery({
-    queryKey: ['analytics', 'trends', period],
+    queryKey: ['analytics', activeTenantId, 'trends', period],
     queryFn: () => api.get<any>('/analytics/trends', { period }),
     refetchInterval: 15000,
   });
 
   const { data: sources } = useQuery({
-    queryKey: ['analytics', 'sources', period],
+    queryKey: ['analytics', activeTenantId, 'sources', period],
     queryFn: () => api.get<any>('/analytics/sources', { period }),
     refetchInterval: 15000,
   });

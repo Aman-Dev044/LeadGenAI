@@ -55,12 +55,14 @@ export default function OwnerOverviewPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'overview'],
     queryFn: () => api.get<any>('/admin/overview'),
-    refetchInterval: 30_000,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
   const { data: activity } = useQuery({
     queryKey: ['admin', 'activity'],
     queryFn: () => api.get<any>('/admin/activity'),
-    refetchInterval: 30_000,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
   const { data: search, isFetching: searching } = useQuery({
     queryKey: ['admin', 'search', searchTerm],

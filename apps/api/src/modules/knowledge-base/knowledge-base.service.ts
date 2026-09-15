@@ -98,7 +98,10 @@ export class KnowledgeBaseService {
   }
 
   async findAllSources(tenantId: string, paginationDto: PaginationDto) {
-    const query: any = { tenantId, deletedAt: null };
+    const query: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     if (paginationDto.search) {
       query.name = { $regex: escapeRegex(paginationDto.search), $options: 'i' };
     }
@@ -106,11 +109,11 @@ export class KnowledgeBaseService {
   }
 
   async findSourceById(tenantId: string, sourceId: string) {
-    const source = await this.sourceModel.findOne({
-      _id: sourceId,
-      tenantId,
-      deletedAt: null,
-    });
+    const filter: any = { _id: sourceId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
+    const source = await this.sourceModel.findOne(filter);
     if (!source) {
       throw new NotFoundException('Knowledge source not found');
     }
@@ -118,8 +121,12 @@ export class KnowledgeBaseService {
   }
 
   async deleteSource(tenantId: string, sourceId: string) {
+    const filter: any = { _id: sourceId };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const source = await this.sourceModel.findOneAndUpdate(
-      { _id: sourceId, tenantId },
+      filter,
       { deletedAt: new Date() },
       { new: true },
     );
@@ -128,17 +135,19 @@ export class KnowledgeBaseService {
     }
 
     // Delete associated chunks
-    await this.chunkModel.deleteMany({ sourceId, tenantId });
+    const chunkFilter: any = { sourceId };
+    if (tenantId && tenantId !== 'all') chunkFilter.tenantId = tenantId;
+    await this.chunkModel.deleteMany(chunkFilter);
 
     return { message: 'Knowledge source deleted' };
   }
 
   async reprocessSource(tenantId: string, sourceId: string) {
-    const source = await this.sourceModel.findOne({
-      _id: sourceId,
-      tenantId,
-      deletedAt: null,
-    });
+    const filter: any = { _id: sourceId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
+    const source = await this.sourceModel.findOne(filter);
     if (!source) {
       throw new NotFoundException('Knowledge source not found');
     }

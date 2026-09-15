@@ -56,6 +56,8 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = {
+      _id: payload.sub,
+      id: payload.sub,
       userId: payload.sub,
       tenantId: payload.tenantId,
       email: payload.email,
@@ -65,14 +67,18 @@ export class AuthGuard implements CanActivate {
     };
     request.tenantId = payload.tenantId;
 
-    // Owner may inspect any tenant through the regular endpoints
+    // Owner may inspect a specific tenant or view platform-wide data across all tenants
     if (payload.role === 'SUPER_ADMIN') {
       const override = request.headers?.[TENANT_OVERRIDE_HEADER];
       if (typeof override === 'string' && /^[a-f0-9]{24}$/i.test(override)) {
         request.tenantId = override;
         request.user.tenantId = override;
         request.tenantOverride = true;
+      } else {
+        request.tenantId = 'all';
+        request.user.tenantId = 'all';
       }
+      request.user.isSuperAdmin = true;
     }
 
     return true;

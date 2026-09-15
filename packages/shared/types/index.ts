@@ -1,5 +1,5 @@
-// User Roles
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALESPERSON' | 'VIEWER';
+// User Roles: Platform owner is SUPER_ADMIN. Workspace roles are strictly ADMIN and SALESPERSON.
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON';
 
 // Lead
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'unqualified' | 'converted' | 'lost';

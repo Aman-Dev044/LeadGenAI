@@ -90,6 +90,15 @@ export class BillingController {
     return this.billingService.getInvoiceById(tenantId, id);
   }
 
+  @Patch('invoices/:id/pay')
+  @Roles('ADMIN')
+  async payInvoice(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.billingService.payInvoice(tenantId, id);
+  }
+
   @Post('webhook')
   @Public()
   async handlePaymentWebhook(@Body() body: any, @Req() req: any) {

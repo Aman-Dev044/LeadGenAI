@@ -12,12 +12,13 @@ export function formatDate(date: string | Date) {
   }).format(new Date(date));
 }
 
-export function formatCurrency(amount: number, currency = 'INR') {
-  return new Intl.NumberFormat('en-IN', {
+export function formatCurrency(amount: number, currency = 'USD') {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
-  }).format(amount / 100);
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 export function getInitials(name: string) {

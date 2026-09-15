@@ -243,6 +243,14 @@ export default function LoginPage() {
                 Staff accounts are assigned by your workspace administrator.
               </p>
             )}
+
+            <p className="text-[11px] text-muted-foreground text-center pt-2 border-t border-border/50">
+              By signing in, you acknowledge LeadAI's{' '}
+              <Link href="/privacy" className="text-primary font-medium underline-offset-2 hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </CardFooter>
         </form>
       </Card>

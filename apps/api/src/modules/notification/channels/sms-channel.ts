@@ -23,11 +23,18 @@ export class SmsChannel {
       return false;
     }
 
+    const cleanFrom = fromNumber.replace(/^whatsapp:/i, '').replace(/[\s\-()]/g, '').trim();
+    let cleanTo = phoneNumber.replace(/^whatsapp:/i, '').replace(/[\s\-()]/g, '').trim();
+    if (!cleanTo.startsWith('+')) {
+      cleanTo = `+${cleanTo}`;
+    }
+    const finalFrom = cleanFrom.startsWith('+') ? cleanFrom : `+${cleanFrom}`;
+
     try {
       const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
       const body = new URLSearchParams({
-        To: phoneNumber,
-        From: fromNumber,
+        To: cleanTo,
+        From: finalFrom,
         Body: `${notification.title}\n${notification.body || ''}`,
       });
 
@@ -42,12 +49,14 @@ export class SmsChannel {
 
       if (!response.ok) {
         const errorData = await response.text();
-        this.logger.error(`SMS send failed: ${errorData}`);
+        this.logger.error(`SMS send failed (${response.status}): ${errorData}`);
         return false;
       }
 
+      const result = await response.json().catch(() => ({}));
+      this.logger.log(`SMS sent successfully via Twilio (SID: ${result.sid || 'ok'}) to ${cleanTo}`);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`SMS notification failed: ${error.message}`);
       return false;
     }

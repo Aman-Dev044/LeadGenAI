@@ -99,6 +99,46 @@ export class Lead {
   @Prop()
   aiSummaryUpdatedAt: Date;
 
+  // Point 3: Executive Buyer Intelligence & Dossier
+  @Prop({
+    type: {
+      companySummary: String,
+      estimatedSize: String,
+      industry: String,
+      buyerIntent: String,
+      painPoints: [String],
+      dealClosingPitch: String,
+      recommendedAction: String,
+      generatedAt: Date,
+    },
+  })
+  dossier: {
+    companySummary?: string;
+    estimatedSize?: string;
+    industry?: string;
+    buyerIntent?: string;
+    painPoints?: string[];
+    dealClosingPitch?: string;
+    recommendedAction?: string;
+    generatedAt?: Date;
+  };
+
+  // Point 4: WhatsApp Voice Note Script & Assistant
+  @Prop({
+    type: {
+      script: String,
+      durationEstimate: String,
+      angle: String,
+      generatedAt: Date,
+    },
+  })
+  voiceNoteScript: {
+    script?: string;
+    durationEstimate?: string;
+    angle?: string;
+    generatedAt?: Date;
+  };
+
   @Prop()
   lastActivityAt: Date;
 

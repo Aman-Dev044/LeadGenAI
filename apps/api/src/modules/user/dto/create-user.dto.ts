@@ -19,7 +19,7 @@ export class CreateUserDto {
   password: string;
 
   @IsNotEmpty()
-  @IsEnum(['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'])
+  @IsEnum(['ADMIN', 'SALESPERSON'])
   role: string;
 
   @IsOptional()

@@ -1,10 +1,12 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users, Download, Upload, Flame, CheckSquare, X, Inbox, FileSpreadsheet } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
+import { perms } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +54,34 @@ const emptyForm = { firstName: '', lastName: '', email: '', phone: '', company: 
 export default function LeadsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const impersonation = useAuthStore((s) => s.impersonation);
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+  const { data: tenantsData } = useQuery({
+    queryKey: ['admin-tenants-list'],
+    queryFn: async () => {
+      const res: any = await api.get('/admin/tenants?limit=100');
+      return res?.data?.data || res?.data || [];
+    },
+    enabled: !!isOwner,
+  });
+  const tenantMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (tenantsData || []).forEach((t: any) => {
+      if (!t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')) {
+        map.set(t._id, t);
+      }
+    });
+    return map;
+  }, [tenantsData]);
+
+  const role = user?.role;
+  const canCreate = perms.createLead(role);
+  const canDelete = perms.deleteLead(role);
+  const canBulkAssign = perms.bulkAssignLeads(role);
+  const canImportExport = perms.importExportLeads(role);
+  const isSalesperson = perms.isSalesperson(role);
+  const tableCols = 7 + (canBulkAssign ? 1 : 0) + (canDelete ? 1 : 0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState('');
@@ -73,8 +103,10 @@ export default function LeadsPage() {
   const [showImport, setShowImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['leads', page, limit, search, status, temperature, source],
+    queryKey: ['leads', activeTenantId, page, limit, search, status, temperature, source],
     queryFn: () => api.get<PaginatedResponse<Lead>['data']>('/leads', {
       page, limit, search: search || undefined,
       status: status || undefined,
@@ -84,7 +116,7 @@ export default function LeadsPage() {
   });
 
   const { data: usersData } = useQuery({
-    queryKey: ['users', 'assignable'],
+    queryKey: ['users', 'assignable', activeTenantId],
     queryFn: () => api.get<any>('/users/assignable'),
   });
 
@@ -222,19 +254,29 @@ export default function LeadsPage() {
     <div>
       <PageHeader
         title="Leads"
-        description="Every prospect captured by your agents, imports and team — in one pipeline."
+        description={
+          isSalesperson
+            ? 'The prospects assigned to you — work them from first touch to close.'
+            : 'Every prospect captured by your agents, imports and team — in one pipeline.'
+        }
         icon={Users}
         actions={
           <>
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="h-4 w-4" /> Export CSV
-            </Button>
-            <Button variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4" /> Import CSV
-            </Button>
-            <Button variant="gradient" onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" /> Add Lead
-            </Button>
+            {canImportExport && (
+              <>
+                <Button variant="outline" onClick={handleExport}>
+                  <Download className="h-4 w-4" /> Export CSV
+                </Button>
+                <Button variant="outline" onClick={() => setShowImport(true)}>
+                  <Upload className="h-4 w-4" /> Import CSV
+                </Button>
+              </>
+            )}
+            {canCreate && (
+              <Button variant="gradient" onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" /> Add Lead
+              </Button>
+            )}
           </>
         }
       />
@@ -297,9 +339,11 @@ export default function LeadsPage() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[44px]">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
-                </TableHead>
+                {canBulkAssign && (
+                  <TableHead className="w-[44px]">
+                    <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                  </TableHead>
+                )}
                 <TableHead>Lead</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Status</TableHead>
@@ -307,22 +351,24 @@ export default function LeadsPage() {
                 <TableHead>Score</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="w-[56px]"></TableHead>
+                {canDelete && <TableHead className="w-[56px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {leads.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={9} className="h-44 text-center">
+                  <TableCell colSpan={tableCols} className="h-44 text-center">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
                         <Users className="h-5 w-5" />
                       </div>
                       <p className="text-sm font-medium text-foreground">No leads found</p>
-                      <p className="text-xs">Try clearing filters, or add your first lead.</p>
-                      <Button size="sm" variant="soft" className="mt-2" onClick={() => setShowCreate(true)}>
-                        <Plus className="h-4 w-4" /> Add lead
-                      </Button>
+                      <p className="text-xs">{canCreate ? 'Try clearing filters, or add your first lead.' : 'Try clearing filters.'}</p>
+                      {canCreate && (
+                        <Button size="sm" variant="soft" className="mt-2" onClick={() => setShowCreate(true)}>
+                          <Plus className="h-4 w-4" /> Add lead
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -336,16 +382,25 @@ export default function LeadsPage() {
                       data-state={isSel ? 'selected' : undefined}
                       onClick={() => router.push(`/dashboard/leads/${lead._id}`)}
                     >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={isSel} onCheckedChange={() => toggleOne(lead._id)} aria-label="Select lead" />
-                      </TableCell>
+                      {canBulkAssign && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox checked={isSel} onCheckedChange={() => toggleOne(lead._id)} aria-label="Select lead" />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-3 min-w-0">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback>{getInitials(leadName(lead))}</AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <div className="font-semibold truncate">{leadName(lead)}</div>
+                            <div className="font-semibold truncate flex items-center gap-1.5">
+                              <span>{leadName(lead)}</span>
+                              {isOwner && (lead as any).tenantId && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                                  🏢 {tenantMap.get((lead as any).tenantId)?.name || 'Tenant'}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || '—'}</div>
                           </div>
                         </div>
@@ -356,11 +411,13 @@ export default function LeadsPage() {
                       <TableCell><ScoreBar score={lead.score} /></TableCell>
                       <TableCell className="text-sm capitalize">{lead.source || <span className="text-muted-foreground">—</span>}</TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(lead.createdAt)}</TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteId(lead._id)} aria-label="Delete lead">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+                      {canDelete && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10" onClick={() => setDeleteId(lead._id)} aria-label="Delete lead">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })

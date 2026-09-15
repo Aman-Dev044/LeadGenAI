@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Ticket, Eye, Send, Inbox, LoaderCircle, CheckCircle2, AlertTriangle, User, StickyNote } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
+import { perms } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -34,6 +36,10 @@ const STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function SupportTicketsPage() {
+  const role = useAuthStore((s) => s.user?.role);
+  const canCreate = perms.createTicket(role);
+  const canManage = perms.manageTicket(role);
+  const isSalesperson = perms.isSalesperson(role);
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -176,9 +182,9 @@ export default function SupportTicketsPage() {
     <div>
       <PageHeader
         title="Support Tickets"
-        description="Track issues raised by leads and your team, assign an owner and keep a note trail until resolved."
+        description={isSalesperson ? 'Tickets assigned to you — keep the note trail going until they are resolved.' : 'Track issues raised by leads and your team, assign an owner and keep a note trail until resolved.'}
         icon={Ticket}
-        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Ticket</Button>}
+        actions={canCreate && <Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Ticket</Button>}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -282,7 +288,7 @@ export default function SupportTicketsPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-xs">Status</Label>
-                    <Select value={viewTicket.status} onValueChange={(v) => statusMutation.mutate({ id: viewTicket._id, status: v })}>
+                    <Select value={viewTicket.status} onValueChange={(v) => statusMutation.mutate({ id: viewTicket._id, status: v })} disabled={!canManage}>
                       <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
@@ -291,7 +297,7 @@ export default function SupportTicketsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Assign To</Label>
-                    <Select value={viewTicket.assignedTo || 'none'} onValueChange={(v) => { if (v !== 'none') assignMutation.mutate({ id: viewTicket._id, assignedTo: v }); }}>
+                    <Select value={viewTicket.assignedTo || 'none'} onValueChange={(v) => { if (v !== 'none') assignMutation.mutate({ id: viewTicket._id, assignedTo: v }); }} disabled={!canManage}>
                       <SelectTrigger className="h-9"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Unassigned</SelectItem>

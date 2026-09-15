@@ -8,6 +8,8 @@ import { AgentSchema } from '../../schemas/agent.schema';
 import { HandoffSchema } from '../../schemas/handoff.schema';
 import { LeadSchema } from '../../schemas/lead.schema';
 import { LeadActivitySchema } from '../../schemas/lead-activity.schema';
+import { AppointmentSchema } from '../../schemas/appointment.schema';
+import { UserSchema } from '../../schemas/user.schema';
 import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 import { AppointmentModule } from '../appointment/appointment.module';
 import { SupportTicketModule } from '../support-ticket/support-ticket.module';
@@ -24,6 +26,8 @@ import { GatewayModule } from '../../gateways/gateway.module';
       { name: 'Handoff', schema: HandoffSchema },
       { name: 'Lead', schema: LeadSchema },
       { name: 'LeadActivity', schema: LeadActivitySchema },
+      { name: 'Appointment', schema: AppointmentSchema },
+      { name: 'User', schema: UserSchema },
     ]),
     KnowledgeBaseModule,
     AppointmentModule,

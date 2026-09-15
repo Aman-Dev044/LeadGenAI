@@ -1,9 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock, CalendarCheck, CalendarDays, CheckCircle2, Video, User } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
+import { useSocket } from '@/hooks/use-socket';
+import { perms } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -43,6 +46,31 @@ const emptyForm = { title: '', description: '', startTime: '', endTime: '', assi
 
 export default function AppointmentsPage() {
   const queryClient = useQueryClient();
+  const { user, impersonation } = useAuthStore();
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+  const { data: tenantsData } = useQuery({
+    queryKey: ['admin-tenants-list'],
+    queryFn: async () => {
+      const res: any = await api.get('/admin/tenants?limit=100');
+      return res?.data?.data || res?.data || [];
+    },
+    enabled: !!isOwner,
+  });
+  const tenantMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (tenantsData || []).forEach((t: any) => {
+      if (!t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')) {
+        map.set(t._id, t);
+      }
+    });
+    return map;
+  }, [tenantsData]);
+
+  const role = user?.role;
+  const canCreate = perms.createAppointment(role);
+  const canEdit = perms.editAppointment(role);
+  const canDelete = perms.deleteAppointment(role);
+  const isSalesperson = perms.isSalesperson(role);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState('');
@@ -60,20 +88,44 @@ export default function AppointmentsPage() {
   const [rescheduleAppt, setRescheduleAppt] = useState<any>(null);
   const [rescheduleForm, setRescheduleForm] = useState({ startTime: '', endTime: '', reason: '' });
 
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['appointments', page, limit, statusFilter],
+    queryKey: ['appointments', activeTenantId, page, limit, statusFilter],
     queryFn: () => api.get<any>('/appointments', { page, limit, status: statusFilter || undefined }),
   });
 
   const { data: usersData } = useQuery({
-    queryKey: ['users', 'assignable'],
+    queryKey: ['users', 'assignable', activeTenantId],
     queryFn: () => api.get<any>('/users/assignable'),
   });
 
-  const { data: leadsData } = useQuery({
-    queryKey: ['leads-list'],
+  const leadsData = useQuery({
+    queryKey: ['leads-list', activeTenantId],
     queryFn: () => api.get<any>('/leads', { limit: 100 }),
-  });
+  }).data;
+
+  const { socket, isConnected } = useSocket();
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleAppointmentChange = () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    };
+
+    socket.on('appointment:created', handleAppointmentChange);
+    socket.on('appointment:updated', handleAppointmentChange);
+    socket.on('appointment_created', handleAppointmentChange);
+    socket.on('appointment_updated', handleAppointmentChange);
+
+    return () => {
+      socket.off('appointment:created', handleAppointmentChange);
+      socket.off('appointment:updated', handleAppointmentChange);
+      socket.off('appointment_created', handleAppointmentChange);
+      socket.off('appointment_updated', handleAppointmentChange);
+    };
+  }, [socket, isConnected, queryClient]);
 
   const users = (usersData as any)?.data?.data || (usersData as any)?.data || [];
   const leads = (leadsData as any)?.data?.data || (leadsData as any)?.data || [];
@@ -176,7 +228,9 @@ export default function AppointmentsPage() {
     if (form.description.trim()) payload.description = form.description.trim();
     if (form.startTime) payload.startTime = new Date(form.startTime).toISOString();
     if (form.endTime) payload.endTime = new Date(form.endTime).toISOString();
-    if (form.assignedTo) payload.assignedTo = form.assignedTo;
+    // A salesperson books onto their own calendar; managers pick the owner
+    const assignedTo = isSalesperson ? user?._id : form.assignedTo;
+    if (assignedTo) payload.assignedTo = assignedTo;
     if (form.leadId) payload.leadId = form.leadId;
     if (form.meetingLink.trim()) payload.meetingLink = form.meetingLink.trim();
 
@@ -241,9 +295,20 @@ export default function AppointmentsPage() {
     updateMutation.mutate({ id: editAppt._id, body: payload });
   };
 
-  const getUserName = (id: string) => {
+  const getUserName = (a: any) => {
+    if (a?.assignedUser) {
+      const name = `${a.assignedUser.firstName || ''} ${a.assignedUser.lastName || ''}`.trim();
+      if (name) return name;
+      if (a.assignedUser.email) return a.assignedUser.email;
+    }
+    const id = typeof a === 'string' ? a : a?.assignedTo;
     const u = users.find((u: any) => u._id === id);
-    return u ? `${u.firstName} ${u.lastName}` : id || '-';
+    if (u) {
+      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+      if (name) return name;
+      if (u.email) return u.email;
+    }
+    return id && !/^[a-f\d]{24}$/i.test(id) ? id : 'Salesperson';
   };
 
   const now = new Date();
@@ -260,7 +325,14 @@ export default function AppointmentsPage() {
           <div className="flex items-center gap-3">
             <DateTile date={a.startTime} muted={past || a.status === 'cancelled'} />
             <div className="min-w-0">
-              <div className="font-semibold truncate">{a.title}</div>
+              <div className="font-semibold truncate flex items-center gap-1.5">
+                <span>{a.title}</span>
+                {isOwner && a.tenantId && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                    🏢 {tenantMap.get(a.tenantId)?.name || 'Tenant'}
+                  </span>
+                )}
+              </div>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="tabular">{fmtTime(a.startTime)} – {fmtTime(a.endTime)}</span>
                 {a.meetingLink && (
@@ -295,12 +367,12 @@ export default function AppointmentsPage() {
       key: 'assignedTo', label: 'Assigned To', render: (a: any) => (
         <div className="flex items-center gap-2 text-sm">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground"><User className="h-3.5 w-3.5" /></div>
-          <span>{getUserName(a.assignedTo)}</span>
+          <span>{getUserName(a)}</span>
         </div>
       ),
     },
     {
-      key: 'actions', label: '', className: 'text-right', render: (a: any) => (
+      key: 'actions', label: '', className: 'text-right', render: (a: any) => canEdit && (
         <div className="flex justify-end gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(a); }}>
             <Pencil className="h-3.5 w-3.5" />
@@ -315,9 +387,11 @@ export default function AppointmentsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete permanently" onClick={(e) => { e.stopPropagation(); setDeleteId(a._id); }}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {canDelete && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete permanently" onClick={(e) => { e.stopPropagation(); setDeleteId(a._id); }}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -327,9 +401,9 @@ export default function AppointmentsPage() {
     <div>
       <PageHeader
         title="Appointments"
-        description="Meetings booked by your AI agents and your team, all in one calendar."
+        description={isSalesperson ? 'Your meetings, booked by you or by the AI agents on your behalf.' : 'Meetings booked by your AI agents and your team, all in one calendar.'}
         icon={Calendar}
-        actions={<Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Appointment</Button>}
+        actions={canCreate && <Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Appointment</Button>}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -380,17 +454,19 @@ export default function AppointmentsPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Assigned To *</Label>
-                <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
-                  <SelectContent>
-                    {users.map((u: any) => (
-                      <SelectItem key={u._id} value={u._id}>{u.firstName} {u.lastName} ({u.role})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!isSalesperson && (
+                <div className="space-y-2">
+                  <Label>Assigned To *</Label>
+                  <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map((u: any) => (
+                        <SelectItem key={u._id} value={u._id}>{u.firstName} {u.lastName} ({u.role})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Lead</Label>
                 <Select value={form.leadId || 'none'} onValueChange={(v) => setForm({ ...form, leadId: v === 'none' ? '' : v })}>

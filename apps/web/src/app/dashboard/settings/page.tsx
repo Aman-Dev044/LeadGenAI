@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Save, Building2, Palette, Bot, Lock, Info, Bell, Settings, Hash, CreditCard, CalendarClock, Sparkles, MessageSquare, KeyRound, type LucideIcon } from 'lucide-react';
+import { Save, Building2, Palette, Bot, Lock, Info, Bell, Settings, Hash, CreditCard, CalendarClock, Sparkles, MessageSquare, KeyRound, Mail, CheckCircle2, Clock, ArrowRight, RefreshCw, ShieldCheck, EyeOff, ExternalLink, Trash2, type LucideIcon } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +19,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Loading } from '@/components/shared/loading';
 import { formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
+import { AccountDeletionCard } from '@/components/settings/account-deletion-card';
 
 const AI_PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -88,9 +91,388 @@ function InfoNote({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ChangeEmailCard({ userEmail }: { userEmail?: string }) {
+  const router = useRouter();
+  const { logout } = useAuthStore();
+
+  const [step, setStep] = useState<'idle' | 'current_sent' | 'current_verified' | 'new_sent'>('idle');
+  const [currentOtp, setCurrentOtp] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newOtp, setNewOtp] = useState('');
+
+  const [currentTimer, setCurrentTimer] = useState(0);
+  const [newTimer, setNewTimer] = useState(0);
+
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  // Timer countdown for current email OTP (120s)
+  useEffect(() => {
+    if (currentTimer <= 0) return;
+    const interval = setInterval(() => {
+      setCurrentTimer((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentTimer]);
+
+  // Timer countdown for new email OTP (120s)
+  useEffect(() => {
+    if (newTimer <= 0) return;
+    const interval = setInterval(() => {
+      setNewTimer((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [newTimer]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleReset = () => {
+    setStep('idle');
+    setCurrentOtp('');
+    setNewEmail('');
+    setNewOtp('');
+    setCurrentTimer(0);
+    setNewTimer(0);
+  };
+
+  // Step 1: Request OTP on current email
+  const handleRequestCurrentOtp = async () => {
+    try {
+      setLoadingAction('request_current');
+      await api.post('/auth/email-change/request-current-otp', {});
+      toast.success('6-character verification code sent to your current email');
+      setStep('current_sent');
+      setCurrentTimer(120);
+      setCurrentOtp('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send verification code');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Step 1: Verify OTP for current email
+  const handleVerifyCurrentOtp = async () => {
+    const code = currentOtp.trim().toUpperCase();
+    if (!code || code.length !== 6) {
+      toast.error('Please enter the 6-character verification code');
+      return;
+    }
+    try {
+      setLoadingAction('verify_current');
+      await api.post('/auth/email-change/verify-current-otp', { code });
+      toast.success('Current email verified! Now enter your new email address.');
+      setStep('current_verified');
+    } catch (err: any) {
+      toast.error(err.message || 'Invalid or expired verification code');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Step 2: Request OTP on new email
+  const handleRequestNewOtp = async () => {
+    const email = newEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+    if (email === userEmail?.toLowerCase()) {
+      toast.error('New email cannot be the same as your current email');
+      return;
+    }
+    try {
+      setLoadingAction('request_new');
+      await api.post('/auth/email-change/request-new-otp', { newEmail: email });
+      toast.success(`6-character verification code sent to ${email}`);
+      setStep('new_sent');
+      setNewTimer(120);
+      setNewOtp('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send code to new email');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Step 2: Verify OTP for new email and finalize replacement
+  const handleVerifyNewOtp = async () => {
+    const code = newOtp.trim().toUpperCase();
+    if (!code || code.length !== 6) {
+      toast.error('Please enter the 6-character verification code');
+      return;
+    }
+    try {
+      setLoadingAction('verify_new');
+      await api.post('/auth/email-change/verify-new-otp', { code });
+      toast.success('Email updated successfully! Please log in with your new email.');
+      logout();
+      setTimeout(() => {
+        router.push('/auth/login');
+      }, 500);
+    } catch (err: any) {
+      toast.error(err.message || 'Invalid or expired verification code');
+      setLoadingAction(null);
+    }
+  };
+
+  const isStage1Complete = step === 'current_verified' || step === 'new_sent';
+
+  return (
+    <Card>
+      <SectionHeader
+        icon={Mail}
+        title="Change Email Address"
+        description="Securely change your account email using a two-step 6-character alphanumeric verification."
+      />
+      <CardContent className="space-y-6">
+        <InfoNote>
+          Changing your email address is a 2-step verification process. First, verify ownership of your current email address ({userEmail || 'current email'}). Second, verify your new email address. Each verification code is valid for exactly <strong>2 minutes</strong>. Once complete, your old email is replaced in the database and you will be signed out to log in with your new email.
+        </InfoNote>
+
+        {/* Step Indicator */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={cn(
+            "p-3 rounded-xl border flex items-center gap-3 transition-colors",
+            isStage1Complete ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" : (step === 'current_sent' ? "border-primary/50 bg-primary/5" : "border-border/60 bg-muted/20")
+          )}>
+            <div className={cn(
+              "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
+              isStage1Complete ? "bg-emerald-500 text-white" : (step === 'current_sent' ? "bg-primary text-white" : "bg-muted text-muted-foreground")
+            )}>
+              {isStage1Complete ? <CheckCircle2 className="w-4 h-4" /> : "1"}
+            </div>
+            <div className="text-xs">
+              <p className="font-semibold text-foreground">Step 1: Current Email</p>
+              <p className="text-muted-foreground">{isStage1Complete ? "Verified" : (step === 'current_sent' ? "Enter 6-char OTP" : "Send 2-min OTP")}</p>
+            </div>
+          </div>
+
+          <div className={cn(
+            "p-3 rounded-xl border flex items-center gap-3 transition-colors",
+            !isStage1Complete ? "opacity-50 border-border/40 bg-muted/10" : (step === 'new_sent' ? "border-primary/50 bg-primary/5" : "border-border/60 bg-muted/20")
+          )}>
+            <div className={cn(
+              "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
+              step === 'new_sent' ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+            )}>
+              2
+            </div>
+            <div className="text-xs">
+              <p className="font-semibold text-foreground">Step 2: New Email</p>
+              <p className="text-muted-foreground">{!isStage1Complete ? "Locked until Step 1" : (step === 'new_sent' ? "Enter 6-char OTP" : "Enter new email")}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Step 1 Content: Current Email */}
+        <div className="rounded-xl border p-4 space-y-4 bg-card">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <span>1. Verify Current Email</span>
+                {isStage1Complete && (
+                  <Badge variant="success" className="gap-1 text-[11px] py-0 px-2">
+                    <CheckCircle2 className="w-3 h-3" /> Verified
+                  </Badge>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Current email: <span className="font-medium text-foreground">{userEmail || 'Account email'}</span>
+              </p>
+            </div>
+            {step !== 'idle' && !isStage1Complete && (
+              <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs text-muted-foreground h-8">
+                Reset
+              </Button>
+            )}
+          </div>
+
+          {!isStage1Complete ? (
+            <div className="space-y-3 pt-1">
+              {step === 'idle' ? (
+                <Button
+                  onClick={handleRequestCurrentOtp}
+                  disabled={loadingAction === 'request_current'}
+                  className="gap-2"
+                >
+                  <Mail className="w-4 h-4" />
+                  {loadingAction === 'request_current' ? 'Sending Code...' : 'Send Verification Code to Current Email'}
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="space-y-1.5 flex-1 max-w-xs">
+                      <Label htmlFor="current-otp" className="text-xs">6-Character Verification Code</Label>
+                      <Input
+                        id="current-otp"
+                        type="text"
+                        value={currentOtp}
+                        onChange={(e) => setCurrentOtp(e.target.value.toUpperCase().slice(0, 6))}
+                        placeholder="e.g. 7K9M2P"
+                        maxLength={6}
+                        className="font-mono text-center tracking-widest text-base font-bold uppercase"
+                        autoComplete="one-time-code"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 sm:pt-6">
+                      <Button
+                        onClick={handleVerifyCurrentOtp}
+                        disabled={loadingAction === 'verify_current' || currentOtp.trim().length !== 6 || currentTimer === 0}
+                        className="gap-1.5"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        {loadingAction === 'verify_current' ? 'Verifying...' : 'Verify Code'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleRequestCurrentOtp}
+                        disabled={loadingAction === 'request_current' || currentTimer > 0}
+                        className="gap-1.5"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", loadingAction === 'request_current' && "animate-spin")} />
+                        Resend
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {currentTimer > 0 ? (
+                      <Badge variant="outline" className="gap-1.5 font-mono text-xs border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10">
+                        <Clock className="w-3 h-3 animate-pulse" /> Code expires in {formatTimer(currentTimer)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="gap-1.5 text-xs">
+                        <Clock className="w-3 h-3" /> Code expired. Click Resend to get a new code.
+                      </Badge>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">Combination of 6 numbers & letters</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              Current email verified. Proceed to enter your new email below.
+            </p>
+          )}
+        </div>
+
+        {/* Step 2 Content: New Email */}
+        {isStage1Complete && (
+          <div className="rounded-xl border p-4 space-y-4 bg-card border-primary/20">
+            <div>
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <span>2. Enter New Email & Confirm</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                The verification code will be sent to your new email address to ensure you have access to it.
+              </p>
+            </div>
+
+            <div className="space-y-4 pt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="space-y-1.5 flex-1 max-w-sm">
+                  <Label htmlFor="new-email" className="text-xs">New Email Address</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="new.email@example.com"
+                    disabled={step === 'new_sent'}
+                  />
+                </div>
+                {step !== 'new_sent' ? (
+                  <div className="pt-1 sm:pt-6">
+                    <Button
+                      onClick={handleRequestNewOtp}
+                      disabled={loadingAction === 'request_new' || !newEmail.trim()}
+                      className="gap-2"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      {loadingAction === 'request_new' ? 'Sending Code...' : 'Send Code to New Email'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="pt-1 sm:pt-6">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setStep('current_verified'); setNewTimer(0); setNewOtp(''); }}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Change New Email
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {step === 'new_sent' && (
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="space-y-1.5 flex-1 max-w-xs">
+                      <Label htmlFor="new-otp" className="text-xs">6-Character Code Sent to {newEmail}</Label>
+                      <Input
+                        id="new-otp"
+                        type="text"
+                        value={newOtp}
+                        onChange={(e) => setNewOtp(e.target.value.toUpperCase().slice(0, 6))}
+                        placeholder="e.g. 4B8Y2M"
+                        maxLength={6}
+                        className="font-mono text-center tracking-widest text-base font-bold uppercase"
+                        autoComplete="one-time-code"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 sm:pt-6">
+                      <Button
+                        onClick={handleVerifyNewOtp}
+                        disabled={loadingAction === 'verify_new' || newOtp.trim().length !== 6 || newTimer === 0}
+                        className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        {loadingAction === 'verify_new' ? 'Updating & Logging out...' : 'Confirm & Replace Email'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleRequestNewOtp}
+                        disabled={loadingAction === 'request_new' || newTimer > 0}
+                        className="gap-1.5"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", loadingAction === 'request_new' && "animate-spin")} />
+                        Resend
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {newTimer > 0 ? (
+                      <Badge variant="outline" className="gap-1.5 font-mono text-xs border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10">
+                        <Clock className="w-3 h-3 animate-pulse" /> Code expires in {formatTimer(newTimer)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="gap-1.5 text-xs">
+                        <Clock className="w-3 h-3" /> Code expired. Click Resend to get a new code.
+                      </Badge>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">Combination of 6 numbers & letters</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   // Organization form
   const [orgForm, setOrgForm] = useState({ name: '', domain: '', allowedOrigins: '', logo: '' });
@@ -108,23 +490,25 @@ export default function SettingsPage() {
     emailOnHandoff: true,
     slackWebhookUrl: '',
     teamsWebhookUrl: '',
-    notifyRoles: ['ADMIN', 'SALES_MANAGER'] as string[],
+    notifyRoles: ['ADMIN', 'SALESPERSON'] as string[],
   });
 
   // Password form
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
 
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+
   // Track original data for diffing
   const [originalTenant, setOriginalTenant] = useState<any>(null);
 
   const { data: tenantData, isLoading } = useQuery({
-    queryKey: ['tenant'],
+    queryKey: ['tenant', activeTenantId],
     queryFn: () => api.get<any>('/tenant'),
   });
 
   useEffect(() => {
     const tenant = (tenantData as any)?.data || {};
-    if (tenant && tenant.name && !originalTenant) {
+    if (tenant && (tenant.name || tenant._id) && (!originalTenant || originalTenant._id !== tenant._id)) {
       setOriginalTenant(tenant);
       setOrgForm({
         name: tenant.name || '',
@@ -150,7 +534,7 @@ export default function SettingsPage() {
         emailOnHandoff: ns.emailOnHandoff !== false,
         slackWebhookUrl: ns.slackWebhookUrl || '',
         teamsWebhookUrl: ns.teamsWebhookUrl || '',
-        notifyRoles: Array.isArray(ns.notifyRoles) && ns.notifyRoles.length ? ns.notifyRoles : ['ADMIN', 'SALES_MANAGER'],
+        notifyRoles: Array.isArray(ns.notifyRoles) && ns.notifyRoles.length ? ns.notifyRoles : ['ADMIN', 'SALESPERSON'],
       });
     }
   }, [tenantData, originalTenant]);
@@ -297,13 +681,24 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      <Tabs defaultValue="organization">
+      <Tabs defaultValue={user?.role === 'ADMIN' ? 'organization' : 'security'}>
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="organization"><Building2 className="h-3.5 w-3.5" /> Organization</TabsTrigger>
-          <TabsTrigger value="branding"><Palette className="h-3.5 w-3.5" /> Branding</TabsTrigger>
-          <TabsTrigger value="ai"><Bot className="h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
-          <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5" /> Notifications</TabsTrigger>
+          {user?.role === 'ADMIN' && (
+            <>
+              <TabsTrigger value="organization"><Building2 className="h-3.5 w-3.5" /> Organization</TabsTrigger>
+              <TabsTrigger value="branding"><Palette className="h-3.5 w-3.5" /> Branding</TabsTrigger>
+              <TabsTrigger value="ai"><Bot className="h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
+              <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5" /> Notifications</TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="security"><Lock className="h-3.5 w-3.5" /> Security</TabsTrigger>
+          <TabsTrigger value="privacy"><ShieldCheck className="h-3.5 w-3.5" /> Privacy & Compliance</TabsTrigger>
+          <TabsTrigger
+            value="danger"
+            className="text-rose-600 dark:text-rose-400 data-[state=active]:bg-rose-500/10 data-[state=active]:text-rose-600 dark:data-[state=active]:text-rose-400"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete Account
+          </TabsTrigger>
         </TabsList>
 
         {/* Organization Tab */}
@@ -485,7 +880,6 @@ export default function SettingsPage() {
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'ADMIN', label: 'Admins' },
-                    { value: 'SALES_MANAGER', label: 'Sales Managers' },
                     { value: 'SALESPERSON', label: 'Salespeople' },
                   ].map((r) => {
                     const checked = notifForm.notifyRoles.includes(r.value);
@@ -564,7 +958,9 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Security Tab */}
-        <TabsContent value="security">
+        <TabsContent value="security" className="space-y-6">
+          <ChangeEmailCard userEmail={user?.email} />
+
           <Card>
             <SectionHeader icon={KeyRound} title="Change Password" description={`Update the password for ${user?.email || 'your account'}. Minimum 8 characters.`} />
             <CardContent>
@@ -592,6 +988,82 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
+        </TabsContent>
+
+        {/* Privacy & Compliance Tab */}
+        <TabsContent value="privacy">
+          <Card>
+            <SectionHeader
+              icon={ShieldCheck}
+              title="Privacy & Data Compliance"
+              description="Learn about our data protection standards, multi-tenant boundaries, and AI model isolation."
+            />
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                      <EyeOff className="h-4 w-4" />
+                    </span>
+                    <p className="font-semibold text-sm">Zero AI Model Training</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Under enterprise API guarantees, your customer conversations, lead records, and uploaded documents are strictly private and never used to train public LLMs.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Lock className="h-4 w-4" />
+                    </span>
+                    <p className="font-semibold text-sm">Multi-Tenant Isolation</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Database queries automatically enforce tenant segregation guards. Other organizations cannot view or access your proprietary data.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Official Platform Privacy Policy
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Read our full legal disclosure regarding GDPR, CCPA, data retention, and security safeguards.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild className="gap-1.5 shrink-0">
+                  <Link href="/privacy" target="_blank">
+                    <span>View Privacy Policy</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="rounded-xl border bg-muted/10 p-4 space-y-2 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">Data Subject Rights (GDPR & CCPA)</p>
+                <p>
+                  Your leads and customers have the right to access, rectify, or request permanent deletion of their data. For specific data removal requests or legal inquiries, contact our Data Protection Officer at{' '}
+                  <a href="mailto:info.cyberbells@gmail.com" className="text-primary font-medium hover:underline">
+                    info.cyberbells@gmail.com
+                  </a>
+                  .
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Delete Account & Ownership Transfer Tab */}
+        <TabsContent value="danger">
+          <AccountDeletionCard
+            userRole={user?.role || 'SALESPERSON'}
+            userEmail={user?.email || ''}
+            tenantName={tenant?.name || 'Workspace'}
+            onLogout={logout}
+          />
         </TabsContent>
       </Tabs>
     </div>

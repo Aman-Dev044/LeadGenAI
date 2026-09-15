@@ -12,7 +12,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto, UpdateAppointmentDto, RescheduleAppointmentDto } from './dto';
-import { CurrentTenant, Roles, Public } from '../../common/decorators';
+import { CurrentTenant, CurrentUser, Roles, Public } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Controller('appointments')
@@ -20,7 +20,7 @@ export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
 
   @Post()
-  @Roles('ADMIN', 'SALESPERSON')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
   async create(
     @CurrentTenant() tenantId: string,
     @Body() dto: CreateAppointmentDto,
@@ -29,18 +29,21 @@ export class AppointmentController {
   }
 
   @Get()
-  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
   async findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string; role: string },
     @Query() paginationDto: PaginationDto,
     @Query('status') status?: string,
     @Query('assignedTo') assignedTo?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
+    // A salesperson only sees their own calendar
+    const scopedAssignee = user.role === 'SALESPERSON' ? user.userId : assignedTo;
     return this.appointmentService.findAll(tenantId, paginationDto, {
       status,
-      assignedTo,
+      assignedTo: scopedAssignee,
       from,
       to,
     });
@@ -92,7 +95,7 @@ export class AppointmentController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
   async findById(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
@@ -101,7 +104,7 @@ export class AppointmentController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'SALESPERSON')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
   async update(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,

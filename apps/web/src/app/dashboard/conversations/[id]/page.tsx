@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, Send, Bot, User, ArrowLeftRight, WifiOff, FileText, Loader2, Sparkles, XCircle, MapPin, ArrowRight, MessageSquare } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
+import { perms } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +60,9 @@ function playIncomingMessageSound() {
 export default function ConversationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const role = useAuthStore((s) => s.user?.role);
+  const canTakeOver = perms.takeOverConversation(role);
+  const canSummarize = perms.summarizeConversation(role);
   const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -208,8 +213,29 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
   const isLiveChat = (conversation.mode === 'human' || conversation.mode === 'hybrid') && conversation.status !== 'ended';
   const canSend = isLiveChat && conversation.status !== 'ended';
   const visitorId: string = conversation.visitorId || '';
-  const visitorLabel = `Visitor ${visitorId.slice(0, 8)}`;
-  const location = [conversation.visitorInfo?.city, conversation.visitorInfo?.country].filter(Boolean).join(', ');
+  const vInfo: any = conversation.visitorInfo || {};
+  const lead: any = typeof conversation.leadId === 'object' && conversation.leadId ? conversation.leadId : null;
+
+  const rawName = [vInfo.firstName, vInfo.lastName].filter(Boolean).join(' ')
+    || vInfo.name
+    || (lead ? [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.name : '')
+    || '';
+
+  const hasName = Boolean(rawName.trim()) && rawName.trim().toLowerCase() !== 'visitor';
+  const visitorLabel = hasName ? rawName.trim() : `Visitor ${visitorId.slice(0, 8)}`;
+  const initials = hasName
+    ? rawName.trim().split(/\s+/).map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()
+    : (visitorId.slice(0, 2).toUpperCase() || 'V');
+
+  const locationParts = [
+    vInfo.city || lead?.city,
+    vInfo.region || lead?.state,
+    vInfo.country || lead?.country,
+  ].filter(Boolean);
+
+  const location = locationParts.length > 0
+    ? locationParts.join(', ')
+    : (vInfo.timezone ? vInfo.timezone.replace('_', ' ') : '');
   const statusVariant: Record<string, 'success' | 'secondary' | 'warning' | 'info'> = { active: 'success', ended: 'secondary', handed_off: 'warning', archived: 'info' };
   const modeMeta: Record<string, { label: string; icon: any; cls: string }> = {
     bot: { label: 'AI bot', icon: Bot, cls: 'bg-primary/10 text-primary' },
@@ -277,7 +303,7 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {conversation.status === 'active' && conversation.mode === 'bot' && (
+                {canTakeOver && conversation.status === 'active' && conversation.mode === 'bot' && (
                   <Button variant="gradient" size="sm" onClick={() => handoffMutation.mutate()}>
                     <ArrowLeftRight className="h-3.5 w-3.5" /> Take Over
                   </Button>
@@ -464,7 +490,7 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 <CardTitle className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-violet-500" /> AI summary</CardTitle>
                 <CardDescription>Key points from the transcript.</CardDescription>
               </div>
-              <Button
+              {canSummarize && <Button
                 variant="outline"
                 size="sm"
                 onClick={() => summaryMutation.mutate()}
@@ -475,7 +501,7 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 ) : (
                   <><FileText className="h-3.5 w-3.5" /> {conversation.summary ? 'Regenerate' : 'Generate'}</>
                 )}
-              </Button>
+              </Button>}
             </CardHeader>
             <CardContent>
               {conversation.summary ? (

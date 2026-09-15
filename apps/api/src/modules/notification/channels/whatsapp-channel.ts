@@ -23,11 +23,19 @@ export class WhatsAppChannel {
       return false;
     }
 
+    // Clean and normalize phone numbers
+    const cleanFrom = fromNumber.replace(/^whatsapp:/i, '').replace(/[\s\-()]/g, '').trim();
+    let cleanTo = phoneNumber.replace(/^whatsapp:/i, '').replace(/[\s\-()]/g, '').trim();
+    if (!cleanTo.startsWith('+')) {
+      cleanTo = `+${cleanTo}`;
+    }
+    const finalFrom = cleanFrom.startsWith('+') ? cleanFrom : `+${cleanFrom}`;
+
     try {
       const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
       const body = new URLSearchParams({
-        To: `whatsapp:${phoneNumber}`,
-        From: `whatsapp:${fromNumber}`,
+        To: `whatsapp:${cleanTo}`,
+        From: `whatsapp:${finalFrom}`,
         Body: `*${notification.title}*\n${notification.body || ''}`,
       });
 
@@ -42,12 +50,14 @@ export class WhatsAppChannel {
 
       if (!response.ok) {
         const errorData = await response.text();
-        this.logger.error(`WhatsApp send failed: ${errorData}`);
+        this.logger.error(`WhatsApp send failed (${response.status}): ${errorData}`);
         return false;
       }
 
+      const result = await response.json().catch(() => ({}));
+      this.logger.log(`WhatsApp message sent successfully via Twilio (SID: ${result.sid || 'ok'}) to ${cleanTo}`);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`WhatsApp notification failed: ${error.message}`);
       return false;
     }

@@ -26,3 +26,4 @@ export * from './subscription.schema';
 export * from './invoice.schema';
 export * from './usage-record.schema';
 export * from './platform-settings.schema';
+export * from './account-deletion-request.schema';

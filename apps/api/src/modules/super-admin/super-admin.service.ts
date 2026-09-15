@@ -252,16 +252,26 @@ export class SuperAdminService {
 
     return {
       ...result,
-      data: result.data.map((t: any) => ({
-        ...t,
-        stats: {
-          users: users[t._id] || 0,
-          leads: leads[t._id] || 0,
-          conversations: conversations[t._id] || 0,
-          agents: agents[t._id] || 0,
-          lastConversationAt: lastMap[String(t._id)] || null,
-        },
-      })),
+      data: result.data.map((t: any) => {
+        const isPaid = t.plan && t.plan !== 'free';
+        const effectiveStatus = (t.status === 'suspended' || t.status === 'cancelled')
+          ? t.status
+          : (isPaid ? 'active' : t.status);
+        const effectiveTrial = (isPaid || effectiveStatus === 'active') ? undefined : t.trialEndsAt;
+
+        return {
+          ...t,
+          status: effectiveStatus,
+          trialEndsAt: effectiveTrial,
+          stats: {
+            users: users[t._id] || 0,
+            leads: leads[t._id] || 0,
+            conversations: conversations[t._id] || 0,
+            agents: agents[t._id] || 0,
+            lastConversationAt: lastMap[String(t._id)] || null,
+          },
+        };
+      }),
     };
   }
 

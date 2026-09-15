@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, ChevronRight, Command, Crown, LogOut, Moon, Search, Sun, User, UserCog } from 'lucide-react';
+import { Bell, ChevronRight, Command, Crown, LogOut, Moon, Search, Sun, User, UserCog, Building2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import { Button } from '@/components/ui/button';
@@ -13,10 +13,12 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, getInitials } from '@/lib/utils';
 import { api } from '@/lib/api-client';
 import { exitImpersonation } from '@/lib/impersonation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { allNavItems, type NavItem } from './sidebar';
 
 function useBreadcrumb(pathname: string, isOwner: boolean) {
@@ -132,6 +134,53 @@ export function Header() {
   });
   const unreadCount: number = Math.max(unreadNotificationsCount, (unreadData as any)?.data?.count ?? 0);
 
+  const queryClient = useQueryClient();
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+  const setActiveTenantId = useAuthStore((s) => s.setActiveTenantId);
+  const [selectedTenant, setSelectedTenant] = useState<string>(activeTenantId || 'all');
+
+  const { data: tenantsData } = useQuery({
+    queryKey: ['admin-tenants-list'],
+    queryFn: async () => {
+      const res: any = await api.get('/admin/tenants?limit=100');
+      return res?.data?.data || res?.data || [];
+    },
+    enabled: !!isOwner,
+  });
+
+  const clientTenants = useMemo(() => {
+    return (tenantsData || []).filter(
+      (t: any) => !t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')
+    );
+  }, [tenantsData]);
+
+  useEffect(() => {
+    if (activeTenantId && activeTenantId !== selectedTenant) {
+      setSelectedTenant(activeTenantId);
+    }
+  }, [activeTenantId, selectedTenant]);
+
+  useEffect(() => {
+    const onSwitched = (e: any) => {
+      const tid = e.detail || 'all';
+      setSelectedTenant(tid);
+      setActiveTenantId(tid);
+    };
+    window.addEventListener('la_tenant_switched', onSwitched);
+    return () => window.removeEventListener('la_tenant_switched', onSwitched);
+  }, [setActiveTenantId]);
+
+  const handleTenantChange = (tid: string) => {
+    setSelectedTenant(tid);
+    setActiveTenantId(tid);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('la_tenant_switched', { detail: tid }));
+    }
+    queryClient.invalidateQueries();
+    const tName = tid === 'all' ? 'All Tenants (Platform View)' : (clientTenants.find((t: any) => t._id === tid)?.name || 'Selected Tenant');
+    toast.success(`Active Tenant: ${tName}`);
+  };
+
   const handleLogout = async () => {
     try {
       const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
@@ -160,14 +209,37 @@ export function Header() {
           </span>
         ))}
         {impersonation && <Badge variant="warning" dot className="ml-2">Impersonating</Badge>}
-        {isOwner && !pathname.startsWith('/dashboard/admin') && (
+        {isOwner && (
           <Badge variant="warning" className="ml-2 hidden sm:inline-flex">Platform owner</Badge>
         )}
       </nav>
 
       <QuickJump items={navItems} />
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
+        {/* Tenant Selector for Superadmin across all menus */}
+        {isOwner && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-xs shadow-xs dark:bg-amber-500/15">
+            <Building2 className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="hidden md:inline font-semibold text-amber-900 dark:text-amber-200">Tenant:</span>
+            <Select value={selectedTenant} onValueChange={handleTenantChange}>
+              <SelectTrigger className="h-7 border-0 bg-transparent shadow-none font-medium text-xs focus:ring-0 px-1 py-0 min-w-[130px] max-w-[210px] text-foreground">
+                <SelectValue placeholder="All Tenants" />
+              </SelectTrigger>
+              <SelectContent align="end" className="text-xs max-h-[300px]">
+                <SelectItem value="all" className="font-bold text-amber-600 dark:text-amber-400">
+                  🌐 All Tenants (Platform View)
+                </SelectItem>
+                {clientTenants.map((t: any) => (
+                  <SelectItem key={t._id} value={t._id}>
+                    {t.name} ({t.slug})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {isOwner && !pathname.startsWith('/dashboard/admin') && (
           <Button variant="outline" size="sm" className="hidden lg:inline-flex" onClick={() => router.push('/dashboard/admin')}>
             <Crown className="h-4 w-4 text-amber-500" /> Owner console

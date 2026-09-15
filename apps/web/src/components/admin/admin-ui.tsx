@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 export const PLANS = ['free', 'starter', 'professional', 'enterprise'];
 export const TENANT_STATUSES = ['trial', 'active', 'suspended', 'cancelled'];
-export const ALL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'];
+export const ALL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALESPERSON'];
 
 export function PlanBadge({ plan }: { plan?: string }) {
   const variant = plan === 'enterprise' ? 'violet' : plan === 'professional' ? 'default' : plan === 'starter' ? 'info' : 'outline';
@@ -17,7 +17,7 @@ export function StatusBadge({ status }: { status?: string }) {
 }
 
 export function RoleBadge({ role }: { role?: string }) {
-  const variant = role === 'SUPER_ADMIN' ? 'warning' : role === 'ADMIN' ? 'violet' : role === 'SALES_MANAGER' ? 'info' : 'secondary';
+  const variant = role === 'SUPER_ADMIN' ? 'warning' : role === 'ADMIN' ? 'violet' : 'info';
   return <Badge variant={variant as any} className="normal-case">{role?.toLowerCase().replace('_', ' ')}</Badge>;
 }
 

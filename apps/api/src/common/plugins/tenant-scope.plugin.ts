@@ -3,6 +3,7 @@ import { Schema } from 'mongoose';
 
 interface TenantStore {
   tenantId: string;
+  isSuperAdmin?: boolean;
 }
 
 export const tenantContext = new AsyncLocalStorage<TenantStore>();
@@ -23,7 +24,7 @@ export function tenantScopePlugin(schema: Schema): void {
   schema.pre('save', function (next) {
     if (!this.tenantId) {
       const store = tenantContext.getStore();
-      if (store?.tenantId) {
+      if (store?.tenantId && store.tenantId !== 'all') {
         this.tenantId = store.tenantId;
       }
     }
@@ -33,7 +34,7 @@ export function tenantScopePlugin(schema: Schema): void {
   // Auto-inject tenantId on insertMany
   schema.pre('insertMany', function (next, docs: any[]) {
     const store = tenantContext.getStore();
-    if (store?.tenantId) {
+    if (store?.tenantId && store.tenantId !== 'all') {
       for (const doc of docs) {
         if (!doc.tenantId) {
           doc.tenantId = store.tenantId;
@@ -43,10 +44,10 @@ export function tenantScopePlugin(schema: Schema): void {
     next();
   });
 
-  // Auto-scope all queries by tenantId
+  // Auto-scope all queries by tenantId (bypassed if tenantId is 'all' or Superadmin platform view)
   const queryMiddleware = function (this: any, next: () => void) {
     const store = tenantContext.getStore();
-    if (store?.tenantId && !this.getFilter().tenantId) {
+    if (store?.tenantId && store.tenantId !== 'all' && !this.getFilter().tenantId) {
       this.where({ tenantId: store.tenantId });
     }
     next();
@@ -65,7 +66,7 @@ export function tenantScopePlugin(schema: Schema): void {
   // Auto-scope aggregation pipelines
   schema.pre('aggregate', function (next) {
     const store = tenantContext.getStore();
-    if (store?.tenantId) {
+    if (store?.tenantId && store.tenantId !== 'all') {
       this.pipeline().unshift({ $match: { tenantId: store.tenantId } });
     }
     next();

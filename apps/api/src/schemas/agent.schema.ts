@@ -43,6 +43,17 @@ export class Agent {
       placeholder: String,
       position: { type: String, default: 'bottom-right' },
       avatarUrl: String,
+      whatsappEnabled: { type: Boolean, default: false },
+      whatsappNumber: { type: String, default: '' },
+      whatsappDefaultMessage: { type: String, default: '' },
+      proactivePromptEnabled: { type: Boolean, default: true },
+      proactiveDelaySeconds: { type: Number, default: 10 },
+      proactiveMessage: { type: String, default: '' },
+      exitIntentEnabled: { type: Boolean, default: true },
+      exitIntentMessage: { type: String, default: '' },
+      defaultVoiceName: { type: String, default: '' },
+      defaultVoiceRate: { type: Number, default: 1.0 },
+      defaultVoicePitch: { type: Number, default: 1.0 },
     },
     default: {},
   })
@@ -52,6 +63,17 @@ export class Agent {
     placeholder?: string;
     position?: string;
     avatarUrl?: string;
+    whatsappEnabled?: boolean;
+    whatsappNumber?: string;
+    whatsappDefaultMessage?: string;
+    proactivePromptEnabled?: boolean;
+    proactiveDelaySeconds?: number;
+    proactiveMessage?: string;
+    exitIntentEnabled?: boolean;
+    exitIntentMessage?: string;
+    defaultVoiceName?: string;
+    defaultVoiceRate?: number;
+    defaultVoicePitch?: number;
   };
 
   @Prop({ type: [String], default: [] })

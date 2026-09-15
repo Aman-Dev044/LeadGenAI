@@ -25,7 +25,14 @@ export class Subscription {
   @Prop({ type: Number, default: 0 })
   priceMonthly: number;
 
-  @Prop({ type: String })
+  @Prop({
+    type: String,
+    enum: ['monthly', 'yearly'],
+    default: 'monthly',
+  })
+  billingInterval: string;
+
+  @Prop({ type: String, default: 'USD' })
   currency: string;
 
   @Prop({

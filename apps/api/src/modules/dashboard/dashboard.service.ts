@@ -11,29 +11,60 @@ export class DashboardService {
     @InjectModel('Agent') private readonly agentModel: Model<any>,
     @InjectModel('Message') private readonly messageModel: Model<any>,
     @InjectModel('User') private readonly userModel: Model<any>,
+    @InjectModel('Appointment') private readonly appointmentModel: Model<any>,
     private readonly cache: CacheService,
   ) {}
 
-  async getOverview(tenantId: string) {
-    const cacheKey = `dashboard:overview:${tenantId}`;
+  async getOverview(tenantId: string, assignedToUserId?: string) {
+    const cacheKey = `dashboard:overview:${tenantId}:${assignedToUserId || 'all'}`;
     const cached = await this.cache.get(cacheKey);
     if (cached) return cached;
 
+    const baseTenant = tenantId && tenantId !== 'all' ? { tenantId } : {};
+
+    let tLead: any = { ...baseTenant, deletedAt: null };
+    let tConv: any = { ...baseTenant };
+    let totalAppointments = 0;
+
+    if (assignedToUserId) {
+      tLead.assignedTo = assignedToUserId;
+
+      const ownedLeads = await this.leadModel.find(tLead).distinct('_id');
+      const ownedLeadIdStrs = ownedLeads.map((id: any) => String(id));
+
+      tConv = {
+        ...baseTenant,
+        $or: [
+          { assignedUserId: assignedToUserId },
+          { leadId: { $in: ownedLeadIdStrs } },
+        ],
+      };
+
+      totalAppointments = await this.appointmentModel.countDocuments({
+        ...baseTenant,
+        assignedTo: assignedToUserId,
+        status: { $in: ['scheduled', 'confirmed'] },
+      });
+    }
+
+    const tAgent = tenantId && tenantId !== 'all' ? { tenantId, status: 'active', deletedAt: null } : { status: 'active', deletedAt: null };
+    const tUser = tenantId && tenantId !== 'all' ? { tenantId, isActive: true, deletedAt: null } : { isActive: true, deletedAt: null };
+
     const [totalLeads, totalConversations, activeAgents, totalUsers] =
       await Promise.all([
-        this.leadModel.countDocuments({ tenantId, deletedAt: null }),
-        this.conversationModel.countDocuments({ tenantId }),
-        this.agentModel.countDocuments({ tenantId, status: 'active', deletedAt: null }),
-        this.userModel.countDocuments({ tenantId, isActive: true, deletedAt: null }),
+        this.leadModel.countDocuments(tLead),
+        this.conversationModel.countDocuments(tConv),
+        this.agentModel.countDocuments(tAgent),
+        this.userModel.countDocuments(tUser),
       ]);
 
     const leadsByStatus = await this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null } },
+      { $match: tLead },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
 
     const leadsByTemperature = await this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null } },
+      { $match: tLead },
       { $group: { _id: '$temperature', count: { $sum: 1 } } },
     ]);
 
@@ -42,6 +73,8 @@ export class DashboardService {
       totalConversations,
       activeAgents,
       totalUsers,
+      totalAppointments,
+      isScoped: !!assignedToUserId,
       leadsByStatus: Object.fromEntries(leadsByStatus.map((s) => [s._id, s.count])),
       leadsByTemperature: Object.fromEntries(leadsByTemperature.map((t) => [t._id, t.count])),
     };
@@ -50,22 +83,27 @@ export class DashboardService {
     return result;
   }
 
-  async getLeadStats(tenantId: string, days = 30) {
-    const cacheKey = `dashboard:leadstats:${tenantId}:${days}`;
+  async getLeadStats(tenantId: string, days = 30, assignedToUserId?: string) {
+    const cacheKey = `dashboard:leadstats:${tenantId}:${days}:${assignedToUserId || 'all'}`;
     const cached = await this.cache.get(cacheKey);
     if (cached) return cached;
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
+    const match: any = {
+      deletedAt: null,
+      createdAt: { $gte: startDate },
+    };
+    if (tenantId && tenantId !== 'all') match.tenantId = tenantId;
+    if (assignedToUserId) match.assignedTo = assignedToUserId;
+
+    const matchAllTime: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') matchAllTime.tenantId = tenantId;
+    if (assignedToUserId) matchAllTime.assignedTo = assignedToUserId;
+
     const dailyLeads = await this.leadModel.aggregate([
-      {
-        $match: {
-          tenantId,
-          createdAt: { $gte: startDate },
-          deletedAt: null,
-        },
-      },
+      { $match: match },
       {
         $group: {
           _id: {
@@ -78,14 +116,14 @@ export class DashboardService {
     ]);
 
     const topSources = await this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null } },
+      { $match: matchAllTime },
       { $group: { _id: '$source', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
     ]);
 
     const avgScore = await this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null, score: { $gt: 0 } } },
+      { $match: { ...matchAllTime, score: { $gt: 0 } } },
       { $group: { _id: null, avgScore: { $avg: '$score' } } },
     ]);
 
@@ -99,20 +137,37 @@ export class DashboardService {
     return leadStatsResult;
   }
 
-  async getConversationStats(tenantId: string, days = 30) {
-    const convCacheKey = `dashboard:convstats:${tenantId}:${days}`;
+  async getConversationStats(tenantId: string, days = 30, assignedToUserId?: string) {
+    const convCacheKey = `dashboard:convstats:${tenantId}:${days}:${assignedToUserId || 'all'}`;
     const convCached = await this.cache.get(convCacheKey);
     if (convCached) return convCached;
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
+    let matchConv: any = {};
+    if (tenantId && tenantId !== 'all') matchConv.tenantId = tenantId;
+
+    if (assignedToUserId) {
+      const ownedLeads = await this.leadModel
+        .find({ tenantId, assignedTo: assignedToUserId, deletedAt: null })
+        .distinct('_id');
+      const ownedLeadIdStrs = ownedLeads.map((id: any) => String(id));
+
+      matchConv.$or = [
+        { assignedUserId: assignedToUserId },
+        { leadId: { $in: ownedLeadIdStrs } },
+      ];
+    }
+
+    const matchDate = {
+      ...matchConv,
+      createdAt: { $gte: startDate },
+    };
+
     const dailyConversations = await this.conversationModel.aggregate([
       {
-        $match: {
-          tenantId,
-          createdAt: { $gte: startDate },
-        },
+        $match: matchDate,
       },
       {
         $group: {
@@ -126,12 +181,12 @@ export class DashboardService {
     ]);
 
     const byStatus = await this.conversationModel.aggregate([
-      { $match: { tenantId } },
+      { $match: matchConv },
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
 
     const avgMessages = await this.conversationModel.aggregate([
-      { $match: { tenantId } },
+      { $match: matchConv },
       { $group: { _id: null, avg: { $avg: '$messageCount' } } },
     ]);
 

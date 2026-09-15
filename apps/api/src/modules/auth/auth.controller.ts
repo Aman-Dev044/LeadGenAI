@@ -18,6 +18,8 @@ import {
   ChangePasswordDto,
   VerifyEmailDto,
   ResendVerificationDto,
+  VerifyEmailChangeOtpDto,
+  RequestNewEmailOtpDto,
 } from './dto';
 import { Public } from '../../common/decorators';
 import { CurrentUser } from '../../common/decorators';
@@ -105,5 +107,44 @@ export class AuthController {
   @Get('profile')
   async getProfile(@CurrentUser('userId') userId: string) {
     return this.authService.getProfile(userId);
+  }
+
+  // ─── Two-Step Email Change Endpoints ─────────────────────────────────
+
+  @Post('email-change/request-current-otp')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async requestCurrentEmailOtp(@CurrentUser('userId') userId: string) {
+    return this.authService.requestCurrentEmailOtp(userId);
+  }
+
+  @Post('email-change/verify-current-otp')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async verifyCurrentEmailOtp(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: VerifyEmailChangeOtpDto,
+  ) {
+    return this.authService.verifyCurrentEmailOtp(userId, dto.code);
+  }
+
+  @Post('email-change/request-new-otp')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async requestNewEmailOtp(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: RequestNewEmailOtpDto,
+  ) {
+    return this.authService.requestNewEmailOtp(userId, dto.newEmail);
+  }
+
+  @Post('email-change/verify-new-otp')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async verifyNewEmailOtp(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: VerifyEmailChangeOtpDto,
+  ) {
+    return this.authService.verifyNewEmailOtp(userId, dto.code);
   }
 }

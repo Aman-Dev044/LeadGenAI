@@ -32,9 +32,7 @@ import { cn } from '@/lib/utils';
 const ROLE_STYLES: Record<string, { tile: string; label: string }> = {
   SUPER_ADMIN: { tile: 'bg-amber-500/12 text-amber-600 dark:text-amber-400', label: 'Platform owner' },
   ADMIN: { tile: 'bg-rose-500/12 text-rose-600 dark:text-rose-400', label: 'Tenant admin' },
-  SALES_MANAGER: { tile: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', label: 'Sales manager' },
   SALESPERSON: { tile: 'bg-sky-500/12 text-sky-600 dark:text-sky-400', label: 'Sales representative' },
-  VIEWER: { tile: 'bg-slate-500/12 text-slate-600 dark:text-slate-300', label: 'Read-only viewer' },
 };
 
 export default function AdminUsersPage() {
@@ -194,7 +192,7 @@ export default function AdminUsersPage() {
       key: 'name',
       label: 'User',
       render: (u: any) => {
-        const style = ROLE_STYLES[u.role] || ROLE_STYLES.VIEWER;
+        const style = ROLE_STYLES[u.role] || ROLE_STYLES.SALESPERSON;
         return (
           <div className="flex items-center gap-3">
             <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold', style.tile)}>
@@ -421,7 +419,7 @@ export default function AdminUsersPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {users.map((u: any) => {
-                  const style = ROLE_STYLES[u.role] || ROLE_STYLES.VIEWER;
+                  const style = ROLE_STYLES[u.role] || ROLE_STYLES.SALESPERSON;
                   const isMe = isMeUser(u);
                   return (
                     <Card key={u._id} className="group flex flex-col justify-between p-5 transition-colors hover:border-primary/30">

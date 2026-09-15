@@ -86,8 +86,15 @@ export default function AdminTenantsPage() {
         status: status || undefined,
         plan: plan || undefined,
       }),
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
-  const { data: overview } = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => api.get<any>('/admin/overview') });
+  const { data: overview } = useQuery({
+    queryKey: ['admin', 'overview'],
+    queryFn: () => api.get<any>('/admin/overview'),
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
+  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'tenants'] });

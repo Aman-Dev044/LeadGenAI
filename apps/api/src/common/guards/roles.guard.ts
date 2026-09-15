@@ -44,13 +44,16 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('This area is restricted to the platform owner');
     }
 
-    // VIEWER gets read-only access (GET requests only)
+    // VIEWER is read-only: GET only, and only on endpoints that explicitly list VIEWER.
+    // (Endpoints without @Roles are open to every authenticated role, so VIEWER never reaches here for them.)
     if (user.role === 'VIEWER') {
-      const method = request.method;
-      if (method === 'GET') {
-        return true;
+      if (request.method !== 'GET') {
+        throw new ForbiddenException('Viewer role has read-only access');
       }
-      throw new ForbiddenException('Viewer role has read-only access');
+      if (!requiredRoles.includes('VIEWER')) {
+        throw new ForbiddenException('Viewer role cannot access this resource');
+      }
+      return true;
     }
 
     const hasRole = requiredRoles.includes(user.role);

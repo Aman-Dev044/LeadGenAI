@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, Save, Trash2, Plus, X, Copy, Check, Bot, Settings2, Cpu, Wrench, BookOpen,
   ClipboardList, Palette, ArrowLeftRight, Code2, MessageCircle, Send, Cpu as CpuIcon,
+  Phone, Volume2, Zap, Play, Sparkles,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,41 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
 
   // New lead capture field form
   const [newField, setNewField] = useState({ field: '', label: '', type: 'text', required: false, options: '' });
+
+  // Browser voices for Text-to-Speech preview
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [isPlayingVoiceSample, setIsPlayingVoiceSample] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v && v.length > 0) setBrowserVoices(v);
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  const testVoicePlayback = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.error('Text-to-speech is not supported in this browser.');
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance('Hello! I am your AI assistant. How can I help you today?');
+    const targetVoice = form?.widgetConfig?.defaultVoiceName;
+    if (targetVoice && browserVoices.length > 0) {
+      const found = browserVoices.find((v) => v.name === targetVoice || v.voiceURI === targetVoice);
+      if (found) utter.voice = found;
+    }
+    utter.rate = form?.widgetConfig?.defaultVoiceRate !== undefined ? Number(form.widgetConfig.defaultVoiceRate) : 1.0;
+    utter.pitch = form?.widgetConfig?.defaultVoicePitch !== undefined ? Number(form.widgetConfig.defaultVoicePitch) : 1.0;
+    setIsPlayingVoiceSample(true);
+    utter.onend = () => setIsPlayingVoiceSample(false);
+    utter.onerror = () => setIsPlayingVoiceSample(false);
+    window.speechSynthesis.speak(utter);
+    toast.success('Playing voice preview...');
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['agent', id],
@@ -542,105 +578,378 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         {/* Widget Tab */}
         <TabsContent value="widget" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader className="pb-4">
-                <CardTitle>Widget Appearance</CardTitle>
-                <CardDescription>How the chat bubble looks on your website.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Primary Color</Label>
-                    <div className="flex gap-2">
-                      <input
-                        type="color"
-                        value={form.widgetConfig?.primaryColor || '#3b82f6'}
-                        onChange={(e) => updateNested('widgetConfig', 'primaryColor', e.target.value)}
-                        className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border bg-card p-1"
-                      />
-                      <Input value={form.widgetConfig?.primaryColor || '#3b82f6'} onChange={(e) => updateNested('widgetConfig', 'primaryColor', e.target.value)} className="font-mono" />
+            <div className="space-y-6 lg:col-span-2">
+              {/* Appearance Card */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-2">
+                    <Palette className="h-5 w-5 text-primary" />
+                    <div>
+                      <CardTitle>Widget Appearance</CardTitle>
+                      <CardDescription>How the chat bubble looks on your website.</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Primary Color</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={form.widgetConfig?.primaryColor || '#3b82f6'}
+                          onChange={(e) => updateNested('widgetConfig', 'primaryColor', e.target.value)}
+                          className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border bg-card p-1"
+                        />
+                        <Input value={form.widgetConfig?.primaryColor || '#3b82f6'} onChange={(e) => updateNested('widgetConfig', 'primaryColor', e.target.value)} className="font-mono" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Position</Label>
+                      <Select value={form.widgetConfig?.position || 'bottom-right'} onValueChange={(v) => updateNested('widgetConfig', 'position', v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                          <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Position</Label>
-                    <Select value={form.widgetConfig?.position || 'bottom-right'} onValueChange={(v) => updateNested('widgetConfig', 'position', v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bottom-right">Bottom Right</SelectItem>
-                        <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                    <Label>Header Text</Label>
+                    <Input value={form.widgetConfig?.headerText || ''} onChange={(e) => updateNested('widgetConfig', 'headerText', e.target.value)} placeholder="Chat with us" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Placeholder Text</Label>
+                    <Input value={form.widgetConfig?.placeholder || ''} onChange={(e) => updateNested('widgetConfig', 'placeholder', e.target.value)} placeholder="Type a message..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Avatar URL</Label>
+                    <div className="flex items-center gap-3">
+                      <Input value={form.widgetConfig?.avatarUrl || ''} onChange={(e) => updateNested('widgetConfig', 'avatarUrl', e.target.value)} placeholder="https://example.com/avatar.png" />
+                      {form.widgetConfig?.avatarUrl && (
+                        <img src={form.widgetConfig.avatarUrl} alt="Avatar" className="h-10 w-10 shrink-0 rounded-full border object-cover" />
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 1-Click WhatsApp Lead Capture Card */}
+              <Card className="border-emerald-500/20 bg-emerald-500/[0.02]">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                        <Phone className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CardTitle>1-Click WhatsApp Lead Capture</CardTitle>
+                          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+                            High Conversion
+                          </Badge>
+                        </div>
+                        <CardDescription>
+                          Connect visitors directly to your sales reps on WhatsApp while logging captured leads in LeadAI.
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={form.widgetConfig?.whatsappEnabled ?? false}
+                      onCheckedChange={(checked) => updateNested('widgetConfig', 'whatsappEnabled', checked)}
+                    />
+                  </div>
+                </CardHeader>
+                {form.widgetConfig?.whatsappEnabled && (
+                  <CardContent className="space-y-4 pt-0">
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-50/50 p-3 text-xs text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
+                      💡 Visitors see a direct WhatsApp button inside the widget header, in exit-intent prompts, and after helpful responses. When clicked, LeadAI captures their intent and opens WhatsApp directly.
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Sales Rep WhatsApp Number (with country code)</Label>
+                      <Input
+                        value={form.widgetConfig?.whatsappNumber || ''}
+                        onChange={(e) => updateNested('widgetConfig', 'whatsappNumber', e.target.value)}
+                        placeholder="e.g. +919876543210 or 14155552671"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Include country code without special characters (e.g. 91 for India, 1 for US/Canada).</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Pre-filled Message</Label>
+                      <Textarea
+                        rows={2}
+                        value={form.widgetConfig?.whatsappDefaultMessage || ''}
+                        onChange={(e) => updateNested('widgetConfig', 'whatsappDefaultMessage', e.target.value)}
+                        placeholder="Hi! I was visiting your website and would like more details about your services."
+                      />
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Proactive Prompts & Exit-Intent Card */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+                      <Zap className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle>Proactive Prompts & Exit-Intent Triggers</CardTitle>
+                      <CardDescription>
+                        Catch visitors before they leave and proactively engage high-intent browsers.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Proactive Visitor Nudge</p>
+                        <p className="text-xs text-muted-foreground">
+                          Pops a friendly floating prompt when visitors dwell on the page or scroll &gt; 50%.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.widgetConfig?.proactivePromptEnabled ?? true}
+                        onCheckedChange={(checked) => updateNested('widgetConfig', 'proactivePromptEnabled', checked)}
+                      />
+                    </div>
+                    {form.widgetConfig?.proactivePromptEnabled !== false && (
+                      <div className="grid gap-4 pt-2 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Delay (seconds)</Label>
+                          <Input
+                            type="number"
+                            min={3}
+                            max={120}
+                            value={form.widgetConfig?.proactiveDelaySeconds ?? 10}
+                            onChange={(e) => updateNested('widgetConfig', 'proactiveDelaySeconds', Number(e.target.value))}
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label>Nudge Message</Label>
+                          <Input
+                            value={form.widgetConfig?.proactiveMessage || ''}
+                            onChange={(e) => updateNested('widgetConfig', 'proactiveMessage', e.target.value)}
+                            placeholder="👋 Hi! Need a quick custom quote or have questions?"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Exit-Intent Interceptor</p>
+                        <p className="text-xs text-muted-foreground">
+                          Detects mouse cursor moving to exit tab and presents an instant offer / consultation.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.widgetConfig?.exitIntentEnabled ?? true}
+                        onCheckedChange={(checked) => updateNested('widgetConfig', 'exitIntentEnabled', checked)}
+                      />
+                    </div>
+                    {form.widgetConfig?.exitIntentEnabled !== false && (
+                      <div className="space-y-2 pt-2">
+                        <Label>Exit Intent Offer / Text</Label>
+                        <Textarea
+                          rows={2}
+                          value={form.widgetConfig?.exitIntentMessage || ''}
+                          onChange={(e) => updateNested('widgetConfig', 'exitIntentMessage', e.target.value)}
+                          placeholder="Wait! Before you leave, get an instant quote or ask our AI anything in 15 seconds."
+                        />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Voice Engine Settings Card */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
+                        <Volume2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CardTitle>Voice Engine & Text-to-Speech (TTS)</CardTitle>
+                          <Badge variant="secondary">Interactive</Badge>
+                        </div>
+                        <CardDescription>
+                          Configure default speech voice, speed, and pitch. Visitors can also customize voices directly within the widget!
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      onClick={testVoicePlayback}
+                      disabled={isPlayingVoiceSample}
+                    >
+                      <Play className="h-3.5 w-3.5 text-primary" />
+                      {isPlayingVoiceSample ? 'Playing...' : 'Test Voice'}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Default Voice Persona</Label>
+                    <Select
+                      value={form.widgetConfig?.defaultVoiceName || 'default'}
+                      onValueChange={(v) => updateNested('widgetConfig', 'defaultVoiceName', v === 'default' ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="System Default (Natural / Neural)" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="default">✨ Auto / Neural Natural (Recommended)</SelectItem>
+                        {browserVoices.map((voice) => (
+                          <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                            {voice.name} ({voice.lang})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Lists voices available in modern browsers (Google Neural, Microsoft, Apple, Siri, etc.).
+                    </p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Header Text</Label>
-                  <Input value={form.widgetConfig?.headerText || ''} onChange={(e) => updateNested('widgetConfig', 'headerText', e.target.value)} placeholder="Chat with us" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Placeholder Text</Label>
-                  <Input value={form.widgetConfig?.placeholder || ''} onChange={(e) => updateNested('widgetConfig', 'placeholder', e.target.value)} placeholder="Type a message..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Avatar URL</Label>
-                  <div className="flex items-center gap-3">
-                    <Input value={form.widgetConfig?.avatarUrl || ''} onChange={(e) => updateNested('widgetConfig', 'avatarUrl', e.target.value)} placeholder="https://example.com/avatar.png" />
-                    {form.widgetConfig?.avatarUrl && (
-                      <img src={form.widgetConfig.avatarUrl} alt="Avatar" className="h-10 w-10 shrink-0 rounded-full border object-cover" />
-                    )}
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label>Speech Speed (Rate)</Label>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {(form.widgetConfig?.defaultVoiceRate ?? 1.0).toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.75"
+                        max="1.4"
+                        step="0.05"
+                        value={form.widgetConfig?.defaultVoiceRate ?? 1.0}
+                        onChange={(e) => updateNested('widgetConfig', 'defaultVoiceRate', parseFloat(e.target.value))}
+                        className="w-full cursor-pointer accent-primary"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Slower (0.75x)</span>
+                        <span>Normal (1.0x)</span>
+                        <span>Faster (1.4x)</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label>Voice Pitch</Label>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {(form.widgetConfig?.defaultVoicePitch ?? 1.0).toFixed(2)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="1.3"
+                        step="0.05"
+                        value={form.widgetConfig?.defaultVoicePitch ?? 1.0}
+                        onChange={(e) => updateNested('widgetConfig', 'defaultVoicePitch', parseFloat(e.target.value))}
+                        className="w-full cursor-pointer accent-primary"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Deeper</span>
+                        <span>Normal</span>
+                        <span>Higher</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Live preview */}
-            <Card className="p-5">
-              <p className="text-sm font-semibold">Live preview</p>
-              <p className="mb-4 text-xs text-muted-foreground">Updates as you type.</p>
-              <div className="relative mx-auto w-full max-w-[260px] rounded-[26px] border-[6px] border-slate-900 bg-slate-100 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                <div className="absolute left-1/2 top-0 h-4 w-20 -translate-x-1/2 rounded-b-xl bg-slate-900 dark:bg-slate-700" />
-                <div className="flex h-[440px] flex-col overflow-hidden rounded-[20px]">
-                  <div className="flex items-center gap-2 px-3 py-3 text-white" style={{ background: primaryColor }}>
-                    {form.widgetConfig?.avatarUrl ? (
-                      <img src={form.widgetConfig.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover ring-2 ring-white/40" />
-                    ) : (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20"><Bot className="h-4 w-4" /></div>
+            <div className="space-y-4">
+              <Card className="p-5">
+                <p className="text-sm font-semibold">Live preview</p>
+                <p className="mb-4 text-xs text-muted-foreground">Updates as you configure.</p>
+                <div className="relative mx-auto w-full max-w-[260px] rounded-[26px] border-[6px] border-slate-900 bg-slate-100 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="absolute left-1/2 top-0 h-4 w-20 -translate-x-1/2 rounded-b-xl bg-slate-900 dark:bg-slate-700" />
+                  <div className="flex h-[440px] flex-col overflow-hidden rounded-[20px]">
+                    <div className="flex items-center justify-between px-3 py-3 text-white" style={{ background: primaryColor }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {form.widgetConfig?.avatarUrl ? (
+                          <img src={form.widgetConfig.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover ring-2 ring-white/40" />
+                        ) : (
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20"><Bot className="h-4 w-4" /></div>
+                        )}
+                        <div className="min-w-0 leading-tight">
+                          <p className="truncate text-[12px] font-semibold">{form.widgetConfig?.headerText || 'Chat with us'}</p>
+                          <p className="text-[10px] opacity-80">Online now</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {form.widgetConfig?.whatsappEnabled && (
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm" title="WhatsApp Enabled">
+                            <Phone className="h-3 w-3" />
+                          </span>
+                        )}
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white" title="Voice Settings">
+                          <Volume2 className="h-3 w-3" />
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-2 overflow-hidden bg-white p-3 dark:bg-slate-950">
+                      <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-[11px] text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                        {form.welcomeMessage || 'Hi! How can I help you today?'}
+                      </div>
+                      <div className="ml-auto max-w-[75%] rounded-2xl rounded-br-md px-3 py-2 text-[11px] text-white" style={{ background: primaryColor }}>
+                        I'd like to know more about pricing.
+                      </div>
+                      <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-[11px] text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                        Sure — could I get your email or WhatsApp number so I can send the details?
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 border-t bg-white px-3 py-2 dark:bg-slate-950">
+                      <div className="flex-1 truncate rounded-full border bg-slate-50 px-3 py-1.5 text-[11px] text-slate-400 dark:bg-slate-900">
+                        {form.widgetConfig?.placeholder || 'Type a message...'}
+                      </div>
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ background: primaryColor }}>
+                        <Send className="h-3.5 w-3.5" />
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      'absolute -bottom-3 flex h-9 w-9 items-center justify-center rounded-full text-white shadow-lg',
+                      (form.widgetConfig?.position || 'bottom-right') === 'bottom-left' ? '-left-3' : '-right-3',
                     )}
-                    <div className="min-w-0 leading-tight">
-                      <p className="truncate text-[12px] font-semibold">{form.widgetConfig?.headerText || 'Chat with us'}</p>
-                      <p className="text-[10px] opacity-80">Online now</p>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-2 overflow-hidden bg-white p-3 dark:bg-slate-950">
-                    <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-[11px] text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                      {form.welcomeMessage || 'Hi! How can I help you today?'}
-                    </div>
-                    <div className="ml-auto max-w-[75%] rounded-2xl rounded-br-md px-3 py-2 text-[11px] text-white" style={{ background: primaryColor }}>
-                      I'd like to know more about pricing.
-                    </div>
-                    <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2 text-[11px] text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                      Sure — could I get your email so I can send the details?
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 border-t bg-white px-3 py-2 dark:bg-slate-950">
-                    <div className="flex-1 truncate rounded-full border bg-slate-50 px-3 py-1.5 text-[11px] text-slate-400 dark:bg-slate-900">
-                      {form.widgetConfig?.placeholder || 'Type a message...'}
-                    </div>
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ background: primaryColor }}>
-                      <Send className="h-3.5 w-3.5" />
-                    </div>
+                    style={{ background: primaryColor }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
                   </div>
                 </div>
-                <div
-                  className={cn(
-                    'absolute -bottom-3 flex h-9 w-9 items-center justify-center rounded-full text-white shadow-lg',
-                    (form.widgetConfig?.position || 'bottom-right') === 'bottom-left' ? '-left-3' : '-right-3',
-                  )}
-                  style={{ background: primaryColor }}
-                >
-                  <MessageCircle className="h-4 w-4" />
+              </Card>
+
+              {form.widgetConfig?.proactivePromptEnabled !== false && (
+                <div className="rounded-xl border border-dashed p-3 text-xs">
+                  <div className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+                    <Zap className="h-3.5 w-3.5" />
+                    <span>Nudge Bubble Preview</span>
+                  </div>
+                  <p className="mt-1 text-slate-600 dark:text-slate-300">
+                    {form.widgetConfig?.proactiveMessage || '👋 Hi! Need a quick custom quote or have questions?'}
+                  </p>
                 </div>
-              </div>
-            </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
 

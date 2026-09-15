@@ -26,18 +26,21 @@ export class SupportTicketController {
   }
 
   @Get()
-  @Roles('ADMIN', 'SALES_MANAGER')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
   async findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string; role: string },
     @Query() paginationDto: PaginationDto,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
     @Query('assignedTo') assignedTo?: string,
   ) {
+    // A salesperson only sees tickets assigned to them
+    const scopedAssignee = user.role === 'SALESPERSON' ? user.userId : assignedTo;
     return this.ticketService.findAll(tenantId, paginationDto, {
       status,
       priority,
-      assignedTo,
+      assignedTo: scopedAssignee,
     });
   }
 

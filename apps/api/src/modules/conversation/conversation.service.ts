@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateConversationDto } from './dto';
@@ -26,6 +26,8 @@ export class ConversationService {
     @InjectModel('Handoff') private readonly handoffModel: Model<any>,
     @InjectModel('Lead') private readonly leadModel: Model<any>,
     @InjectModel('LeadActivity') private readonly activityModel: Model<any>,
+    @InjectModel('Appointment') private readonly appointmentModel: Model<any>,
+    @InjectModel('User') private readonly userModel: Model<any>,
     private readonly aiFactory: AIProviderFactory,
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly appointmentService: AppointmentService,
@@ -51,14 +53,86 @@ export class ConversationService {
     return conversation;
   }
 
-  async findAll(tenantId: string, paginationDto: PaginationDto, filters?: any) {
-    const query: any = { tenantId, deletedAt: null };
+  /** Lead ids assigned to a salesperson - the second way a conversation can belong to them. */
+  private async ownedLeadIds(tenantId: string, ownerId: string): Promise<string[]> {
+    const ids = await this.leadModel
+      .find({ tenantId, assignedTo: ownerId, deletedAt: null })
+      .distinct('_id');
+    return ids.map((id: any) => String(id));
+  }
+
+  /**
+   * Salesperson scoping: a conversation is theirs when it was handed to them
+   * (assignedUserId) or belongs to a lead assigned to them. Managers pass no ownerId.
+   */
+  private async assertOwner(conversation: any, tenantId: string, ownerId?: string) {
+    if (!ownerId) return;
+    if (String(conversation.assignedUserId || '') === String(ownerId)) return;
+    if (conversation.leadId) {
+      const lead = await this.leadModel
+        .findOne({ _id: conversation.leadId, tenantId, deletedAt: null })
+        .select('assignedTo')
+        .lean();
+      if (lead && String((lead as any).assignedTo || '') === String(ownerId)) return;
+    }
+    throw new ForbiddenException('This conversation is not assigned to you');
+  }
+
+  async findAll(tenantId: string, paginationDto: PaginationDto, filters?: any, ownerId?: string) {
+    const query: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
 
     if (filters?.status) query.status = filters.status;
     if (filters?.agentId) query.agentId = filters.agentId;
     if (filters?.leadId) query.leadId = filters.leadId;
+    if (ownerId) {
+      const leadIds = await this.ownedLeadIds(tenantId, ownerId);
+      query.$or = [{ assignedUserId: ownerId }, { leadId: { $in: leadIds } }];
+    }
 
-    return paginate(this.conversationModel, query, paginationDto);
+    const result = await paginate(this.conversationModel, query, paginationDto, ['leadId']);
+
+    // Enrich conversations where visitorInfo name is empty or needs fallback from linked appointment
+    try {
+      const convs = (result.data as any[]) || [];
+      const convsWithoutName = convs.filter((c: any) => {
+        const v = c.visitorInfo || {};
+        const l = c.leadId;
+        const vName = [v.firstName, v.lastName].filter(Boolean).join(' ').trim();
+        const lName = l && typeof l === 'object' ? [l.firstName, l.lastName].filter(Boolean).join(' ').trim() : '';
+        return (!vName || vName.toLowerCase() === 'visitor') && (!lName || lName.toLowerCase() === 'visitor');
+      });
+
+      if (convsWithoutName.length > 0) {
+        const convIds = convsWithoutName.map((c: any) => c._id);
+        const appts = await this.appointmentModel
+          .find({ conversationId: { $in: convIds }, tenantId })
+          .select('conversationId attendee')
+          .lean();
+
+        if (appts && appts.length > 0) {
+          const apptMap = new Map(appts.map((a: any) => [a.conversationId?.toString(), a.attendee]));
+          for (const c of convs) {
+            const attendee: any = apptMap.get(c._id?.toString());
+            if (attendee && attendee.name && attendee.name.toLowerCase() !== 'visitor') {
+              if (!c.visitorInfo) c.visitorInfo = {};
+              const clean = this.cleanAttendeeName(attendee.name);
+              const parts = clean.split(/\s+/);
+              c.visitorInfo.firstName = parts[0];
+              c.visitorInfo.lastName = parts.slice(1).join(' ') || '';
+              if (attendee.email && !c.visitorInfo.email) c.visitorInfo.email = attendee.email;
+              if (attendee.phone && !c.visitorInfo.phone) c.visitorInfo.phone = attendee.phone;
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      this.logger.warn(`Failed to enrich conversations with attendee names: ${e.message}`);
+    }
+
+    return result;
   }
 
   /** Lightweight lookup used by public widget endpoints (never throws). */
@@ -67,6 +141,20 @@ export class ConversationService {
       return await this.conversationModel.findOne({ _id: conversationId, tenantId }).lean();
     } catch {
       return null;
+    }
+  }
+
+  /** Look up recent conversations for a visitor to support chat history & resuming. */
+  async findVisitorConversations(tenantId: string, agentId: string, visitorId: string, limit = 20) {
+    try {
+      return await this.conversationModel
+        .find({ tenantId, agentId, visitorId, deletedAt: null })
+        .sort({ updatedAt: -1 })
+        .limit(limit)
+        .select('_id status mode summary visitorInfo createdAt updatedAt')
+        .lean();
+    } catch {
+      return [];
     }
   }
 
@@ -111,19 +199,20 @@ export class ConversationService {
     }
   }
 
-  async findById(tenantId: string, conversationId: string) {
-    const conversation = await this.conversationModel.findOne({
-      _id: conversationId,
-      tenantId,
-    });
+  async findById(tenantId: string, conversationId: string, ownerId?: string) {
+    const query: any = { _id: conversationId };
+    if (tenantId && tenantId !== 'all') query.tenantId = tenantId;
+    const conversation = await this.conversationModel.findOne(query);
     if (!conversation) {
       throw new NotFoundException('Conversation not found');
     }
+    await this.assertOwner(conversation, tenantId, ownerId);
     return conversation;
   }
 
   async getMessages(tenantId: string, conversationId: string, limit = 50, before?: string) {
-    const query: any = { conversationId, tenantId };
+    const query: any = { conversationId };
+    if (tenantId && tenantId !== 'all') query.tenantId = tenantId;
     if (before) {
       query.createdAt = { $lt: new Date(before) };
     }
@@ -168,6 +257,14 @@ export class ConversationService {
     await this.conversationModel.updateOne({ _id: conversationId }, { $inc: { messageCount: 1 } });
     this.bus.emit(PlatformEvents.MESSAGE_CREATED, { tenantId, conversationId, message: visitorMsg });
 
+    // Auto-extract contact information (email, phone, name) if provided in the visitor message
+    await this.autoExtractLeadFromMessage(tenantId, conversationId, content, conversation);
+
+    // Check updated conversation state
+    const currentConv: any = await this.conversationModel.findOne({ _id: conversationId, tenantId }).lean();
+    const isLeadCaptured = !!currentConv?.leadId;
+    const currentVisitorInfo = currentConv?.visitorInfo || {};
+
     // Generate AI response if in bot mode
     if (conversation.mode === 'bot') {
       try {
@@ -177,8 +274,14 @@ export class ConversationService {
           conversation.agentId,
           content,
         );
-        return { visitorMessage: visitorMsg, botMessage: botResponse };
-      } catch (err) {
+        const finalConv: any = await this.conversationModel.findOne({ _id: conversationId, tenantId }).lean();
+        return {
+          visitorMessage: visitorMsg,
+          botMessage: botResponse,
+          leadCaptured: !!finalConv?.leadId,
+          visitorInfo: finalConv?.visitorInfo || currentVisitorInfo,
+        };
+      } catch (err: any) {
         this.logger.error(`Bot response failed for conversation ${conversationId}: ${err.message}`, err.stack);
         // Save an error message so the user knows something went wrong
         const errorMsg = await this.messageModel.create({
@@ -189,11 +292,126 @@ export class ConversationService {
           type: 'text',
         });
         this.bus.emit(PlatformEvents.MESSAGE_CREATED, { tenantId, conversationId, message: errorMsg });
-        return { visitorMessage: visitorMsg, botMessage: errorMsg };
+        return {
+          visitorMessage: visitorMsg,
+          botMessage: errorMsg,
+          leadCaptured: isLeadCaptured,
+          visitorInfo: currentVisitorInfo,
+        };
       }
     }
 
-    return { visitorMessage: visitorMsg };
+    return {
+      visitorMessage: visitorMsg,
+      leadCaptured: isLeadCaptured,
+      visitorInfo: currentVisitorInfo,
+    };
+  }
+
+  private async autoExtractLeadFromMessage(
+    tenantId: string,
+    conversationId: string,
+    content: string,
+    conversation: any,
+  ) {
+    try {
+      const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      const email = emailMatch ? emailMatch[0].toLowerCase() : null;
+
+      // Extract phone number (7-15 digits, optionally with spaces, hyphens, plus)
+      const phoneMatch = content.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}/);
+      const phoneCandidate = phoneMatch ? phoneMatch[0].trim() : null;
+      const digitsOnly = phoneCandidate ? phoneCandidate.replace(/\D/g, '') : '';
+      const phone = digitsOnly.length >= 7 && digitsOnly.length <= 15 ? phoneCandidate : null;
+
+      // Extract name if provided
+      let firstName: string | null = null;
+      let lastName: string | null = null;
+
+      const STOP_WORDS = new Set([
+        'available', 'tomorrow', 'today', 'yesterday', 'interested', 'looking', 'please',
+        'hello', 'hi', 'hey', 'yes', 'no', 'need', 'want', 'help', 'pricing', 'demo',
+        'schedule', 'meeting', 'call', 'thanks', 'thank', 'you', 'good', 'morning', 'evening',
+        'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+        'can', 'could', 'would', 'will', 'what', 'when', 'where', 'how', 'why', 'who',
+      ]);
+
+      const namePrefixMatch = content.match(/(?:my name is|i am|i'm|this is|call me|name\s*[:\-]?|mera naam\s*(?:hai)?)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+      if (namePrefixMatch) {
+        const candidate = namePrefixMatch[1].trim();
+        const parts = candidate.split(/\s+/).filter(w => !STOP_WORDS.has(w.toLowerCase()));
+        if (parts.length > 0) {
+          firstName = parts[0];
+          lastName = parts.slice(1).join(' ') || null;
+        }
+      } else if (emailMatch && emailMatch.index !== undefined && emailMatch.index > 0) {
+        const beforeEmail = content.slice(0, emailMatch.index).replace(/[,:\-\n]/g, ' ').trim();
+        const words = beforeEmail.split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w) && !STOP_WORDS.has(w.toLowerCase()));
+        if (words.length >= 1 && words.length <= 3) {
+          firstName = words[0];
+          lastName = words.slice(1).join(' ') || null;
+        }
+      } else {
+        // Standalone name: e.g. "Aman Sharma"
+        const trimmed = content.trim();
+        if (/^[A-Za-z]{2,20}(\s+[A-Za-z]{2,20}){1,2}$/.test(trimmed)) {
+          const parts = trimmed.split(/\s+/);
+          if (!parts.some(p => STOP_WORDS.has(p.toLowerCase()))) {
+            firstName = parts[0];
+            lastName = parts.slice(1).join(' ') || null;
+          }
+        }
+      }
+
+      if (firstName) {
+        const clean = this.cleanAttendeeName(firstName + (lastName ? ' ' + lastName : ''));
+        const parts = clean.split(/\s+/);
+        firstName = parts[0] || null;
+        lastName = parts.slice(1).join(' ') || null;
+      }
+
+      if (email || phone || firstName) {
+        const updateFields: Record<string, any> = {};
+        if (email) updateFields['visitorInfo.email'] = email;
+        if (phone) updateFields['visitorInfo.phone'] = phone;
+        if (firstName) updateFields['visitorInfo.firstName'] = firstName;
+        if (lastName) updateFields['visitorInfo.lastName'] = lastName;
+
+        await this.conversationModel.updateOne(
+          { _id: conversationId },
+          { $set: updateFields },
+        );
+
+        if (email || phone) {
+          const vInfo = conversation?.visitorInfo || {};
+          const existingLead = conversation?.leadId
+            ? await this.leadModel.findOne({ _id: conversation.leadId, tenantId })
+            : null;
+
+          const leadData = {
+            firstName: firstName || vInfo.firstName || existingLead?.firstName,
+            lastName: lastName || vInfo.lastName || existingLead?.lastName,
+            email: email || vInfo.email || existingLead?.email,
+            phone: phone || vInfo.phone || existingLead?.phone,
+            company: vInfo.company || existingLead?.company,
+            conversationId,
+            source: 'widget_chat',
+            metadata: {
+              url: vInfo.url,
+              referrer: vInfo.referrer,
+              userAgent: vInfo.userAgent,
+            },
+          };
+
+          const lead = await this.leadService.captureFromWidget(tenantId, leadData);
+          if (lead?._id) {
+            await this.attachCapturedLead(tenantId, conversationId, lead);
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Auto-extract lead from message failed: ${err.message}`);
+    }
   }
 
   async sendAgentMessage(
@@ -450,12 +668,12 @@ Never invent facts. Use null for unknown fields.`,
     const allTools: Record<string, AIToolDefinition> = {
       appointment_booking: {
         name: 'schedule_appointment',
-        description: 'Schedule a new appointment/meeting with the visitor. Use this when the visitor wants to book a meeting, demo, or consultation. You MUST collect the date, time, and visitor name before calling this.',
+        description: 'Schedule a new appointment/meeting with the visitor. Use this when the visitor wants to book a meeting, demo, or consultation. You MUST collect the date, time, and visitor name before calling this. Always use realistic calendar dates based on current day and month.',
         parameters: {
           type: 'object',
           properties: {
             title: { type: 'string', description: 'Title of the appointment (e.g. "Product Demo", "Sales Consultation")' },
-            date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
+            date: { type: 'string', description: 'Date in YYYY-MM-DD format (must be valid calendar date based on current real-world date)' },
             time: { type: 'string', description: 'Start time in HH:MM format (24h)' },
             durationMinutes: { type: 'number', description: 'Duration in minutes (default 30)' },
             attendeeName: { type: 'string', description: 'Name of the visitor/attendee' },
@@ -464,6 +682,20 @@ Never invent facts. Use null for unknown fields.`,
             description: { type: 'string', description: 'Notes or description for the appointment' },
           },
           required: ['title', 'date', 'time', 'attendeeName'],
+        },
+      },
+      appointment_reschedule: {
+        name: 'reschedule_appointment',
+        description: 'Reschedule or move an existing scheduled appointment to a new date and time. Use this when the visitor wants to change, move, or reschedule a previously booked meeting.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', description: 'New date in YYYY-MM-DD format' },
+            time: { type: 'string', description: 'New start time in HH:MM format (24h)' },
+            durationMinutes: { type: 'number', description: 'Duration in minutes (default 30)' },
+            reason: { type: 'string', description: 'Reason for rescheduling' },
+          },
+          required: ['date', 'time'],
         },
       },
       lead_capture: {
@@ -504,11 +736,25 @@ Never invent facts. Use null for unknown fields.`,
         parameters: {
           type: 'object',
           properties: {
-            status: { type: 'string', enum: ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'], description: 'New lead status' },
-            temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], description: 'Lead temperature based on interest level' },
-            notes: { type: 'string', description: 'Reason for the status change' },
+            status: {
+              type: 'string',
+              enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'],
+              description: 'New lead pipeline status',
+            },
+            temperature: {
+              type: 'string',
+              enum: ['hot', 'warm', 'cold'],
+              description: 'Interest level of the lead based on conversation signals',
+            },
+            qualificationScore: {
+              type: 'number',
+              description: 'Estimated qualification score from 0-100',
+            },
+            notes: {
+              type: 'string',
+              description: 'Reason for the status/temperature change',
+            },
           },
-          required: ['status'],
         },
       },
       notify_salesperson: {
@@ -517,20 +763,28 @@ Never invent facts. Use null for unknown fields.`,
         parameters: {
           type: 'object',
           properties: {
-            title: { type: 'string', description: 'Notification title (e.g. "Hot Lead Alert", "Urgent Request")' },
-            message: { type: 'string', description: 'Notification message with key details' },
-            priority: { type: 'string', enum: ['normal', 'high', 'urgent'], description: 'Notification priority' },
+            message: { type: 'string', description: 'Notification message for the sales team' },
+            priority: {
+              type: 'string',
+              enum: ['normal', 'urgent'],
+              description: 'Priority level of the notification',
+            },
           },
-          required: ['title', 'message'],
+          required: ['message'],
         },
       },
       handoff_to_human: {
         name: 'handoff_to_human',
-        description: 'Transfer this conversation to a human agent. Use this when: (1) the visitor explicitly asks to speak to a person, (2) you cannot adequately answer their question, or (3) the query requires human judgment (pricing negotiations, complaints, complex issues).',
+        description: 'Hand off this conversation to an available human sales agent. Use this when the visitor explicitly asks to speak with a human/person, or when their question is too complex/critical for AI.',
         parameters: {
           type: 'object',
           properties: {
-            reason: { type: 'string', description: 'Why the handoff is needed (for the human agent context)' },
+            reason: { type: 'string', description: 'Why the conversation is being handed off to a human' },
+            priority: {
+              type: 'string',
+              enum: ['normal', 'urgent'],
+              description: 'Urgency level of the handoff',
+            },
           },
           required: ['reason'],
         },
@@ -548,10 +802,30 @@ Never invent facts. Use null for unknown fields.`,
       },
     };
 
-    // Only return tools that are enabled for this agent
-    return enabledTools
-      .filter((toolId) => allTools[toolId])
-      .map((toolId) => allTools[toolId]);
+    const resultTools: AIToolDefinition[] = [];
+    for (const toolId of enabledTools) {
+      if (allTools[toolId]) {
+        resultTools.push(allTools[toolId]);
+        if (toolId === 'appointment_booking' && allTools.appointment_reschedule) {
+          resultTools.push(allTools.appointment_reschedule);
+        }
+      }
+    }
+    return resultTools;
+  }
+
+  private cleanAttendeeName(name?: string): string {
+    if (!name) return 'Visitor';
+    const trimmed = name.trim();
+    const words = trimmed.split(/\s+/);
+    const cleaned: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+      if (i > 0 && words[i].toLowerCase() === words[i - 1].toLowerCase()) {
+        continue;
+      }
+      cleaned.push(words[i]);
+    }
+    return cleaned.join(' ');
   }
 
   // ─── Tool Execution ───────────────────────────────────────────────
@@ -573,19 +847,78 @@ Never invent facts. Use null for unknown fields.`,
             return JSON.stringify({ success: false, error: 'Invalid date or time format' });
           }
 
-          const assignedTo = tenantId;
+          // Check if there is ALREADY an active scheduled appointment for this conversation
+          const existingAppt: any = await this.appointmentModel.findOne({
+            tenantId,
+            conversationId,
+            status: { $in: ['scheduled', 'confirmed'] },
+          }).sort({ createdAt: -1 });
+
+          if (existingAppt) {
+            // Reschedule existing appointment instead of creating a duplicate!
+            const rescheduled = await this.appointmentService.reschedule(tenantId, existingAppt._id.toString(), {
+              startTime: startTime.toISOString(),
+              endTime: endTime.toISOString(),
+              reason: args.description || 'Rescheduled via chat conversation',
+            });
+            return JSON.stringify({
+              success: true,
+              rescheduled: true,
+              appointmentId: rescheduled._id,
+              title: rescheduled.title,
+              startTime: startTime.toISOString(),
+              endTime: endTime.toISOString(),
+              status: 'scheduled',
+              message: `Existing appointment "${rescheduled.title}" has been successfully rescheduled to ${startTime.toLocaleDateString()} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+            });
+          }
+
+          // Resolve assignedTo to a real salesperson user
+          const conversation: any = await this.conversationModel.findById(conversationId).lean();
+          let assignedTo: string | undefined = conversation?.assignedUserId;
+
+          if (!assignedTo && conversation?.leadId) {
+            const lead: any = await this.leadModel.findById(conversation.leadId).select('assignedTo').lean();
+            if (lead?.assignedTo) assignedTo = lead.assignedTo;
+          }
+
+          if (!assignedTo) {
+            const sp: any = await this.userModel.findOne({
+              tenantId,
+              isActive: true,
+              role: { $in: ['SALESPERSON', 'SALES_MANAGER', 'ADMIN'] },
+            }).sort({ role: 1 }).lean();
+            if (sp?._id) assignedTo = sp._id.toString();
+          }
+
+          if (!assignedTo) assignedTo = tenantId;
+
+          const rawName = args.attendeeName ||
+            (conversation?.visitorInfo?.firstName ? `${conversation.visitorInfo.firstName} ${conversation.visitorInfo.lastName || ''}`.trim() : 'Visitor');
+          const cleanName = this.cleanAttendeeName(rawName);
 
           const appointment = await this.appointmentService.bookFromWidget(tenantId, {
             assignedTo,
             startTime: startTime.toISOString(),
             endTime: endTime.toISOString(),
             attendee: {
-              name: args.attendeeName,
-              email: args.attendeeEmail,
-              phone: args.attendeePhone,
+              name: cleanName,
+              email: args.attendeeEmail || conversation?.visitorInfo?.email,
+              phone: args.attendeePhone || conversation?.visitorInfo?.phone,
             },
             conversationId,
           });
+
+          if (cleanName && cleanName.toLowerCase() !== 'visitor') {
+            const parts = cleanName.split(/\s+/);
+            const vUpdate: any = {
+              'visitorInfo.firstName': parts[0],
+              'visitorInfo.lastName': parts.slice(1).join(' ') || '',
+            };
+            if (args.attendeeEmail) vUpdate['visitorInfo.email'] = args.attendeeEmail;
+            if (args.attendeePhone) vUpdate['visitorInfo.phone'] = args.attendeePhone;
+            await this.conversationModel.updateOne({ _id: conversationId }, { $set: vUpdate });
+          }
 
           return JSON.stringify({
             success: true,
@@ -595,8 +928,71 @@ Never invent facts. Use null for unknown fields.`,
             endTime: endTime.toISOString(),
             status: 'scheduled',
           });
-        } catch (err) {
+        } catch (err: any) {
           this.logger.error(`Failed to create appointment: ${err.message}`);
+          return JSON.stringify({ success: false, error: err.message });
+        }
+      }
+      case 'reschedule_appointment': {
+        try {
+          const startTime = new Date(`${args.date}T${args.time}:00`);
+          const duration = args.durationMinutes || 30;
+          const endTime = new Date(startTime.getTime() + duration * 60000);
+
+          if (isNaN(startTime.getTime())) {
+            return JSON.stringify({ success: false, error: 'Invalid date or time format' });
+          }
+
+          const conversation: any = await this.conversationModel.findById(conversationId).lean();
+          const email = conversation?.visitorInfo?.email;
+
+          if (args.attendeeName) {
+            const clean = this.cleanAttendeeName(args.attendeeName);
+            if (clean && clean.toLowerCase() !== 'visitor') {
+              const parts = clean.split(/\s+/);
+              await this.conversationModel.updateOne(
+                { _id: conversationId },
+                {
+                  $set: {
+                    'visitorInfo.firstName': parts[0],
+                    'visitorInfo.lastName': parts.slice(1).join(' ') || '',
+                  },
+                },
+              );
+            }
+          }
+
+          const existingAppt: any = await this.appointmentModel.findOne({
+            tenantId,
+            $or: [
+              { conversationId },
+              ...(email ? [{ 'attendee.email': email.toLowerCase() }] : []),
+            ],
+            status: { $in: ['scheduled', 'confirmed'] },
+          }).sort({ createdAt: -1 });
+
+          if (!existingAppt) {
+            return this.executeToolCall(tenantId, conversationId, agentId, 'schedule_appointment', args);
+          }
+
+          const rescheduled = await this.appointmentService.reschedule(tenantId, existingAppt._id.toString(), {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            reason: args.reason || 'Rescheduled by visitor in chat',
+          });
+
+          return JSON.stringify({
+            success: true,
+            rescheduled: true,
+            appointmentId: rescheduled._id,
+            title: rescheduled.title,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            status: 'scheduled',
+            message: `Appointment "${rescheduled.title}" has been successfully rescheduled to ${startTime.toLocaleDateString()} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+          });
+        } catch (err: any) {
+          this.logger.error(`Failed to reschedule appointment: ${err.message}`);
           return JSON.stringify({ success: false, error: err.message });
         }
       }
@@ -924,6 +1320,37 @@ Never invent facts. Use null for unknown fields.`,
     if (phone) knownDetails.push(`- Phone: ${phone}`);
     if (company) knownDetails.push(`- Company: ${company}`);
 
+    const now = new Date();
+    const currentDateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+    const currentTimeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const yyyymmdd = now.toISOString().split('T')[0];
+
+    const dateTimePrompt = `\n\nCURRENT REAL-WORLD CALENDAR & TIME (USE THIS FOR ALL DATES):
+- Today is: ${currentDateStr} (${yyyymmdd})
+- Current Time: ${currentTimeStr}
+CRITICAL DATE RULE: When the visitor mentions "today", "tomorrow", "next Monday", "this Friday", or any date/time, ALWAYS calculate the exact date relative to TODAY (${currentDateStr}). Never invent or hallucinate future months like October or November if today is in September!`;
+
+    // Check if an appointment is already booked in this conversation
+    const activeAppt: any = await this.appointmentModel.findOne({
+      tenantId,
+      conversationId,
+      status: { $in: ['scheduled', 'confirmed'] },
+    }).sort({ createdAt: -1 }).lean();
+
+    let appointmentContextPrompt = '';
+    if (activeAppt) {
+      const apptStart = new Date(activeAppt.startTime).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      appointmentContextPrompt = `\n\nACTIVE SCHEDULED APPOINTMENT:
+The visitor ALREADY has a scheduled meeting: "${activeAppt.title}" on ${apptStart}.
+If the visitor asks to reschedule, move, or change the time/date of their meeting, call the reschedule_appointment tool to move this existing meeting. DO NOT book a new duplicate meeting; tell them their meeting has been rescheduled!`;
+    }
+
     let visitorContextPrompt = '';
     if (knownDetails.length > 0) {
       visitorContextPrompt = `\n\nALREADY CAPTURED VISITOR INFORMATION (DO NOT ASK FOR THESE AGAIN):\n${knownDetails.join('\n')}\nCRITICAL INSTRUCTION: The visitor has ALREADY provided these contact details (via the contact form/chat). You MUST NOT ask for their name, email, phone number, or company again. Acknowledge what they need and directly assist them with their requirements/questions.`;
@@ -933,7 +1360,7 @@ Never invent facts. Use null for unknown fields.`,
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: agent.systemPrompt + visitorContextPrompt + knowledgeContext + toolInstructions,
+        content: agent.systemPrompt + dateTimePrompt + appointmentContextPrompt + visitorContextPrompt + knowledgeContext + toolInstructions,
       },
       ...history.map((m: any) => ({
         role: (m.sender === 'visitor' ? 'user' : m.sender === 'system' ? 'system' : 'assistant') as 'user' | 'system' | 'assistant',

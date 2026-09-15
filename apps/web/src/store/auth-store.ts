@@ -55,6 +55,9 @@ interface AuthState {
   impersonation: ImpersonationState | null;
   /** True once the persisted state has been read from localStorage on the client. */
   hasHydrated: boolean;
+  /** Active selected tenant for SuperAdmin organization switcher ('all' or tenant ObjectId). */
+  activeTenantId: string;
+  setActiveTenantId: (tenantId: string) => void;
   setAuth: (user: User, accessToken: string, refreshToken: string, tenant?: SessionTenant | null) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   updateUser: (user: Partial<User>) => void;
@@ -74,6 +77,17 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       impersonation: null,
       hasHydrated: false,
+      activeTenantId: typeof window !== 'undefined' ? localStorage.getItem('la_platform_tenant') || 'all' : 'all',
+      setActiveTenantId: (activeTenantId: string) => {
+        if (typeof window !== 'undefined') {
+          if (activeTenantId === 'all') {
+            localStorage.removeItem('la_platform_tenant');
+          } else {
+            localStorage.setItem('la_platform_tenant', activeTenantId);
+          }
+        }
+        set({ activeTenantId });
+      },
       setAuth: (user, accessToken, refreshToken, tenant) => {
         persistTokens(accessToken, refreshToken);
         set({ user, accessToken, refreshToken, isAuthenticated: true, tenant: tenant ?? get().tenant ?? null });
@@ -124,9 +138,18 @@ export const useAuthStore = create<AuthState>()(
         try {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          localStorage.removeItem('la_platform_tenant');
         } catch {}
         clearAuthCookie();
-        set({ user: null, tenant: null, accessToken: null, refreshToken: null, isAuthenticated: false, impersonation: null });
+        set({
+          user: null,
+          tenant: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          impersonation: null,
+          activeTenantId: 'all',
+        });
       },
       setHasHydrated: (value) => set({ hasHydrated: value }),
     }),
@@ -139,6 +162,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         impersonation: state.impersonation,
+        activeTenantId: state.activeTenantId,
       }),
       onRehydrateStorage: () => (state) => {
         // Keep the middleware cookie in sync with what the client actually has

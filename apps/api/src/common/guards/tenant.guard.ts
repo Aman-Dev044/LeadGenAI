@@ -25,14 +25,15 @@ export class TenantGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const tenantId = request.tenantId;
 
-    if (!tenantId) {
+    if (!tenantId && request.user?.role !== 'SUPER_ADMIN') {
       throw new ForbiddenException('Tenant context is required');
     }
 
     // Set tenant context in AsyncLocalStorage for Mongoose plugin
     const store = tenantContext.getStore();
     if (store) {
-      store.tenantId = tenantId;
+      store.tenantId = tenantId || (request.user?.role === 'SUPER_ADMIN' ? 'all' : '');
+      store.isSuperAdmin = request.user?.role === 'SUPER_ADMIN';
     }
 
     return true;

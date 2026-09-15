@@ -24,8 +24,13 @@ export class AnalyticsService {
     return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   }
 
+  private tMatch(tenantId: string): Record<string, any> {
+    return tenantId && tenantId !== 'all' ? { tenantId } : {};
+  }
+
   async getOverview(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     const [
       totalVisitors,
@@ -37,42 +42,42 @@ export class AnalyticsService {
       appointmentCount,
     ] = await Promise.all([
       this.pageViewModel.distinct('visitorId', {
-        tenantId,
+        ...tm,
         createdAt: { $gte: periodStart },
       }).then((ids) => ids.length),
       this.conversationModel.countDocuments({
-        tenantId,
+        ...tm,
         createdAt: { $gte: periodStart },
       }),
       this.leadModel.countDocuments({
-        tenantId,
+        ...tm,
         deletedAt: null,
         createdAt: { $gte: periodStart },
       }),
       this.leadModel.countDocuments({
-        tenantId,
+        ...tm,
         deletedAt: null,
         status: 'qualified',
         createdAt: { $gte: periodStart },
       }),
       this.leadModel.countDocuments({
-        tenantId,
+        ...tm,
         deletedAt: null,
         temperature: 'hot',
         createdAt: { $gte: periodStart },
       }),
       this.handoffModel.countDocuments({
-        tenantId,
+        ...tm,
         createdAt: { $gte: periodStart },
       }),
       this.appointmentModel.countDocuments({
-        tenantId,
+        ...tm,
         createdAt: { $gte: periodStart },
       }),
     ]);
 
     const avgScore = await this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null, score: { $gt: 0 }, createdAt: { $gte: periodStart } } },
+      { $match: { ...tm, deletedAt: null, score: { $gt: 0 }, createdAt: { $gte: periodStart } } },
       { $group: { _id: null, avg: { $avg: '$score' } } },
     ]);
 
@@ -100,19 +105,20 @@ export class AnalyticsService {
 
   async getLeadAnalytics(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     const [byStatus, byTemperature, scoreDistribution] = await Promise.all([
       this.leadModel.aggregate([
-        { $match: { tenantId, deletedAt: null, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, deletedAt: null, createdAt: { $gte: periodStart } } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
       this.leadModel.aggregate([
-        { $match: { tenantId, deletedAt: null, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, deletedAt: null, createdAt: { $gte: periodStart } } },
         { $group: { _id: '$temperature', count: { $sum: 1 }, avgScore: { $avg: '$score' } } },
       ]),
       this.leadModel.aggregate([
-        { $match: { tenantId, deletedAt: null, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, deletedAt: null, createdAt: { $gte: periodStart } } },
         {
           $bucket: {
             groupBy: '$score',
@@ -129,16 +135,17 @@ export class AnalyticsService {
 
   async getConversationAnalytics(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     const [byStatus, avgDuration, avgMessages] = await Promise.all([
       this.conversationModel.aggregate([
-        { $match: { tenantId, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, createdAt: { $gte: periodStart } } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
       this.conversationModel.aggregate([
         {
           $match: {
-            tenantId,
+            ...tm,
             createdAt: { $gte: periodStart },
             endedAt: { $exists: true },
           },
@@ -153,7 +160,7 @@ export class AnalyticsService {
         },
       ]),
       this.conversationModel.aggregate([
-        { $match: { tenantId, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, createdAt: { $gte: periodStart } } },
         { $group: { _id: null, avg: { $avg: '$messageCount' } } },
       ]),
     ]);
@@ -167,24 +174,25 @@ export class AnalyticsService {
 
   async getAgentPerformance(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
-    const agents = await this.agentModel.find({ tenantId, deletedAt: null }).lean();
+    const agents = await this.agentModel.find({ ...tm, deletedAt: null }).lean();
 
     return Promise.all(
       agents.map(async (agent: any) => {
         const [conversations, totalMessages, handoffs] = await Promise.all([
           this.conversationModel.countDocuments({
-            tenantId,
+            ...tm,
             agentId: agent._id.toString(),
             createdAt: { $gte: periodStart },
           }),
           this.messageModel.countDocuments({
-            tenantId,
+            ...tm,
             sender: 'bot',
             createdAt: { $gte: periodStart },
           }),
           this.handoffModel.countDocuments({
-            tenantId,
+            ...tm,
             agentId: agent._id.toString(),
             createdAt: { $gte: periodStart },
           }),
@@ -207,9 +215,10 @@ export class AnalyticsService {
 
   async getSourceBreakdown(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     return this.leadModel.aggregate([
-      { $match: { tenantId, deletedAt: null, createdAt: { $gte: periodStart } } },
+      { $match: { ...tm, deletedAt: null, createdAt: { $gte: periodStart } } },
       {
         $group: {
           _id: '$source',
@@ -225,10 +234,11 @@ export class AnalyticsService {
 
   async getTrends(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     const [leadTrend, conversationTrend] = await Promise.all([
       this.leadModel.aggregate([
-        { $match: { tenantId, deletedAt: null, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, deletedAt: null, createdAt: { $gte: periodStart } } },
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -240,7 +250,7 @@ export class AnalyticsService {
         { $sort: { _id: 1 } },
       ]),
       this.conversationModel.aggregate([
-        { $match: { tenantId, createdAt: { $gte: periodStart } } },
+        { $match: { ...tm, createdAt: { $gte: periodStart } } },
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -256,11 +266,12 @@ export class AnalyticsService {
 
   async getTeamPerformance(tenantId: string, query: AnalyticsQueryDto) {
     const periodStart = this.getPeriodStart(query);
+    const tm = this.tMatch(tenantId);
 
     return this.leadModel.aggregate([
       {
         $match: {
-          tenantId,
+          ...tm,
           deletedAt: null,
           assignedTo: { $exists: true, $ne: null },
           createdAt: { $gte: periodStart },

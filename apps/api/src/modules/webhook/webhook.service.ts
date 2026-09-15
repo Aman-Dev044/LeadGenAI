@@ -31,19 +31,26 @@ export class WebhookService {
   }
 
   async findAll(tenantId: string, paginationDto: PaginationDto) {
-    const query: any = { tenantId };
+    const query: any = {};
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     return paginate(this.webhookModel, query, paginationDto);
   }
 
   async findById(tenantId: string, webhookId: string) {
-    const webhook = await this.webhookModel.findOne({ _id: webhookId, tenantId });
+    const filter: any = { _id: webhookId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+    const webhook = await this.webhookModel.findOne(filter);
     if (!webhook) throw new NotFoundException('Webhook not found');
     return webhook;
   }
 
   async update(tenantId: string, webhookId: string, dto: UpdateWebhookDto) {
+    const filter: any = { _id: webhookId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
     const webhook = await this.webhookModel.findOneAndUpdate(
-      { _id: webhookId, tenantId },
+      filter,
       { $set: dto },
       { new: true },
     );
@@ -52,25 +59,26 @@ export class WebhookService {
   }
 
   async remove(tenantId: string, webhookId: string) {
-    const webhook = await this.webhookModel.findOneAndDelete({
-      _id: webhookId,
-      tenantId,
-    });
+    const filter: any = { _id: webhookId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+    const webhook = await this.webhookModel.findOneAndDelete(filter);
     if (!webhook) throw new NotFoundException('Webhook not found');
     return { message: 'Webhook deleted' };
   }
 
   async getLogs(tenantId: string, webhookId: string, paginationDto: PaginationDto) {
+    const filter: any = { webhookId };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
     return paginate(
       this.webhookLogModel,
-      { webhookId, tenantId },
+      filter,
       paginationDto,
     );
   }
 
   async testWebhook(tenantId: string, webhookId: string) {
     const webhook = await this.findById(tenantId, webhookId);
-    await this.dispatcher.dispatch(tenantId, 'webhook.test', {
+    await this.dispatcher.dispatch(webhook.tenantId || tenantId, 'webhook.test', {
       message: 'This is a test webhook delivery',
       timestamp: new Date().toISOString(),
     });

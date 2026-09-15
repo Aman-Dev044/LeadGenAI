@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Users, UserCheck, UserX, ShieldCheck, UserCog, Mail, Phone, Clock } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -18,10 +19,10 @@ import { StatCard } from '@/components/shared/stat-card';
 import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
 import { formatDate, getInitials } from '@/lib/utils';
 
-const ROLES = ['ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'];
+const ROLES = ['ADMIN', 'SALESPERSON'];
 
 const roleColors: Record<string, 'violet' | 'info' | 'secondary' | 'outline'> = {
-  ADMIN: 'violet', SALES_MANAGER: 'info', SALESPERSON: 'secondary', VIEWER: 'outline',
+  ADMIN: 'violet', SALESPERSON: 'secondary', SALES_MANAGER: 'info', VIEWER: 'outline',
 };
 
 const roleLabel = (r: string) => (r || '').toLowerCase().replace(/_/g, ' ');
@@ -47,8 +48,10 @@ export default function UsersPage() {
   // Delete
   const [deleteUser, setDeleteUser] = useState<any>(null);
 
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['users', page, limit, search],
+    queryKey: ['users', activeTenantId, page, limit, search],
     queryFn: () => api.get<any>('/users', { page, limit, search: search || undefined }),
   });
 

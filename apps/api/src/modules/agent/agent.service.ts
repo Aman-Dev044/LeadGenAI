@@ -19,7 +19,10 @@ export class AgentService {
   }
 
   async findAll(tenantId: string, paginationDto: PaginationDto) {
-    const query: any = { tenantId, deletedAt: null };
+    const query: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
 
     if (paginationDto.search) {
       const safeSearch = escapeRegex(paginationDto.search);
@@ -33,11 +36,11 @@ export class AgentService {
   }
 
   async findById(tenantId: string, agentId: string) {
-    const agent = await this.agentModel.findOne({
-      _id: agentId,
-      tenantId,
-      deletedAt: null,
-    });
+    const query: any = { _id: agentId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
+    const agent = await this.agentModel.findOne(query);
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
@@ -45,8 +48,12 @@ export class AgentService {
   }
 
   async update(tenantId: string, agentId: string, dto: UpdateAgentDto) {
+    const filter: any = { _id: agentId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const agent = await this.agentModel.findOneAndUpdate(
-      { _id: agentId, tenantId, deletedAt: null },
+      filter,
       { $set: dto },
       { new: true },
     );
@@ -58,8 +65,12 @@ export class AgentService {
   }
 
   async remove(tenantId: string, agentId: string) {
+    const filter: any = { _id: agentId };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const agent = await this.agentModel.findOneAndUpdate(
-      { _id: agentId, tenantId },
+      filter,
       { deletedAt: new Date(), status: 'inactive' },
       { new: true },
     );

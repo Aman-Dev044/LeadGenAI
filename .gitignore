@@ -67,8 +67,10 @@ ehthumbs.db
 Desktop.ini
 
 # ============================================================
-# AI Assistant / Scratch Cache
+# AI Assistant / Scratch Cache / Local Dev Scripts
 # ============================================================
 .claude/
 .gemini/
 scratch/
+scratch*
+scripts/

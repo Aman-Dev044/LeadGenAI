@@ -37,6 +37,18 @@ export class WidgetController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60000, limit: 60 } })
+  @Get('conversations')
+  async getVisitorConversations(
+    @Query('agentId') agentId: string,
+    @Query('visitorId') visitorId: string,
+  ) {
+    if (!agentId || !visitorId) return [];
+    const agent = await this.agentService.getPublicConfig(agentId);
+    return this.conversationService.findVisitorConversations(agent.tenantId, agentId, visitorId);
+  }
+
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 30 } })
   @Post('conversations/start')
   async startConversation(
@@ -45,20 +57,42 @@ export class WidgetController {
   ) {
     const agent = await this.agentService.getPublicConfig(body.agentId);
     const info = body.visitorInfo || {};
+    const clientIp = (info.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.ip || '').replace(/^::ffff:/, '');
+
+    let city = info.city;
+    let country = info.country;
+    let region = info.region;
+    let countryCode = info.countryCode;
+    const timezone = info.timezone;
+
+    if (!city && !country && timezone) {
+      if (timezone.includes('Kolkata') || timezone.includes('Calcutta')) {
+        country = 'India';
+        countryCode = 'IN';
+      } else if (timezone.includes('Dubai')) {
+        city = 'Dubai';
+        country = 'United Arab Emirates';
+      } else if (timezone.includes('New_York')) {
+        city = 'New York';
+        country = 'United States';
+      } else if (timezone.includes('London')) {
+        city = 'London';
+        country = 'United Kingdom';
+      }
+    }
+
     return this.conversationService.create(agent.tenantId, {
       agentId: body.agentId,
       visitorId: body.visitorId,
       visitorInfo: {
-        url: info.url,
-        referrer: info.referrer,
-        utmSource: info.utmSource,
-        utmMedium: info.utmMedium,
-        utmCampaign: info.utmCampaign,
-        utmTerm: info.utmTerm,
-        utmContent: info.utmContent,
-        device: info.device,
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
+        ...info,
+        city,
+        region,
+        country,
+        countryCode,
+        timezone,
+        ip: clientIp,
+        userAgent: req.headers['user-agent'] || info.userAgent,
       } as any,
     });
   }
@@ -81,8 +115,20 @@ export class WidgetController {
         utmCampaign: info.utmCampaign,
       };
     }
+
+    const rawData: any = body.data || {};
+    let firstName: string | undefined = rawData.firstName;
+    let lastName: string | undefined = rawData.lastName;
+    if (!firstName && rawData.name) {
+      const parts = String(rawData.name).trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ') || undefined;
+    }
+
     const lead = await this.leadService.captureFromWidget(agent.tenantId, {
-      ...body.data,
+      ...rawData,
+      firstName,
+      lastName,
       conversationId: body.conversationId,
       source: 'widget',
       metadata,
@@ -92,6 +138,64 @@ export class WidgetController {
       this.conversationService.maybeSummarize(agent.tenantId, body.conversationId, 'lead_captured').catch(() => undefined);
     }
     return lead;
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
+  @Post('conversations/:id/lead')
+  async captureConversationLead(
+    @Param('id') conversationId: string,
+    @Body() body: any,
+    @Req() req: any,
+  ) {
+    const agentId = body.agentId;
+    const agent = await this.agentService.getPublicConfig(agentId);
+    let metadata: Record<string, any> = {
+      userAgent: req.headers['user-agent'] || body.userAgent,
+      ip: req.ip,
+      url: body.url,
+      referrer: body.referrer,
+      utmSource: body.utmSource,
+      utmMedium: body.utmMedium,
+      utmCampaign: body.utmCampaign,
+    };
+    if (conversationId) {
+      const conv: any = await this.conversationService.findPublic(agent.tenantId, conversationId);
+      const info: any = conv?.visitorInfo || {};
+      metadata = {
+        ...metadata,
+        url: metadata.url || info.url,
+        referrer: metadata.referrer || info.referrer,
+        utmSource: metadata.utmSource || info.utmSource,
+        utmMedium: metadata.utmMedium || info.utmMedium,
+        utmCampaign: metadata.utmCampaign || info.utmCampaign,
+      };
+    }
+
+    const rawData: any = body.data || body;
+    let firstName: string | undefined = rawData.firstName;
+    let lastName: string | undefined = rawData.lastName;
+    if (!firstName && rawData.name) {
+      const parts = String(rawData.name).trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ') || undefined;
+    }
+
+    const lead = await this.leadService.captureFromWidget(agent.tenantId, {
+      ...rawData,
+      firstName,
+      lastName,
+      conversationId,
+      source: body.source || 'widget_form',
+      metadata,
+    });
+
+    if (conversationId) {
+      await this.conversationService.attachCapturedLead(agent.tenantId, conversationId, lead);
+      this.conversationService.maybeSummarize(agent.tenantId, conversationId, 'lead_captured').catch(() => undefined);
+    }
+
+    return { success: true, lead };
   }
 
   @Public()

@@ -39,7 +39,10 @@ export class UserService {
   }
 
   async findAll(tenantId: string, paginationDto: PaginationDto) {
-    const query: any = { tenantId, deletedAt: null };
+    const query: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
 
     if (paginationDto.search) {
       const safeSearch = escapeRegex(paginationDto.search);
@@ -55,8 +58,12 @@ export class UserService {
 
   /** Lightweight list of active team members for assignment dropdowns (any dashboard role may read it). */
   async findAssignable(tenantId: string) {
+    const filter: any = { isActive: true, deletedAt: null, role: { $in: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] } };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     return this.userModel
-      .find({ tenantId, isActive: true, deletedAt: null, role: { $in: ['ADMIN', 'SALES_MANAGER', 'SALESPERSON'] } })
+      .find(filter)
       .select('firstName lastName email role avatar')
       .sort({ firstName: 1, lastName: 1 })
       .limit(500)
@@ -64,11 +71,11 @@ export class UserService {
   }
 
   async findById(tenantId: string, userId: string) {
-    const user = await this.userModel.findOne({
-      _id: userId,
-      tenantId,
-      deletedAt: null,
-    });
+    const filter: any = { _id: userId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
+    const user = await this.userModel.findOne(filter);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -76,8 +83,12 @@ export class UserService {
   }
 
   async update(tenantId: string, userId: string, dto: UpdateUserDto) {
+    const filter: any = { _id: userId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const user = await this.userModel.findOneAndUpdate(
-      { _id: userId, tenantId, deletedAt: null },
+      filter,
       { $set: dto },
       { new: true },
     );
@@ -88,8 +99,12 @@ export class UserService {
   }
 
   async deactivate(tenantId: string, userId: string) {
+    const filter: any = { _id: userId };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const user = await this.userModel.findOneAndUpdate(
-      { _id: userId, tenantId },
+      filter,
       { isActive: false },
       { new: true },
     );
@@ -100,8 +115,12 @@ export class UserService {
   }
 
   async activate(tenantId: string, userId: string) {
+    const filter: any = { _id: userId };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
     const user = await this.userModel.findOneAndUpdate(
-      { _id: userId, tenantId },
+      filter,
       { isActive: true },
       { new: true },
     );
@@ -112,15 +131,18 @@ export class UserService {
   }
 
   async remove(tenantId: string, userId: string) {
-    const user = await this.userModel.findOneAndDelete({
-      _id: userId,
-      tenantId,
-    });
+    const filter: any = { _id: userId };
+    if (tenantId && tenantId !== 'all') {
+      filter.tenantId = tenantId;
+    }
+    const user = await this.userModel.findOneAndDelete(filter);
     if (!user) {
       throw new NotFoundException('User not found');
     }
     // Permanently remove all session refresh tokens for this user from DB
-    await this.refreshTokenModel.deleteMany({ userId, tenantId });
+    const tokenFilter: any = { userId };
+    if (tenantId && tenantId !== 'all') tokenFilter.tenantId = tenantId;
+    await this.refreshTokenModel.deleteMany(tokenFilter);
     return { message: 'User permanently deleted from database' };
   }
 

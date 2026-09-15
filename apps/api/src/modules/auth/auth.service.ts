@@ -20,6 +20,7 @@ import { RegisterDto, LoginDto, ChangePasswordDto } from './dto';
 const VERIFICATION_CODE_TTL_MS = 5 * 60 * 1000;
 const VERIFICATION_MAX_ATTEMPTS = 5;
 const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+const EMAIL_CHANGE_OTP_TTL_MS = 2 * 60 * 1000; // 2 minutes
 export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
@@ -690,6 +691,226 @@ AI Lead Generation Platform`,
       phone: user.phone,
       avatar: user.avatar,
       lastLoginAt: user.lastLoginAt,
+    };
+  }
+
+  private generateAlphanumericOtp(length = 6): string {
+    const chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars[crypto.randomInt(0, chars.length)];
+    }
+    return result;
+  }
+
+  // ─── Two-Step Email Change with 2-Minute Alphanumeric OTP ──────────────
+
+  async requestCurrentEmailOtp(userId: string) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+
+    const code = this.generateAlphanumericOtp(6);
+    const expiresAt = new Date(Date.now() + EMAIL_CHANGE_OTP_TTL_MS);
+
+    user.emailChangeCurrentOtpHash = this.hashCode(code);
+    user.emailChangeCurrentOtpExpires = expiresAt;
+    user.emailChangeCurrentVerified = false;
+    await user.save();
+
+    let delivered = false;
+    try {
+      const result = await this.emailProvider.sendEmail({
+        to: user.email,
+        subject: `${code} is your email change verification code`,
+        text: `Hi ${user.firstName || ''},\n\nYour 6-character verification code to change your email is: ${code}\n\nThis code is valid for 2 minutes only. If you did not request this, please secure your account immediately.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #111827;">Email Change Verification</h2>
+            <p style="color: #374151; font-size: 15px;">Hi ${user.firstName || ''},</p>
+            <p style="color: #374151; font-size: 15px;">You requested to change your account email address. Enter the 6-character code below to verify ownership of your current email:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <span style="display: inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; background: #FEF3C7; color: #B45309; padding: 14px 28px; border-radius: 8px; font-family: monospace;">${code}</span>
+            </div>
+            <p style="color: #DC2626; font-size: 14px; font-weight: 600;">⚠️ This code expires in exactly 2 minutes.</p>
+            <p style="color: #6B7280; font-size: 13px;">If you did not request this, please ignore this email or change your password immediately.</p>
+            <hr style="border: 1px solid #E5E7EB; margin: 24px 0;" />
+            <p style="color: #9CA3AF; font-size: 12px;">AI Lead Generation Platform</p>
+          </div>
+        `,
+      });
+      delivered = !!result?.success;
+    } catch (err: any) {
+      this.logger.error(`Failed to send current email OTP to ${user.email}: ${err.message}`);
+    }
+
+    this.logger.log(`[DEV] Email change OTP for current email (${user.email}): ${code}`);
+
+    return {
+      message: 'Verification code sent to your current email address',
+      currentEmail: user.email,
+      expiresAt,
+      expiresInSeconds: 120,
+    };
+  }
+
+  async verifyCurrentEmailOtp(userId: string, code: string) {
+    const user = await this.userModel.findById(userId).select('+emailChangeCurrentOtpHash');
+    if (!user) throw new BadRequestException('User not found');
+
+    if (!user.emailChangeCurrentOtpHash || !user.emailChangeCurrentOtpExpires) {
+      throw new BadRequestException('No verification code requested. Please request a code first.');
+    }
+
+    if (new Date(user.emailChangeCurrentOtpExpires) < new Date()) {
+      throw new BadRequestException('Verification code has expired (valid for 2 minutes). Please request a new code.');
+    }
+
+    const cleanCode = code.toUpperCase().trim();
+    const expected = Buffer.from(user.emailChangeCurrentOtpHash, 'hex');
+    const given = Buffer.from(this.hashCode(cleanCode), 'hex');
+    const matches = expected.length === given.length && crypto.timingSafeEqual(expected, given);
+
+    if (!matches) {
+      throw new BadRequestException('Invalid verification code. Please check and try again.');
+    }
+
+    user.emailChangeCurrentVerified = true;
+    user.emailChangeCurrentOtpHash = undefined;
+    user.emailChangeCurrentOtpExpires = undefined;
+    await user.save();
+
+    return {
+      success: true,
+      message: 'Current email verified successfully. You can now enter your new email address.',
+    };
+  }
+
+  async requestNewEmailOtp(userId: string, newEmail: string) {
+    const targetEmail = newEmail.toLowerCase().trim();
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new BadRequestException('User not found');
+
+    if (!user.emailChangeCurrentVerified) {
+      throw new BadRequestException('Please verify your current email address first.');
+    }
+
+    if (user.email.toLowerCase().trim() === targetEmail) {
+      throw new BadRequestException('New email address must be different from your current email.');
+    }
+
+    // Check if new email is already registered by any active user
+    const existing = await this.userModel.findOne({ email: targetEmail, deletedAt: null });
+    if (existing) {
+      throw new ConflictException('This email address is already in use by another account.');
+    }
+
+    const code = this.generateAlphanumericOtp(6);
+    const expiresAt = new Date(Date.now() + EMAIL_CHANGE_OTP_TTL_MS);
+
+    user.emailChangePendingEmail = targetEmail;
+    user.emailChangeNewOtpHash = this.hashCode(code);
+    user.emailChangeNewOtpExpires = expiresAt;
+    await user.save();
+
+    let delivered = false;
+    try {
+      const result = await this.emailProvider.sendEmail({
+        to: targetEmail,
+        subject: `${code} is your new email verification code`,
+        text: `Hi ${user.firstName || ''},\n\nYour 6-character verification code for your new email (${targetEmail}) is: ${code}\n\nThis code is valid for 2 minutes only.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #111827;">Confirm Your New Email Address</h2>
+            <p style="color: #374151; font-size: 15px;">Hi ${user.firstName || ''},</p>
+            <p style="color: #374151; font-size: 15px;">Please enter this 6-character code to confirm <strong>${targetEmail}</strong> as your new account email:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <span style="display: inline-block; font-size: 32px; letter-spacing: 8px; font-weight: bold; background: #EEF2FF; color: #4338CA; padding: 14px 28px; border-radius: 8px; font-family: monospace;">${code}</span>
+            </div>
+            <p style="color: #DC2626; font-size: 14px; font-weight: 600;">⚠️ This code expires in exactly 2 minutes.</p>
+            <p style="color: #6B7280; font-size: 13px;">Once confirmed, your old email will be replaced and you will be signed out to log in with this new email.</p>
+            <hr style="border: 1px solid #E5E7EB; margin: 24px 0;" />
+            <p style="color: #9CA3AF; font-size: 12px;">AI Lead Generation Platform</p>
+          </div>
+        `,
+      });
+      delivered = !!result?.success;
+    } catch (err: any) {
+      this.logger.error(`Failed to send new email OTP to ${targetEmail}: ${err.message}`);
+    }
+
+    this.logger.log(`[DEV] Email change OTP for new email (${targetEmail}): ${code}`);
+
+    return {
+      message: `Verification code sent to ${targetEmail}`,
+      pendingEmail: targetEmail,
+      expiresAt,
+      expiresInSeconds: 120,
+    };
+  }
+
+  async verifyNewEmailOtp(userId: string, code: string) {
+    const user = await this.userModel.findById(userId).select('+emailChangeNewOtpHash');
+    if (!user) throw new BadRequestException('User not found');
+
+    if (!user.emailChangeCurrentVerified || !user.emailChangePendingEmail) {
+      throw new BadRequestException('Please start the email change process from the beginning.');
+    }
+
+    if (!user.emailChangeNewOtpHash || !user.emailChangeNewOtpExpires) {
+      throw new BadRequestException('No verification code active for new email. Please request a code.');
+    }
+
+    if (new Date(user.emailChangeNewOtpExpires) < new Date()) {
+      throw new BadRequestException('Verification code has expired (valid for 2 minutes). Please request a new code.');
+    }
+
+    const cleanCode = code.toUpperCase().trim();
+    const expected = Buffer.from(user.emailChangeNewOtpHash, 'hex');
+    const given = Buffer.from(this.hashCode(cleanCode), 'hex');
+    const matches = expected.length === given.length && crypto.timingSafeEqual(expected, given);
+
+    if (!matches) {
+      throw new BadRequestException('Invalid verification code for new email. Please check and try again.');
+    }
+
+    const targetEmail = user.emailChangePendingEmail;
+
+    // Prevent race condition: check again if someone registered with targetEmail meanwhile
+    const conflict = await this.userModel.findOne({
+      email: targetEmail,
+      _id: { $ne: user._id },
+      deletedAt: null,
+    });
+    if (conflict) {
+      throw new ConflictException('This email was recently taken by another account. Please choose another.');
+    }
+
+    const oldEmail = user.email;
+
+    // Replace old email in database with new email
+    user.email = targetEmail;
+    user.emailVerifiedAt = new Date();
+    user.emailChangeCurrentVerified = false;
+    user.emailChangePendingEmail = undefined;
+    user.emailChangeCurrentOtpHash = undefined;
+    user.emailChangeCurrentOtpExpires = undefined;
+    user.emailChangeNewOtpHash = undefined;
+    user.emailChangeNewOtpExpires = undefined;
+    await user.save();
+
+    // Revoke all sessions/refresh tokens for security so user must log in with new email
+    await this.refreshTokenModel.updateMany(
+      { userId: user._id.toString(), isRevoked: false },
+      { isRevoked: true, revokedAt: new Date() },
+    );
+
+    this.logger.log(`User ${user._id} successfully changed email from ${oldEmail} to ${targetEmail}`);
+
+    return {
+      success: true,
+      message: `Email changed successfully to ${targetEmail}. Please log in with your new email.`,
+      oldEmail,
+      newEmail: targetEmail,
     };
   }
 

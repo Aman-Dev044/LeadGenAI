@@ -1,10 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Bot, Copy, MoreHorizontal, Trash2, ArrowUpRight, Cpu, Sparkles, Wrench, Calendar } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -29,12 +30,32 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'destructive'> = 
 export default function AgentsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user, impersonation, activeTenantId } = useAuthStore();
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+  const { data: tenantsData } = useQuery({
+    queryKey: ['admin-tenants-list'],
+    queryFn: async () => {
+      const res: any = await api.get('/admin/tenants?limit=100');
+      return res?.data?.data || res?.data || [];
+    },
+    enabled: !!isOwner,
+  });
+  const tenantMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (tenantsData || []).forEach((t: any) => {
+      if (!t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')) {
+        map.set(t._id, t);
+      }
+    });
+    return map;
+  }, [tenantsData]);
+
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', description: '', systemPrompt: '', welcomeMessage: 'Hi! How can I help you today?' });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['agents'],
+    queryKey: ['agents', activeTenantId],
     queryFn: () => api.get<any>('/agents'),
   });
 
@@ -136,7 +157,14 @@ export default function AgentsPage() {
                           <Bot className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-semibold leading-tight">{agent.name}</p>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="truncate font-semibold leading-tight">{agent.name}</p>
+                            {isOwner && (agent as any).tenantId && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                                🏢 {tenantMap.get((agent as any).tenantId)?.name || 'Tenant'}
+                              </span>
+                            )}
+                          </div>
                           <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                             {agent.description || 'No description'}
                           </p>

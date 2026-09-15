@@ -6,8 +6,11 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, Mail, Phone, Building2, Globe, Tag, MessageSquare, Pencil, Trash2, X, Plus,
   Activity, StickyNote, Flame, MapPin, Megaphone, Clock, CheckCircle2, UserRound, ArrowRight,
+  Sparkles, Mic, Volume2, VolumeX, Copy, Check, ExternalLink, RefreshCw, Briefcase, Target,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
+import { perms } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,11 +75,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const role = useAuthStore((s) => s.user?.role);
+  const canEdit = perms.editLead(role);
+  const canDelete = perms.deleteLead(role);
+  const canReassign = perms.reassignLead(role);
   const [note, setNote] = useState('');
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '' });
+
+  // Voice note and dossier states
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [copiedPitch, setCopiedPitch] = useState(false);
+  const [copiedVoiceScript, setCopiedVoiceScript] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -112,6 +124,54 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     },
     onError: (err: any) => toast.error(err.message || 'Failed to add note'),
   });
+
+  const generateDossierMutation = useMutation({
+    mutationFn: () => api.post<any>(`/leads/${id}/dossier`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-activities', id] });
+      toast.success('AI Lead Dossier generated successfully!');
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to generate dossier'),
+  });
+
+  const generateVoiceNoteMutation = useMutation({
+    mutationFn: () => api.post<any>(`/leads/${id}/voice-note`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lead', id] });
+      queryClient.invalidateQueries({ queryKey: ['lead-activities', id] });
+      toast.success('WhatsApp Voice Note script generated!');
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to generate voice note script'),
+  });
+
+  const playVoicePreview = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.error('Voice synthesis not supported in this browser');
+      return;
+    }
+    if (isPlayingVoice) {
+      window.speechSynthesis.cancel();
+      setIsPlayingVoice(false);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[*_~#]/g, '').trim();
+    const utter = new SpeechSynthesisUtterance(clean);
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const natural = voices.find(
+      (v) =>
+        v.lang.startsWith('en') &&
+        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Zira')),
+    );
+    if (natural) utter.voice = natural;
+    utter.onstart = () => setIsPlayingVoice(true);
+    utter.onend = () => setIsPlayingVoice(false);
+    utter.onerror = () => setIsPlayingVoice(false);
+    window.speechSynthesis.speak(utter);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/leads/${id}`),
@@ -199,12 +259,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <ArrowLeft className="h-4 w-4" /> Back to Leads
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={openEdit}>
-            <Pencil className="h-4 w-4" /> Edit
-          </Button>
-          <Button variant="outline" size="sm" className="text-rose-600 hover:text-rose-600 hover:bg-rose-500/10 hover:border-rose-500/40" onClick={() => setShowDelete(true)}>
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={openEdit}>
+              <Pencil className="h-4 w-4" /> Edit
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="outline" size="sm" className="text-rose-600 hover:text-rose-600 hover:bg-rose-500/10 hover:border-rose-500/40" onClick={() => setShowDelete(true)}>
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          )}
         </div>
       </div>
 
@@ -295,14 +359,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="flex flex-wrap items-center gap-2">
                   {(lead.tags || []).length === 0 && <span className="text-sm text-muted-foreground">No tags yet</span>}
                   {(lead.tags || []).map((tag: string) => (
-                    <Badge key={tag} variant="secondary" className="normal-case pr-1">
+                    <Badge key={tag} variant="secondary" className={canEdit ? 'normal-case pr-1' : 'normal-case'}>
                       {tag}
-                      <button onClick={() => removeTag(tag)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-rose-500/15 hover:text-rose-600 cursor-pointer" aria-label={`Remove ${tag}`}>
-                        <X className="h-3 w-3" />
-                      </button>
+                      {canEdit && (
+                        <button onClick={() => removeTag(tag)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-rose-500/15 hover:text-rose-600 cursor-pointer" aria-label={`Remove ${tag}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </Badge>
                   ))}
-                  <div className="flex gap-1.5">
+                  {canEdit && <div className="flex gap-1.5">
                     <Input
                       placeholder="Add tag…"
                       value={newTag}
@@ -313,9 +379,286 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <Button size="sm" variant="soft" className="h-8" onClick={addTag} disabled={!newTag.trim()}>
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
-                  </div>
+                  </div>}
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Point 3: AI Lead Dossier & Buyer Intelligence Cheat Sheet */}
+          <Card className="border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.04] via-card to-card">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <CardTitle className="text-base font-semibold">AI Lead Dossier & Buyer Intelligence</CardTitle>
+                  <Badge variant="outline" className="border-indigo-500/30 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold uppercase tracking-wider">
+                    Deal Cheat Sheet
+                  </Badge>
+                </div>
+                <CardDescription>
+                  Deep synthesis of company profile, buyer intent, and personalized closing angles.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-indigo-500/30 hover:bg-indigo-500/10 text-xs font-medium"
+                onClick={() => generateDossierMutation.mutate()}
+                disabled={generateDossierMutation.isPending}
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', generateDossierMutation.isPending && 'animate-spin')} />
+                {lead.dossier ? 'Refresh Dossier' : 'Generate Dossier'}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-1">
+              {lead.dossier ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {lead.dossier.industry && (
+                      <Badge variant="secondary" className="gap-1.5 py-1 px-2.5">
+                        <Briefcase className="h-3 w-3 text-muted-foreground" />
+                        <span>Industry: <strong>{lead.dossier.industry}</strong></span>
+                      </Badge>
+                    )}
+                    {lead.dossier.estimatedSize && (
+                      <Badge variant="secondary" className="gap-1.5 py-1 px-2.5">
+                        <Building2 className="h-3 w-3 text-muted-foreground" />
+                        <span>Scale: <strong>{lead.dossier.estimatedSize}</strong></span>
+                      </Badge>
+                    )}
+                    {lead.dossier.buyerIntent && (
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1.5 py-1 px-2.5">
+                        <Target className="h-3 w-3" />
+                        <span>{lead.dossier.buyerIntent}</span>
+                      </Badge>
+                    )}
+                  </div>
+
+                  {lead.dossier.companySummary && (
+                    <div className="rounded-xl border bg-muted/40 p-3.5 text-sm leading-relaxed">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Company Profile</p>
+                      <p className="text-foreground/90">{lead.dossier.companySummary}</p>
+                    </div>
+                  )}
+
+                  {lead.dossier.painPoints && lead.dossier.painPoints.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Target Pain Points</p>
+                      <ul className="grid gap-2 sm:grid-cols-2">
+                        {lead.dossier.painPoints.map((pt: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-2 text-xs rounded-lg border bg-background/60 p-2.5 text-foreground/80">
+                            <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                            <span>{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {lead.dossier.dealClosingPitch && (
+                    <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.07] p-3.5 text-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5" /> High-Conversion Closing Pitch
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-500/15"
+                          onClick={() => {
+                            navigator.clipboard.writeText(lead.dossier.dealClosingPitch);
+                            setCopiedPitch(true);
+                            setTimeout(() => setCopiedPitch(false), 2000);
+                            toast.success('Pitch copied to clipboard!');
+                          }}
+                        >
+                          {copiedPitch ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copiedPitch ? 'Copied' : 'Copy Pitch'}
+                        </Button>
+                      </div>
+                      <p className="text-foreground italic text-xs leading-relaxed">
+                        "{lead.dossier.dealClosingPitch}"
+                      </p>
+                    </div>
+                  )}
+
+                  {lead.dossier.recommendedAction && (
+                    <div className="flex items-center gap-2 rounded-lg border bg-emerald-500/[0.06] border-emerald-500/20 px-3.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                      <span><strong>Recommended Action:</strong> {lead.dossier.recommendedAction}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-indigo-500/30 bg-indigo-500/[0.02] p-6 text-center">
+                  <Sparkles className="h-8 w-8 text-indigo-500/70 mb-2" />
+                  <p className="text-sm font-semibold">Generate AI Buyer Dossier</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
+                    Instant deep synthesis of company background, pain points, and a tailored closing pitch for {fullName}.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                    onClick={() => generateDossierMutation.mutate()}
+                    disabled={generateDossierMutation.isPending}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {generateDossierMutation.isPending ? 'Analyzing Prospect...' : 'Generate Executive Dossier'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Point 4: WhatsApp Personalized Voice Note Assistant */}
+          <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-card to-card">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    <Mic className="h-4 w-4" />
+                  </div>
+                  <CardTitle className="text-base font-semibold">WhatsApp Personalized Voice Note Assistant</CardTitle>
+                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
+                    1-Click Audio Closer
+                  </Badge>
+                </div>
+                <CardDescription>
+                  Generates tailored 30-40s spoken audio scripts to record on WhatsApp with 1-click web chat launcher.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {lead.phone && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium"
+                    asChild
+                  >
+                    <a
+                      href={`https://wa.me/${(lead.phone || '').replace(/[^\d]/g, '')}?text=${encodeURIComponent(
+                        `Hi ${lead.firstName || 'there'}, thanks for reaching out! Just sent you a quick personalized voice note regarding your enquiry.`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open WhatsApp
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-500/30 hover:bg-emerald-500/10 text-xs font-medium"
+                  onClick={() => generateVoiceNoteMutation.mutate()}
+                  disabled={generateVoiceNoteMutation.isPending}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', generateVoiceNoteMutation.isPending && 'animate-spin')} />
+                  {lead.voiceNoteScript ? 'Regenerate Script' : 'Generate Script'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-1">
+              {lead.voiceNoteScript ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      {lead.voiceNoteScript.angle && (
+                        <Badge variant="secondary" className="font-medium">
+                          Strategy: {lead.voiceNoteScript.angle}
+                        </Badge>
+                      )}
+                      {lead.voiceNoteScript.durationEstimate && (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          <Clock className="h-3 w-3" /> {lead.voiceNoteScript.durationEstimate} duration
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn('h-7 text-xs gap-1.5', isPlayingVoice && 'bg-emerald-500/10 text-emerald-600 border-emerald-500/40')}
+                        onClick={() => playVoicePreview(lead.voiceNoteScript?.script || '')}
+                      >
+                        {isPlayingVoice ? <VolumeX className="h-3.5 w-3.5 text-rose-500" /> : <Volume2 className="h-3.5 w-3.5 text-emerald-500" />}
+                        {isPlayingVoice ? 'Stop Audio' : 'Preview AI Voice'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          navigator.clipboard.writeText(lead.voiceNoteScript?.script || '');
+                          setCopiedVoiceScript(true);
+                          setTimeout(() => setCopiedVoiceScript(false), 2000);
+                          toast.success('Script copied to clipboard!');
+                        }}
+                      >
+                        {copiedVoiceScript ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedVoiceScript ? 'Copied' : 'Copy Script'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Speech script body */}
+                  <div className="relative rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 text-sm leading-relaxed">
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                      <Mic className="h-3.5 w-3.5" /> Voice Script (Read aloud or record into WhatsApp)
+                    </p>
+                    <p className="text-foreground/90 whitespace-pre-wrap font-sans text-xs sm:text-sm">
+                      "{lead.voiceNoteScript.script}"
+                    </p>
+                  </div>
+
+                  {/* Direct Action Guide */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3 text-xs">
+                    <div className="text-muted-foreground">
+                      💡 <strong>Pro Tip:</strong> WhatsApp voice notes have a <strong>4.2x higher response rate</strong> than text cold messages!
+                    </div>
+                    {lead.phone ? (
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 shadow-sm gap-1.5"
+                        asChild
+                      >
+                        <a
+                          href={`https://wa.me/${(lead.phone || '').replace(/[^\d]/g, '')}?text=${encodeURIComponent(
+                            `Hi ${lead.firstName || 'there'}, thanks for reaching out! Just sent you a quick voice note regarding your enquiry.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" /> Launch WhatsApp Web Now
+                        </a>
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">Add phone number to unlock 1-click WhatsApp launch</span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-emerald-500/30 bg-emerald-500/[0.02] p-6 text-center">
+                  <Mic className="h-8 w-8 text-emerald-500/70 mb-2" />
+                  <p className="text-sm font-semibold">Generate WhatsApp Voice Note Script</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
+                    Create a personalized 35-second voice note script with 1-click WhatsApp web launcher for {fullName}.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    onClick={() => generateVoiceNoteMutation.mutate()}
+                    disabled={generateVoiceNoteMutation.isPending}
+                  >
+                    <Mic className="h-4 w-4" />
+                    {generateVoiceNoteMutation.isPending ? 'Writing Script...' : 'Generate Voice Note Script'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -385,14 +728,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <TabsContent value="notes">
               <Card>
                 <CardContent className="p-6 space-y-5">
-                  <div className="space-y-2">
-                    <Textarea placeholder="Write a note about this lead…" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-                    <div className="flex justify-end">
-                      <Button size="sm" onClick={() => addNoteMutation.mutate(note)} disabled={!note.trim() || addNoteMutation.isPending}>
-                        <Plus className="h-4 w-4" /> {addNoteMutation.isPending ? 'Adding...' : 'Add Note'}
-                      </Button>
+                  {canEdit && (
+                    <div className="space-y-2">
+                      <Textarea placeholder="Write a note about this lead…" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+                      <div className="flex justify-end">
+                        <Button size="sm" onClick={() => addNoteMutation.mutate(note)} disabled={!note.trim() || addNoteMutation.isPending}>
+                          <Plus className="h-4 w-4" /> {addNoteMutation.isPending ? 'Adding...' : 'Add Note'}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {noteActivities.length === 0 ? (
                     <EmptyState compact icon={StickyNote} title="No notes yet" description="Keep context for your team by adding a note above." />
                   ) : (
@@ -416,13 +761,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           {/* Quick Actions */}
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle>Update lead</CardTitle>
-              <CardDescription>Changes save instantly.</CardDescription>
+              <CardTitle>{canEdit ? 'Update lead' : 'Lead status'}</CardTitle>
+              <CardDescription>{canEdit ? 'Changes save instantly.' : 'Read-only for your role.'}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={lead.status} onValueChange={(v) => updateMutation.mutate({ status: v })}>
+                <Select value={lead.status} onValueChange={(v) => updateMutation.mutate({ status: v })} disabled={!canEdit}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'].map((s) => (
@@ -433,7 +778,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="space-y-2">
                 <Label>Temperature</Label>
-                <Select value={lead.temperature} onValueChange={(v) => updateMutation.mutate({ temperature: v })}>
+                <Select value={lead.temperature} onValueChange={(v) => updateMutation.mutate({ temperature: v })} disabled={!canEdit}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="hot">Hot</SelectItem>
@@ -444,7 +789,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </div>
               <div className="space-y-2">
                 <Label>Assigned To</Label>
-                <Select value={lead.assignedTo || ''} onValueChange={(v) => updateMutation.mutate({ assignedTo: v })}>
+                <Select value={lead.assignedTo || ''} onValueChange={(v) => updateMutation.mutate({ assignedTo: v })} disabled={!canReassign}>
                   <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
                     {users.map((u: any) => (

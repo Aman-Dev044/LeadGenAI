@@ -36,6 +36,8 @@ export function useRealtimeNotifications() {
         setHasNewLead(true);
         setNewLeadsCount((prev) => prev + 1);
         queryClient.invalidateQueries({ queryKey: ['leads'] });
+      } else if (notification.type === 'appointment') {
+        queryClient.invalidateQueries({ queryKey: ['appointments'] });
       }
 
       // Invalidate notifications query so the list refreshes

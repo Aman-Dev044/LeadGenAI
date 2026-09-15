@@ -7,6 +7,7 @@ import { ConversationSchema } from '../../schemas/conversation.schema';
 import { AgentSchema } from '../../schemas/agent.schema';
 import { MessageSchema } from '../../schemas/message.schema';
 import { UserSchema } from '../../schemas/user.schema';
+import { AppointmentSchema } from '../../schemas/appointment.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UserSchema } from '../../schemas/user.schema';
       { name: 'Agent', schema: AgentSchema },
       { name: 'Message', schema: MessageSchema },
       { name: 'User', schema: UserSchema },
+      { name: 'Appointment', schema: AppointmentSchema },
     ]),
   ],
   controllers: [DashboardController],

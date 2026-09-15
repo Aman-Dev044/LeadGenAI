@@ -9,11 +9,13 @@ import { PlatformBanner } from '@/components/layout/platform-banner';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { Loading } from '@/components/shared/loading';
+import { canAccessPath, homePathFor } from '@/lib/permissions';
+import { AccessDenied } from '@/components/shared/access-denied';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, hasHydrated } = useAuthStore();
+  const { isAuthenticated, hasHydrated, user, impersonation } = useAuthStore();
   const { sidebarOpen, setSidebarOpen } = useUIStore();
 
   // Wait for the persisted auth state to load before deciding; the server render
@@ -41,6 +43,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  // Role gate: owner console has its own layout; every other dashboard route is checked here
+  // so a typed URL never renders a page the role cannot use.
+  const isOwnerConsole = pathname.startsWith('/dashboard/admin');
+  const effectiveRole = user?.role === 'SUPER_ADMIN' && impersonation ? 'ADMIN' : user?.role;
+  const allowed = isOwnerConsole || canAccessPath(effectiveRole, pathname);
+
   return (
     <div className="min-h-screen">
       <Sidebar />
@@ -49,7 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Header />
         <main className="flex-1 p-4 md:p-6 lg:p-8">
           <div key={pathname} className="mx-auto w-full max-w-[1600px] page-enter">
-            <ErrorBoundary>{children}</ErrorBoundary>
+            <ErrorBoundary>{allowed ? children : <AccessDenied homeHref={homePathFor(effectiveRole)} />}</ErrorBoundary>
           </div>
         </main>
       </div>

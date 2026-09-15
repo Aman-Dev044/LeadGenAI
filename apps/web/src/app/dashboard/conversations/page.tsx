@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { MessageSquare, Bot, UserRound, Sparkles, Radio, Smile, Frown, Meh } from 'lucide-react';
+import { MessageSquare, Bot, UserRound, Sparkles, Radio, Smile, Frown, Meh, MapPin } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -57,12 +58,32 @@ function gradientFor(id: string) {
 
 export default function ConversationsPage() {
   const router = useRouter();
+  const { user, impersonation, activeTenantId } = useAuthStore();
+  const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
+  const { data: tenantsData } = useQuery({
+    queryKey: ['admin-tenants-list'],
+    queryFn: async () => {
+      const res: any = await api.get('/admin/tenants?limit=100');
+      return res?.data?.data || res?.data || [];
+    },
+    enabled: !!isOwner,
+  });
+  const tenantMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (tenantsData || []).forEach((t: any) => {
+      if (!t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')) {
+        map.set(t._id, t);
+      }
+    });
+    return map;
+  }, [tenantsData]);
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState('');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', page, limit, status],
+    queryKey: ['conversations', activeTenantId, page, limit, status],
     queryFn: () => api.get<any>('/conversations', {
       page, limit, status: status || undefined,
     }),
@@ -82,17 +103,57 @@ export default function ConversationsPage() {
       key: 'visitorId', label: 'Visitor',
       render: (c: Conversation) => {
         const vid = c.visitorId || '';
+        const vInfo: any = c.visitorInfo || {};
+        const lead: any = typeof c.leadId === 'object' && c.leadId ? c.leadId : null;
+
+        const rawName = [vInfo.firstName, vInfo.lastName].filter(Boolean).join(' ')
+          || vInfo.name
+          || (lead ? [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.name : '')
+          || '';
+
+        const hasName = Boolean(rawName.trim()) && rawName.trim().toLowerCase() !== 'visitor';
+        const displayName = hasName ? rawName.trim() : `Visitor ${vid.slice(0, 8)}`;
+
+        const initials = hasName
+          ? rawName.trim().split(/\s+/).map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()
+          : (vid.slice(0, 2).toUpperCase() || 'V');
+
+        const locationParts = [
+          vInfo.city || lead?.city,
+          vInfo.region || lead?.state,
+          vInfo.country || lead?.country,
+        ].filter(Boolean);
+
+        const locationStr = locationParts.length > 0
+          ? locationParts.join(', ')
+          : (vInfo.timezone ? vInfo.timezone.replace('_', ' ') : 'Location unknown');
+
+        const isKnownLocation = locationStr !== 'Location unknown';
+
         return (
           <div className="flex items-center gap-3 min-w-0">
-            <Avatar className="h-9 w-9">
-              <AvatarFallback className={cn('bg-gradient-to-br', gradientFor(vid))}>
-                {vid.slice(0, 2).toUpperCase() || 'V'}
+            <Avatar className="h-9 w-9 shrink-0">
+              <AvatarFallback className={cn('bg-gradient-to-br font-semibold text-xs text-white', gradientFor(hasName ? rawName : vid))}>
+                {initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <div className="font-semibold truncate">Visitor <span className="font-mono text-xs font-normal text-muted-foreground">{vid.slice(0, 8)}</span></div>
-              <div className="text-xs text-muted-foreground truncate">
-                {[c.visitorInfo?.city, c.visitorInfo?.country].filter(Boolean).join(', ') || 'Location unknown'}
+              <div className="font-semibold truncate flex items-center gap-1.5">
+                <span>{displayName}</span>
+                {hasName && (
+                  <span className="font-mono text-[10px] font-normal text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded border border-border/40">
+                    {vid.slice(0, 8)}
+                  </span>
+                )}
+                {isOwner && (c as any).tenantId && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                    🏢 {tenantMap.get((c as any).tenantId)?.name || 'Tenant'}
+                  </span>
+                )}
+              </div>
+              <div className={cn('text-xs truncate flex items-center gap-1 mt-0.5', isKnownLocation ? 'text-slate-600 dark:text-slate-300 font-medium' : 'text-muted-foreground')}>
+                <MapPin className={cn('h-3 w-3 shrink-0', isKnownLocation ? 'text-emerald-500' : 'text-muted-foreground/60')} />
+                <span>{locationStr}</span>
               </div>
             </div>
           </div>

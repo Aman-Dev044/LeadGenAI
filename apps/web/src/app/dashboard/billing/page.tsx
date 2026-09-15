@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Check, Zap, XCircle, FileText, CreditCard, ArrowUp, ArrowDown, Sparkles, CalendarDays, Receipt, Gauge, Crown, Rocket, Building2 } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -44,6 +45,9 @@ const invoiceStatusVariant: Record<string, 'default' | 'success' | 'warning' | '
 export default function BillingPage() {
   const queryClient = useQueryClient();
 
+  // Monthly / Yearly interval toggle
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
+
   // Plan change confirmation
   const [changePlan, setChangePlan] = useState<{ plan: string; direction: 'upgrade' | 'downgrade' } | null>(null);
 
@@ -55,13 +59,15 @@ export default function BillingPage() {
   const [showInvoices, setShowInvoices] = useState(false);
   const [invoicePage, setInvoicePage] = useState(1);
 
+  const activeTenantId = useAuthStore((s) => s.activeTenantId);
+
   const { data: subData, isLoading } = useQuery({
-    queryKey: ['billing', 'subscription'],
+    queryKey: ['billing', activeTenantId, 'subscription'],
     queryFn: () => api.get<any>('/billing/current'),
   });
 
   const { data: usageData } = useQuery({
-    queryKey: ['billing', 'usage'],
+    queryKey: ['billing', activeTenantId, 'usage'],
     queryFn: () => api.get<any>('/billing/usage'),
   });
 
@@ -71,15 +77,17 @@ export default function BillingPage() {
   });
 
   const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
-    queryKey: ['billing', 'invoices', invoicePage],
+    queryKey: ['billing', activeTenantId, 'invoices', invoicePage],
     queryFn: () => api.get<any>('/billing/invoices', { page: invoicePage, limit: 10 }),
     enabled: showInvoices,
   });
 
   const upgradeMutation = useMutation({
-    mutationFn: (plan: string) => api.patch('/billing/upgrade', { plan }),
+    mutationFn: ({ plan, interval }: { plan: string; interval: 'monthly' | 'yearly' }) =>
+      api.patch('/billing/upgrade', { plan, interval }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing'] });
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
       setChangePlan(null);
       toast.success('Plan upgraded successfully');
     },
@@ -87,11 +95,22 @@ export default function BillingPage() {
   });
 
   const downgradeMutation = useMutation({
-    mutationFn: (plan: string) => api.patch('/billing/downgrade', { plan }),
+    mutationFn: ({ plan, interval }: { plan: string; interval: 'monthly' | 'yearly' }) =>
+      api.patch('/billing/downgrade', { plan, interval }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['billing'] });
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
       setChangePlan(null);
       toast.success('Plan downgraded');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const payInvoiceMutation = useMutation({
+    mutationFn: (invoiceId: string) => api.patch(`/billing/invoices/${invoiceId}/pay`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing'] });
+      toast.success('Invoice marked as paid');
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -119,9 +138,12 @@ export default function BillingPage() {
   const subStatus = subscription.status || 'active';
 
   // Build plans with backend data if available
-  const getPlanPrice = (plan: string) => {
+  const getPlanPrice = (plan: string, interval: 'monthly' | 'yearly' = billingInterval) => {
     const bp = Array.isArray(backendPlans) ? backendPlans.find((p: any) => p.name === plan) : null;
-    return bp?.priceMonthly ?? { free: 0, starter: 1999, professional: 4999, enterprise: 14999 }[plan] ?? 0;
+    if (interval === 'yearly') {
+      return bp?.priceYearly ?? { free: 0, starter: 279, professional: 759, enterprise: 1910 }[plan] ?? 0;
+    }
+    return bp?.priceMonthly ?? { free: 0, starter: 29, professional: 79, enterprise: 199 }[plan] ?? 0;
   };
 
   const getPlanLimits = (plan: string) => {
@@ -132,9 +154,9 @@ export default function BillingPage() {
   const handlePlanChange = () => {
     if (!changePlan) return;
     if (changePlan.direction === 'upgrade') {
-      upgradeMutation.mutate(changePlan.plan);
+      upgradeMutation.mutate({ plan: changePlan.plan, interval: billingInterval });
     } else {
-      downgradeMutation.mutate(changePlan.plan);
+      downgradeMutation.mutate({ plan: changePlan.plan, interval: billingInterval });
     }
   };
 
@@ -274,11 +296,51 @@ export default function BillingPage() {
         </Card>
       </div>
 
-      {/* Plans Grid */}
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold tracking-tight">Available plans</h3>
-        <p className="text-sm text-muted-foreground">Upgrade or downgrade any time. Changes apply immediately.</p>
+      {/* Plans Header & Sliding Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <div>
+          <h3 className="text-lg font-semibold tracking-tight">Available plans</h3>
+          <p className="text-sm text-muted-foreground">Upgrade or downgrade any time. Changes apply immediately.</p>
+        </div>
+
+        {/* Liquid sliding pill toggle (matching Login page toggle style) */}
+        <div className="relative flex w-full max-w-[270px] p-1.5 rounded-full bg-slate-200/85 dark:bg-slate-800/90 border border-slate-300/70 dark:border-slate-700/80 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.08)] backdrop-blur-md self-start sm:self-auto">
+          <div
+            className={cn(
+              'absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] rounded-full bg-white/95 dark:bg-slate-900/95 border border-white/80 dark:border-white/10 shadow-[0_2px_10px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]',
+              billingInterval === 'monthly' ? 'left-1.5' : 'left-[calc(50%+1.5px)]',
+            )}
+          />
+          <button
+            type="button"
+            onClick={() => setBillingInterval('monthly')}
+            className={cn(
+              'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none',
+              billingInterval === 'monthly'
+                ? 'text-slate-900 dark:text-white font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
+            )}
+          >
+            <span>Monthly</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingInterval('yearly')}
+            className={cn(
+              'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none',
+              billingInterval === 'yearly'
+                ? 'text-slate-900 dark:text-white font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
+            )}
+          >
+            <span>Yearly</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 leading-none">
+              -20%
+            </span>
+          </button>
+        </div>
       </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
         {PLAN_ORDER.map((plan) => {
           const planIndex = PLAN_ORDER.indexOf(plan);
@@ -289,6 +351,7 @@ export default function BillingPage() {
           const meta = PLAN_META[plan];
           const PlanIcon = meta?.icon || Sparkles;
           const highlight = plan === 'professional' && !isCurrent;
+          const planPrice = getPlanPrice(plan, billingInterval);
 
           return (
             <Card
@@ -316,8 +379,22 @@ export default function BillingPage() {
                   </div>
                 </div>
                 <div className="pt-3">
-                  <span className="text-3xl font-bold tabular tracking-tight">{formatCurrency(getPlanPrice(plan))}</span>
-                  <span className="text-sm text-muted-foreground">/mo</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold tabular tracking-tight">{formatCurrency(planPrice)}</span>
+                    <span className="text-sm text-muted-foreground">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span>
+                    {billingInterval === 'yearly' && plan !== 'free' && (
+                      <Badge variant="success" className="text-[10px] ml-1 py-0 px-1.5 font-semibold">Save 20%</Badge>
+                    )}
+                  </div>
+                  {billingInterval === 'yearly' && plan !== 'free' ? (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      billed annually (${Math.round(planPrice / 12).toLocaleString()}/mo)
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {plan === 'free' ? 'Free forever' : 'billed monthly'}
+                    </p>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="flex-1">
@@ -363,7 +440,7 @@ export default function BillingPage() {
             <DialogTitle>{changePlan?.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} Plan</DialogTitle>
             <DialogDescription>
               {changePlan?.direction === 'upgrade'
-                ? `Are you sure you want to upgrade from ${currentPlan} to ${changePlan?.plan}? You will be charged ${formatCurrency(getPlanPrice(changePlan?.plan || ''))}/mo.`
+                ? `Are you sure you want to upgrade from ${currentPlan} to ${changePlan?.plan}? You will be charged ${formatCurrency(getPlanPrice(changePlan?.plan || '', billingInterval))}/${billingInterval === 'yearly' ? 'yr' : 'mo'}.`
                 : `Are you sure you want to downgrade from ${currentPlan} to ${changePlan?.plan}? Your limits will be reduced. If current usage exceeds the new limits, some features may be restricted.`
               }
             </DialogDescription>
@@ -450,9 +527,24 @@ export default function BillingPage() {
                     <TableRow key={inv._id}>
                       <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
                       <TableCell><Badge variant="outline">{inv.plan}</Badge></TableCell>
-                      <TableCell className="font-semibold tabular">{formatCurrency(inv.amount, inv.currency || 'INR')}</TableCell>
+                      <TableCell className="font-semibold tabular">{formatCurrency(inv.amount, inv.currency || 'USD')}</TableCell>
                       <TableCell>
-                        <Badge variant={invoiceStatusVariant[inv.status] || 'default'} dot>{inv.status}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={invoiceStatusVariant[inv.status] || 'default'} dot>
+                            {inv.status}
+                          </Badge>
+                          {inv.status === 'pending' && (
+                            <Button
+                              size="sm"
+                              variant="soft"
+                              className="h-6 text-[11px] px-2"
+                              onClick={() => payInvoiceMutation.mutate(inv._id)}
+                              disabled={payInvoiceMutation.isPending}
+                            >
+                              {payInvoiceMutation.isPending ? 'Paying...' : 'Pay Now'}
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {inv.periodStart && inv.periodEnd

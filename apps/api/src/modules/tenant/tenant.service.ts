@@ -10,6 +10,15 @@ export class TenantService {
   ) {}
 
   async findById(tenantId: string) {
+    if (!tenantId || tenantId === 'all') {
+      const defaultTenant =
+        (await this.tenantModel.findOne({ isPlatformOwner: true })) ||
+        (await this.tenantModel.findOne({}));
+      if (!defaultTenant) {
+        throw new NotFoundException('Tenant not found');
+      }
+      return defaultTenant;
+    }
     const tenant = await this.tenantModel.findById(tenantId);
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
@@ -18,8 +27,19 @@ export class TenantService {
   }
 
   async update(tenantId: string, dto: UpdateTenantDto) {
+    let targetId = tenantId;
+    if (!targetId || targetId === 'all') {
+      const defaultTenant =
+        (await this.tenantModel.findOne({ isPlatformOwner: true })) ||
+        (await this.tenantModel.findOne({}));
+      if (!defaultTenant) {
+        throw new NotFoundException('Tenant not found');
+      }
+      targetId = String(defaultTenant._id);
+    }
+
     const tenant = await this.tenantModel.findByIdAndUpdate(
-      tenantId,
+      targetId,
       { $set: dto },
       { new: true },
     );
@@ -30,10 +50,7 @@ export class TenantService {
   }
 
   async getUsage(tenantId: string) {
-    const tenant = await this.tenantModel.findById(tenantId);
-    if (!tenant) {
-      throw new NotFoundException('Tenant not found');
-    }
+    const tenant = await this.findById(tenantId);
 
     return {
       plan: tenant.plan,
@@ -44,7 +61,14 @@ export class TenantService {
   }
 
   async getAllowedOrigins(tenantId: string): Promise<string[]> {
-    const tenant = await this.tenantModel.findById(tenantId).select('allowedOrigins domain');
+    let tenant;
+    if (!tenantId || tenantId === 'all') {
+      tenant =
+        (await this.tenantModel.findOne({ isPlatformOwner: true }).select('allowedOrigins domain')) ||
+        (await this.tenantModel.findOne({}).select('allowedOrigins domain'));
+    } else {
+      tenant = await this.tenantModel.findById(tenantId).select('allowedOrigins domain');
+    }
     if (!tenant) return [];
     const origins = [...(tenant.allowedOrigins || [])];
     if (tenant.domain) {

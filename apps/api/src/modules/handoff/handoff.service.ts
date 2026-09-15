@@ -48,9 +48,14 @@ export class HandoffService {
     return handoff;
   }
 
-  async findAll(tenantId: string, paginationDto: PaginationDto, status?: string) {
+  async findAll(tenantId: string, paginationDto: PaginationDto, status?: string, forUserId?: string) {
     const query: any = { tenantId };
     if (status) query.status = status;
+    if (forUserId) {
+      // Pending (unclaimed) handoffs are visible to every salesperson so they can accept them;
+      // everything else is limited to what this user owns.
+      query.$or = [{ status: 'pending' }, { assignedTo: forUserId }];
+    }
     return paginate(this.handoffModel, query, paginationDto);
   }
 

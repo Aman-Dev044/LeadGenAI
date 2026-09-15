@@ -23,7 +23,7 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export const TENANT_STATUSES = ['active', 'suspended', 'trial', 'cancelled'] as const;
 export const TENANT_PLANS = ['free', 'starter', 'professional', 'enterprise'] as const;
-export const ALL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER'] as const;
+export const ALL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALESPERSON'] as const;
 
 // ---------------------------------------------------------------- tenants
 

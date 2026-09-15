@@ -4,7 +4,7 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALESPERSON' | 'VIEWER';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON';
   isActive: boolean;
   avatar?: string;
   phone?: string;
@@ -54,7 +54,24 @@ export interface Agent {
   systemPrompt: string;
   welcomeMessage: string;
   aiConfig: { provider: string; model: string; temperature: number; maxTokens: number };
-  widgetConfig: { primaryColor: string; headerText: string; placeholder: string; position: string; avatarUrl?: string };
+  widgetConfig: {
+    primaryColor: string;
+    headerText: string;
+    placeholder: string;
+    position: string;
+    avatarUrl?: string;
+    whatsappEnabled?: boolean;
+    whatsappNumber?: string;
+    whatsappDefaultMessage?: string;
+    proactivePromptEnabled?: boolean;
+    proactiveDelaySeconds?: number;
+    proactiveMessage?: string;
+    exitIntentEnabled?: boolean;
+    exitIntentMessage?: string;
+    defaultVoiceName?: string;
+    defaultVoiceRate?: number;
+    defaultVoicePitch?: number;
+  };
   enabledTools: string[];
   leadCaptureFields: string[];
   handoffConfig?: { enabled: boolean; triggerKeywords: string[]; assignTo?: string; notifyChannels: string[] };
@@ -84,6 +101,22 @@ export interface Lead {
     url?: string; referrer?: string; utmSource?: string; utmMedium?: string;
     utmCampaign?: string; country?: string; city?: string;
   };
+  dossier?: {
+    companySummary?: string;
+    estimatedSize?: string;
+    industry?: string;
+    buyerIntent?: string;
+    painPoints?: string[];
+    dealClosingPitch?: string;
+    recommendedAction?: string;
+    generatedAt?: string;
+  };
+  voiceNoteScript?: {
+    script?: string;
+    durationEstimate?: string;
+    angle?: string;
+    generatedAt?: string;
+  };
   lastActivityAt?: string;
   convertedAt?: string;
   createdAt: string;
@@ -94,12 +127,26 @@ export interface Conversation {
   _id: string;
   tenantId: string;
   agentId: string;
-  leadId?: string;
+  leadId?: string | { _id?: string; firstName?: string; lastName?: string; email?: string; phone?: string; company?: string; city?: string; country?: string };
   visitorId: string;
   status: 'active' | 'ended' | 'handed_off' | 'archived';
   mode: 'bot' | 'human' | 'hybrid';
   assignedUserId?: string;
-  visitorInfo?: { ip?: string; userAgent?: string; country?: string; city?: string };
+  visitorInfo?: {
+    ip?: string;
+    userAgent?: string;
+    country?: string;
+    countryCode?: string;
+    region?: string;
+    city?: string;
+    timezone?: string;
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+  };
   messageCount: number;
   summary?: string;
   sentiment?: string;
