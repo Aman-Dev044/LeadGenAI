@@ -138,8 +138,11 @@ export class NotificationService {
     });
   }
 
-  async findByUser(tenantId: string, userId: string, unreadOnly = false) {
-    const query: any = { tenantId, userId, channel: 'in_app' };
+  async findByUser(tenantId: string | undefined, userId: string, unreadOnly = false) {
+    const query: any = { userId, channel: 'in_app' };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     if (unreadOnly) {
       query.readAt = null;
     }
@@ -151,29 +154,40 @@ export class NotificationService {
       .lean();
   }
 
-  async markAsRead(tenantId: string, notificationId: string, userId: string) {
+  async markAsRead(tenantId: string | undefined, notificationId: string, userId: string) {
+    const query: any = { _id: notificationId, userId };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     return this.notificationModel.findOneAndUpdate(
-      { _id: notificationId, tenantId, userId },
+      query,
       { readAt: new Date(), status: 'read' },
       { new: true },
     );
   }
 
-  async markAllAsRead(tenantId: string, userId: string) {
+  async markAllAsRead(tenantId: string | undefined, userId: string) {
+    const query: any = { userId, readAt: null };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
     await this.notificationModel.updateMany(
-      { tenantId, userId, readAt: null },
+      query,
       { readAt: new Date(), status: 'read' },
     );
     return { message: 'All notifications marked as read' };
   }
 
-  async getUnreadCount(tenantId: string, userId: string) {
-    const count = await this.notificationModel.countDocuments({
-      tenantId,
+  async getUnreadCount(tenantId: string | undefined, userId: string) {
+    const query: any = {
       userId,
       channel: 'in_app',
       readAt: null,
-    });
+    };
+    if (tenantId && tenantId !== 'all') {
+      query.tenantId = tenantId;
+    }
+    const count = await this.notificationModel.countDocuments(query);
     return { count };
   }
 

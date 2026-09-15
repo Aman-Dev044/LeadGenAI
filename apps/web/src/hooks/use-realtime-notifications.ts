@@ -38,6 +38,10 @@ export function useRealtimeNotifications() {
         queryClient.invalidateQueries({ queryKey: ['leads'] });
       } else if (notification.type === 'appointment') {
         queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      } else if (notification.type === 'deletion_request') {
+        queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
+        queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests-count'] });
+        queryClient.invalidateQueries({ queryKey: ['staff-deletion-requests'] });
       }
 
       // Invalidate notifications query so the list refreshes
@@ -132,11 +136,18 @@ export function useRealtimeNotifications() {
 
     const handleSuperAdminDeletionProcessed = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests-count'] });
       queryClient.invalidateQueries({ queryKey: ['my-deletion-request'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     };
 
-    const handleSuperAdminDeletionRequest = () => {
+    const handleSuperAdminDeletionRequest = (data: any) => {
+      toast.error('New Organization Deletion Request', {
+        description: `${data.userName} requested deletion for organization "${data.tenantName}".`,
+      });
       queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     };
 
     const handleDeletionRejected = (data: any) => {

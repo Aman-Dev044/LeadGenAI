@@ -104,7 +104,7 @@ export class AccountDeletionService {
         const notificationBody = `Admin ${userName} requested deletion for organization "${tenant.name}" (${affectedUsersCount} users affected). Reason: ${dto.reason}`;
 
         for (const sa of superAdmins) {
-          await this.notificationModel.create({
+          const notif = await this.notificationModel.create({
             tenantId: String(sa.tenantId),
             userId: String(sa._id),
             title: notificationTitle,
@@ -119,13 +119,16 @@ export class AccountDeletionService {
               tenantName: tenant.name,
               reason: dto.reason,
               description: dto.description,
+              targetAudience: 'SUPER_ADMIN',
             },
           });
-          this.notificationGateway.sendToUser(String(sa._id), 'notification', {
-            title: notificationTitle,
-            body: notificationBody,
-            requestId: String(request._id),
+          this.notificationGateway.sendToUser(String(sa._id), 'notification:new', notif);
+          const unreadCount = await this.notificationModel.countDocuments({
+            userId: String(sa._id),
+            channel: 'in_app',
+            readAt: null,
           });
+          this.notificationGateway.sendToUser(String(sa._id), 'notification:unread-count', unreadCount);
         }
 
         // Broadcast global superadmin event
@@ -154,7 +157,7 @@ export class AccountDeletionService {
         const notificationBody = `Staff member ${userName} (${user.role}) has requested account deletion. Reason: ${dto.reason}`;
 
         for (const admin of tenantAdmins) {
-          await this.notificationModel.create({
+          const notif = await this.notificationModel.create({
             tenantId: String(user.tenantId),
             userId: String(admin._id),
             title: notificationTitle,
@@ -171,13 +174,17 @@ export class AccountDeletionService {
               userRole: user.role,
               reason: dto.reason,
               description: dto.description,
+              targetAudience: 'TENANT_ADMIN',
             },
           });
-          this.notificationGateway.sendToUser(String(admin._id), 'notification', {
-            title: notificationTitle,
-            body: notificationBody,
-            requestId: String(request._id),
+          this.notificationGateway.sendToUser(String(admin._id), 'notification:new', notif);
+          const unreadCount = await this.notificationModel.countDocuments({
+            tenantId: String(user.tenantId),
+            userId: String(admin._id),
+            channel: 'in_app',
+            readAt: null,
           });
+          this.notificationGateway.sendToUser(String(admin._id), 'notification:unread-count', unreadCount);
         }
 
         // Emit to tenant room so admin dashboard refreshes in real-time

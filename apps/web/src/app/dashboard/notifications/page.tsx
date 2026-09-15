@@ -8,7 +8,7 @@ import {
   MessageSquareOff, AlertTriangle, UserCheck, BookOpen, Mail,
   Smartphone, MessageCircle, Hash, Monitor, Send, BellRing,
   Eye, XCircle, CheckCircle, ChevronRight,
-  CreditCard,
+  CreditCard, UserX,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> =
   assignment: { label: 'Assignment', icon: UserCheck, color: 'bg-violet-500/12 text-violet-600 dark:text-violet-400' },
   kb_processing: { label: 'KB Processing', icon: BookOpen, color: 'bg-teal-500/12 text-teal-600 dark:text-teal-400' },
   billing: { label: 'Billing', icon: CreditCard, color: 'bg-amber-500/14 text-amber-700 dark:text-amber-400' },
+  deletion_request: { label: 'Deletion Request', icon: UserX, color: 'bg-rose-500/14 text-rose-600 dark:text-rose-400' },
 };
 
 function timeAgo(date: string) {
@@ -145,6 +146,8 @@ export default function NotificationsPage() {
       router.push(`/dashboard/leads`);
     } else if (n.type === 'billing') {
       router.push(`/dashboard/billing`);
+    } else if (n.type === 'deletion_request') {
+      router.push(n.data?.targetAudience === 'TENANT_ADMIN' ? '/dashboard/users' : '/dashboard/admin/deletion-requests');
     }
   };
 

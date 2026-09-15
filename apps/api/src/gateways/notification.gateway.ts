@@ -29,7 +29,7 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
 
   private readonly logger = new Logger(NotificationGateway.name);
   private userSockets = new Map<string, Set<string>>();
-  private socketUsers = new Map<string, { userId: string; tenantId: string }>();
+  private socketUsers = new Map<string, { userId: string; tenantId: string; role?: string }>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -54,9 +54,9 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
         this.userSockets.set(userId, new Set());
       }
       this.userSockets.get(userId)!.add(client.id);
-      this.socketUsers.set(client.id, { userId, tenantId: payload.tenantId });
+      this.socketUsers.set(client.id, { userId, tenantId: payload.tenantId, role: payload.role });
 
-      this.logger.log(`User connected to notifications: ${userId}`);
+      this.logger.log(`User connected to notifications: ${userId} (${payload.role || 'USER'})`);
     } catch {
       client.disconnect();
     }
@@ -80,8 +80,12 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
   ) {
     const ctx = this.socketUsers.get(client.id);
     if (ctx && data?.notificationId) {
+      const query: any = { _id: data.notificationId, userId: ctx.userId };
+      if (ctx.role !== 'SUPER_ADMIN' && ctx.tenantId && ctx.tenantId !== 'all') {
+        query.tenantId = ctx.tenantId;
+      }
       await this.notificationModel.updateOne(
-        { _id: data.notificationId, tenantId: ctx.tenantId, userId: ctx.userId },
+        query,
         { $set: { readAt: new Date(), status: 'read' } },
       );
       await this.emitUnreadCount(client, ctx);
@@ -96,13 +100,16 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
     await this.emitUnreadCount(client, ctx);
   }
 
-  private async emitUnreadCount(client: Socket, ctx: { userId: string; tenantId: string }) {
+  private async emitUnreadCount(client: Socket, ctx: { userId: string; tenantId: string; role?: string }) {
     try {
-      const count = await this.notificationModel.countDocuments({
-        tenantId: ctx.tenantId,
+      const query: any = {
         userId: ctx.userId,
         readAt: null,
-      });
+      };
+      if (ctx.role !== 'SUPER_ADMIN' && ctx.tenantId && ctx.tenantId !== 'all') {
+        query.tenantId = ctx.tenantId;
+      }
+      const count = await this.notificationModel.countDocuments(query);
       client.emit('notification:unread-count', count);
     } catch (err) {
       this.logger.warn(`Unread count failed: ${err.message}`);

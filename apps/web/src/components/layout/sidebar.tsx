@@ -10,6 +10,8 @@ import {
   Megaphone, SlidersHorizontal, Activity, ShieldCheck, Plug, UserX, type LucideIcon,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api-client';
 import { useUIStore } from '@/store/ui-store';
 import { useAuthStore } from '@/store/auth-store';
 import { PAGE_ACCESS } from '@/lib/permissions';
@@ -93,7 +95,7 @@ export const ownerNavItems: NavItem[] = [
   { label: 'Usage & Limits', href: '/dashboard/admin/usage', icon: Gauge },
   { label: 'Audit Logs', href: '/dashboard/admin/audit-logs', icon: ScrollText },
   { label: 'Announcements', href: '/dashboard/admin/announcements', icon: Megaphone },
-  { label: 'Deletion Requests', href: '/dashboard/admin/deletion-requests', icon: UserX },
+  { label: 'Deletion Requests', href: '/dashboard/admin/deletion-requests', icon: UserX, badgeKey: 'deletionRequests' },
   { label: 'Platform Settings', href: '/dashboard/admin/settings', icon: SlidersHorizontal },
   { label: 'System Health', href: '/dashboard/admin/system', icon: Activity },
 ];
@@ -128,6 +130,17 @@ export function Sidebar() {
 
   const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
 
+  const { data: adminDeletionData } = useQuery({
+    queryKey: ['admin-deletion-requests-count'],
+    queryFn: async () => {
+      const res: any = await api.get('/account-deletion/admin/requests?status=pending&limit=1');
+      return res?.data?.pendingCount ?? res?.pendingCount ?? 0;
+    },
+    enabled: !!isOwner,
+    refetchInterval: 30_000,
+  });
+  const pendingDeletionCount = typeof adminDeletionData === 'number' ? adminDeletionData : 0;
+
   // Clear badges when active section is viewed
   useEffect(() => {
     if (pathname.startsWith('/dashboard/handoffs')) clearHandoffBadge();
@@ -145,6 +158,9 @@ export function Sidebar() {
     if (key === 'leads' && (hasNewLead || newLeadsCount > 0)) {
       const cnt = newLeadsCount > 0 ? newLeadsCount : 1;
       return { count: cnt, label: cnt > 99 ? '99+' : `${cnt}` };
+    }
+    if (key === 'deletionRequests' && pendingDeletionCount > 0) {
+      return { count: pendingDeletionCount, label: pendingDeletionCount > 99 ? '99+' : `${pendingDeletionCount}` };
     }
     return null;
   };

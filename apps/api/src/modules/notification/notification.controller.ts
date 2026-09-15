@@ -27,12 +27,14 @@ export class NotificationController {
   @Get()
   async findByUser(
     @CurrentTenant() tenantId: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: any,
     @Query('unreadOnly') unreadOnly?: string,
   ) {
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const effectiveTenantId = isSuperAdmin ? undefined : tenantId;
     return this.notificationService.findByUser(
-      tenantId,
-      userId,
+      effectiveTenantId,
+      user?.userId || user?._id || user?.id,
       unreadOnly === 'true',
     );
   }
@@ -40,25 +42,41 @@ export class NotificationController {
   @Get('unread-count')
   async getUnreadCount(
     @CurrentTenant() tenantId: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: any,
   ) {
-    return this.notificationService.getUnreadCount(tenantId, userId);
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const effectiveTenantId = isSuperAdmin ? undefined : tenantId;
+    return this.notificationService.getUnreadCount(
+      effectiveTenantId,
+      user?.userId || user?._id || user?.id,
+    );
   }
 
   @Patch(':id/read')
   async markAsRead(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: any,
   ) {
-    return this.notificationService.markAsRead(tenantId, id, userId);
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const effectiveTenantId = isSuperAdmin ? undefined : tenantId;
+    return this.notificationService.markAsRead(
+      effectiveTenantId,
+      id,
+      user?.userId || user?._id || user?.id,
+    );
   }
 
   @Patch('read-all')
   async markAllAsRead(
     @CurrentTenant() tenantId: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() user: any,
   ) {
-    return this.notificationService.markAllAsRead(tenantId, userId);
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const effectiveTenantId = isSuperAdmin ? undefined : tenantId;
+    return this.notificationService.markAllAsRead(
+      effectiveTenantId,
+      user?.userId || user?._id || user?.id,
+    );
   }
 }
