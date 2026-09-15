@@ -71,6 +71,8 @@ Desktop.ini
 # ============================================================
 .claude/
 .gemini/
+.agent/
+.agents/
 scratch/
 scratch*
 scripts/
