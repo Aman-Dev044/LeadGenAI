@@ -3,6 +3,7 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   ...(process.env.BUILD_STANDALONE === 'true' ? { output: 'standalone' } : {}),
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   reactStrictMode: true,
   poweredByHeader: false,
   images: {
