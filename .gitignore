@@ -84,3 +84,5 @@ scripts/
 *.txt
 *.html
 *.bat
+*.yml
+*.yaml

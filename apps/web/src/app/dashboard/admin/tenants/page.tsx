@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Plus, Search, Download, Eye, UserCog, Ban, CheckCircle2, Building2, Users, Bot, FilterX, LayoutGrid, List,
-  ArrowUpRight, Clock, Globe, Activity, MoreHorizontal, Sparkles, ShieldCheck, Loader2,
+  ArrowUpRight, Clock, Globe, Activity, MoreHorizontal, Sparkles, ShieldCheck, Loader2, Trash2,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,9 @@ export default function AdminTenantsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [suspendTarget, setSuspendTarget] = useState<any>(null);
   const [suspendReason, setSuspendReason] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteConfirmSlug, setDeleteConfirmSlug] = useState('');
+  const [purge, setPurge] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -99,6 +102,7 @@ export default function AdminTenantsPage() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'tenants'] });
     queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-tenants-list'] });
   };
 
   const createMutation = useMutation({
@@ -130,6 +134,26 @@ export default function AdminTenantsPage() {
       toast.success('Workspace activated successfully');
     },
     onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, confirmSlug, purge }: { id: string; confirmSlug: string; purge: boolean }) =>
+      api.delete(`/admin/tenants/${id}`, { confirmSlug, purge }),
+    onSuccess: () => {
+      invalidate();
+      try {
+        const activeTid = localStorage.getItem('la_platform_tenant');
+        if (activeTid === deleteTarget?._id) {
+          localStorage.setItem('la_platform_tenant', 'all');
+          window.dispatchEvent(new CustomEvent('la_tenant_switched', { detail: 'all' }));
+        }
+      } catch {}
+      setDeleteTarget(null);
+      setDeleteConfirmSlug('');
+      setPurge(false);
+      toast.success(purge ? 'Tenant permanently purged' : 'Tenant soft-deleted');
+    },
+    onError: (err: any) => toast.error(err.message || 'Delete failed'),
   });
 
   const tenants: any[] = data?.data?.data || [];
@@ -229,6 +253,21 @@ export default function AdminTenantsPage() {
           <DropdownMenuItem className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-500/10" onClick={() => activateMutation.mutate(t._id)}>
             <CheckCircle2 className="h-4 w-4" /> Re-activate
           </DropdownMenuItem>
+        )}
+        {!t.isPlatformOwner && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-rose-600 focus:text-rose-600 focus:bg-rose-500/10"
+              onClick={() => {
+                setDeleteTarget(t);
+                setDeleteConfirmSlug('');
+                setPurge(false);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Delete workspace
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -682,6 +721,50 @@ export default function AdminTenantsPage() {
               onClick={() => suspendMutation.mutate({ id: suspendTarget._id, reason: suspendReason || undefined })}
             >
               {suspendMutation.isPending ? 'Suspending…' : 'Confirm suspension'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete tenant dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <Trash2 className="h-5 w-5" /> Delete {deleteTarget?.name}
+            </DialogTitle>
+            <DialogDescription>
+              This action disables logins and deactivates agents for this workspace. Type the slug <strong>{deleteTarget?.slug}</strong> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Confirmation slug</Label>
+              <Input
+                value={deleteConfirmSlug}
+                onChange={(e) => setDeleteConfirmSlug(e.target.value)}
+                placeholder={deleteTarget?.slug}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={purge}
+                onChange={(e) => setPurge(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Purge all data permanently (irreversible)
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmSlug !== deleteTarget?.slug || deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate({ id: deleteTarget._id, confirmSlug: deleteConfirmSlug, purge })}
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deleteMutation.isPending ? 'Deleting…' : purge ? 'Purge permanently' : 'Soft delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

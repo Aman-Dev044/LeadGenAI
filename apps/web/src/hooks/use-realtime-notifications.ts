@@ -139,6 +139,8 @@ export function useRealtimeNotifications() {
       queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests-count'] });
       queryClient.invalidateQueries({ queryKey: ['my-deletion-request'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-tenants-list'] });
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
     };
 
     const handleSuperAdminDeletionRequest = (data: any) => {

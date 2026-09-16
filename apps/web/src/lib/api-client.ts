@@ -142,8 +142,8 @@ export const api = {
     request<T>(endpoint, { method: 'PATCH', body }),
   put: <T>(endpoint: string, body?: unknown) =>
     request<T>(endpoint, { method: 'PUT', body }),
-  delete: <T>(endpoint: string) =>
-    request<T>(endpoint, { method: 'DELETE' }),
+  delete: <T>(endpoint: string, body?: unknown) =>
+    request<T>(endpoint, { method: 'DELETE', body }),
   upload: <T>(endpoint: string, formData: FormData) =>
     uploadRequest<T>(endpoint, formData),
 };

@@ -14,6 +14,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { randomUUID } from 'crypto';
 import { RegisterDto, LoginDto, ChangePasswordDto } from './dto';
 
 /** Email verification code: 6 digits, valid for 5 minutes, at most 5 wrong guesses per code. */
@@ -934,7 +935,12 @@ AI Lead Generation Platform`,
         expiresIn: this.configService.get<string>('jwt.accessExpiry') || '15m',
       }),
       this.jwtService.signAsync(
-        { sub: user._id.toString(), tenantId, ...(impersonatedBy ? { impersonatedBy } : {}) },
+        {
+          sub: user._id.toString(),
+          tenantId,
+          jti: randomUUID(),
+          ...(impersonatedBy ? { impersonatedBy } : {}),
+        },
         {
           secret: this.configService.get<string>('jwt.refreshSecret'),
           expiresIn: refreshExpiry,

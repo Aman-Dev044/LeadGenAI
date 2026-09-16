@@ -146,19 +146,19 @@ export default function AdminTenantDetailPage() {
 
   // DELETE with a JSON body: the shared client has no body for delete, so call fetch directly
   const handleDelete = async () => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-    const token = localStorage.getItem('accessToken');
     setDeleting(true);
     try {
-      const res = await fetch(`${base}/admin/tenants/${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ confirmSlug, purge }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.message || 'Delete failed');
+      await api.delete(`/admin/tenants/${id}`, { confirmSlug, purge });
       toast.success(purge ? 'Tenant purged permanently' : 'Tenant soft-deleted');
       queryClient.invalidateQueries({ queryKey: ['admin'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-tenants-list'] });
+      try {
+        const activeTid = localStorage.getItem('la_platform_tenant');
+        if (activeTid === id) {
+          localStorage.setItem('la_platform_tenant', 'all');
+          window.dispatchEvent(new CustomEvent('la_tenant_switched', { detail: 'all' }));
+        }
+      } catch {}
       router.push('/dashboard/admin/tenants');
     } catch (err: any) {
       toast.error(err.message);

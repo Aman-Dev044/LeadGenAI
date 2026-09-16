@@ -150,9 +150,25 @@ export function Header() {
 
   const clientTenants = useMemo(() => {
     return (tenantsData || []).filter(
-      (t: any) => !t.isPlatformOwner && t.slug !== 'owner' && !t.name?.toLowerCase().includes('platform owner')
+      (t: any) =>
+        !t.isPlatformOwner &&
+        t.slug !== 'owner' &&
+        !t.name?.toLowerCase().includes('platform owner') &&
+        t.status !== 'cancelled' &&
+        t.status !== 'deleted' &&
+        !t.deletedAt
     );
   }, [tenantsData]);
+
+  useEffect(() => {
+    if (selectedTenant !== 'all' && clientTenants.length > 0) {
+      const exists = clientTenants.some((t: any) => t._id === selectedTenant);
+      if (!exists) {
+        setSelectedTenant('all');
+        setActiveTenantId('all');
+      }
+    }
+  }, [clientTenants, selectedTenant, setActiveTenantId]);
 
   useEffect(() => {
     if (activeTenantId && activeTenantId !== selectedTenant) {
