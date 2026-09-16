@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles,
@@ -35,9 +35,6 @@ import {
   Shield,
   LineChart,
   Workflow,
-  Plus,
-  Minus,
-  Calculator,
   Activity,
   CheckCheck,
 } from 'lucide-react';
@@ -196,34 +193,6 @@ export default function LandingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
 
-  // Interactive ROI Calculator State
-  const [monthlyVisitors, setMonthlyVisitors] = useState<number>(25000);
-  const [dealValue, setDealValue] = useState<number>(2500);
-
-  // ROI Calculations
-  const calculations = useMemo(() => {
-    // 2.2% qualification uplift on website visitors
-    const qualifiedLeads = Math.max(1, Math.round(monthlyVisitors * 0.022));
-    // 18% demo to deal close rate
-    const closedDeals = Math.max(1, Math.round(qualifiedLeads * 0.18));
-    const monthlyPipeline = closedDeals * dealValue;
-    const annualPipeline = monthlyPipeline * 12;
-    // 8.5 minutes saved per qualification vs manual SDR review
-    const hoursSaved = Math.round((monthlyVisitors * 0.08 * 8.5) / 60);
-    // Starter plan cost estimate benchmark
-    const softwareCost = 79 * 12;
-    const roiMultiplier = Math.max(12, Math.round(annualPipeline / Math.max(softwareCost, 1)));
-
-    return {
-      qualifiedLeads,
-      closedDeals,
-      monthlyPipeline,
-      annualPipeline,
-      hoursSaved,
-      roiMultiplier,
-    };
-  }, [monthlyVisitors, dealValue]);
-
   // Animated counters for stats
   const counter1 = useCountUp(340, 1800);
   const counter2 = useCountUp(1800000, 2200);
@@ -320,7 +289,6 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-7 text-[13px] font-semibold text-muted-foreground">
             <a href="#how-it-works" className="hover:text-foreground transition-colors">How It Works</a>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#calculator" className="hover:text-foreground transition-colors">ROI Calculator</a>
             <a href="#results" className="hover:text-foreground transition-colors">Results</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
             <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
@@ -615,196 +583,6 @@ export default function LandingPage() {
               </div>
             </AnimatedSection>
           ))}
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* INTERACTIVE ROI CALCULATOR (Animated, Responsive, No Jitter)  */}
-      {/* ============================================================ */}
-      <section id="calculator" className="py-14 sm:py-16 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto relative z-10">
-        <AnimatedSection className="text-center max-w-3xl mx-auto mb-10">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-3">
-            <Calculator className="h-3 w-3 mr-1.5" /> Interactive ROI Simulator
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-            Calculate Your Revenue Upside With LeadAI.
-          </h2>
-          <p className="mt-2.5 text-sm sm:text-base text-muted-foreground">
-            Adjust your monthly visitor traffic and average deal size to see the immediate pipeline you are leaving on the table.
-          </p>
-        </AnimatedSection>
-
-        <div className="w-full max-w-6xl mx-auto rounded-3xl border border-border/80 bg-card/60 backdrop-blur-xl p-6 sm:p-10 shadow-xl">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
-            {/* Left Controls: Sliders & Quick Buttons */}
-            <div className="lg:col-span-7 space-y-7">
-              {/* Slider 1: Monthly Website Visitors */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-bold text-foreground">Monthly Website Visitors</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMonthlyVisitors((v) => Math.max(2000, v - 5000))}
-                      className="h-7 w-7 rounded-lg border border-border/80 flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Decrease by 5,000"
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="text-sm font-black text-primary px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 min-w-[120px] text-center">
-                      {monthlyVisitors.toLocaleString()} /mo
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setMonthlyVisitors((v) => Math.min(200000, v + 5000))}
-                      className="h-7 w-7 rounded-lg border border-border/80 flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Increase by 5,000"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <input
-                  type="range"
-                  min="2000"
-                  max="150000"
-                  step="1000"
-                  value={monthlyVisitors}
-                  onChange={(e) => setMonthlyVisitors(Number(e.target.value))}
-                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-
-                {/* Preset Chips */}
-                <div className="flex items-center gap-2 pt-1 flex-wrap">
-                  <span className="text-[11px] text-muted-foreground font-semibold mr-1">Presets:</span>
-                  {[5000, 25000, 75000, 150000].map((val) => (
-                    <button
-                      type="button"
-                      key={val}
-                      onClick={() => setMonthlyVisitors(val)}
-                      className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all ${
-                        monthlyVisitors === val
-                          ? 'bg-primary text-white border-primary shadow-sm'
-                          : 'bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {val.toLocaleString()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Slider 2: Average Deal Value (ACV) */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-bold text-foreground">Average Deal Value (ACV)</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDealValue((d) => Math.max(500, d - 500))}
-                      className="h-7 w-7 rounded-lg border border-border/80 flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Decrease by $500"
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="text-sm font-black text-primary px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 min-w-[120px] text-center">
-                      ${dealValue.toLocaleString()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setDealValue((d) => Math.min(25000, d + 500))}
-                      className="h-7 w-7 rounded-lg border border-border/80 flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Increase by $500"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <input
-                  type="range"
-                  min="500"
-                  max="20000"
-                  step="250"
-                  value={dealValue}
-                  onChange={(e) => setDealValue(Number(e.target.value))}
-                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-
-                {/* Preset Chips */}
-                <div className="flex items-center gap-2 pt-1 flex-wrap">
-                  <span className="text-[11px] text-muted-foreground font-semibold mr-1">Presets:</span>
-                  {[1000, 2500, 5000, 10000, 15000].map((val) => (
-                    <button
-                      type="button"
-                      key={val}
-                      onClick={() => setDealValue(val)}
-                      className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all ${
-                        dealValue === val
-                          ? 'bg-primary text-white border-primary shadow-sm'
-                          : 'bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      ${val.toLocaleString()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Benchmark notes */}
-              <div className="p-4 rounded-xl bg-muted/30 border border-border/60 text-xs text-muted-foreground space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Assumes a modest +2.2% net qualification lift based on 800+ customer benchmark datasets.</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Saves approximately {calculations.hoursSaved} manual SDR qualification hours each month.</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Card: Dynamic Real-time Calculations */}
-            <div className="lg:col-span-5 rounded-2xl border-2 border-primary/30 bg-gradient-to-b from-primary/10 via-card to-card p-6 sm:p-7 text-center shadow-lg">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                Projected Added Pipeline
-              </span>
-              <div className="mt-2 text-4xl sm:text-5xl font-black text-foreground tracking-tight">
-                ${(calculations.monthlyPipeline / 1000).toFixed(1)}k
-                <span className="text-base font-semibold text-muted-foreground"> / month</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Estimated ${(calculations.annualPipeline / 1000000).toFixed(2)}M in annual opportunity value
-              </p>
-
-              <div className="mt-6 pt-5 border-t border-border/60 grid grid-cols-2 gap-4 text-left">
-                <div className="p-3 rounded-xl bg-background/80 border border-border/50">
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground">New Qualified Leads</div>
-                  <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
-                    +{calculations.qualifiedLeads} / mo
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-background/80 border border-border/50">
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground">SDR Hours Saved</div>
-                  <div className="text-lg font-black text-primary mt-0.5">
-                    {calculations.hoursSaved} hrs / mo
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Estimated Software ROI:</span>
-                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{calculations.roiMultiplier}x ROI</span>
-              </div>
-
-              <Link href="/auth/register" className="block mt-5">
-                <Button variant="gradient" className="w-full font-bold h-11 shadow-md">
-                  Capture This Pipeline Now <ArrowRight className="h-4 w-4 ml-1.5" />
-                </Button>
-              </Link>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1153,7 +931,7 @@ export default function LandingPage() {
           </div>
 
           {[
-            { title: 'Product', links: [{ label: 'Features', href: '#features' }, { label: 'How It Works', href: '#how-it-works' }, { label: 'ROI Simulator', href: '#calculator' }, { label: 'Pricing', href: '#pricing' }] },
+            { title: 'Product', links: [{ label: 'Features', href: '#features' }, { label: 'How It Works', href: '#how-it-works' }, { label: 'Results', href: '#results' }, { label: 'Pricing', href: '#pricing' }] },
             { title: 'Resources', links: [{ label: 'Dashboard', href: '/auth/login' }, { label: 'FAQ', href: '#faq' }, { label: 'Security', href: '#features' }] },
             { title: 'Company', links: [{ label: 'Privacy Policy', href: '/privacy' }, { label: 'Terms of Service', href: '#faq' }, { label: 'Sign In', href: '/auth/login' }] },
           ].map((col) => (
