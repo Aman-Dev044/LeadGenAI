@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Sparkles,
@@ -19,7 +19,6 @@ import {
   Layers,
   BarChart3,
   Flame,
-  Send,
   Building2,
   Check,
   ChevronDown,
@@ -27,198 +26,283 @@ import {
   Sun,
   DollarSign,
   Cpu,
+  ArrowUpRight,
+  Headphones,
+  Brain,
+  Target,
+  Rocket,
+  Clock,
+  Shield,
+  LineChart,
+  Workflow,
+  type LucideIcon,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-export default function LandingPage() {
-  const { theme, setTheme } = useUIStore();
+/* ============================================================ */
+/* Reusable Animated Counter Hook                                */
+/* ============================================================ */
+function useCountUp(end: number, duration = 2000, suffix = '') {
+  const [value, setValue] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const hasRun = useRef(false);
 
-  // ROI Calculator State
-  const [monthlyVisitors, setMonthlyVisitors] = useState<number>(25000);
-  const [dealValue, setDealValue] = useState<number>(3500);
-
-  // Live Agent Simulator State
-  const [activeScenario, setActiveScenario] = useState<number>(0);
-  const [customInput, setCustomInput] = useState('');
-  const [simulatedChat, setSimulatedChat] = useState<
-    Array<{ sender: 'ai' | 'visitor'; text: string; time: string; badge?: string }>
-  >([
-    {
-      sender: 'ai',
-      text: 'Hi there! 👋 Welcome to Acme Cloud. Looking to accelerate your team’s deployment speed or reduce cloud spend today?',
-      time: '11:42 AM',
-      badge: 'Agent Alex · AI Sales Specialist',
-    },
-    {
-      sender: 'visitor',
-      text: 'We are spending around $15,000/mo on AWS and deployments are taking too long. Do you have an enterprise integration?',
-      time: '11:43 AM',
-    },
-    {
-      sender: 'ai',
-      text: 'Absolutely! Our native Kubernetes & AWS engine cuts pipeline times by 68% and typically saves teams 25-40% on compute. With your scale, our Enterprise Tier is ideal.',
-      time: '11:43 AM',
-      badge: 'Intent Score: 96/100 (Hot Buyer 🔥)',
-    },
-    {
-      sender: 'ai',
-      text: 'Would you like to see a tailored 15-minute architecture walkthrough with our Principal Engineer tomorrow at 2:00 PM EST?',
-      time: '11:43 AM',
-      badge: 'Calendar Slot Proposed',
-    },
-  ]);
-
-  // Pricing State (Monthly / Annual)
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
-
-  // FAQ Accordion State
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
-
-  // Calculation for ROI
-  const estimatedLeads = useMemo(() => {
-    return Math.round(monthlyVisitors * 0.024);
-  }, [monthlyVisitors]);
-
-  const estimatedPipeline = useMemo(() => {
-    return estimatedLeads * dealValue;
-  }, [estimatedLeads, dealValue]);
-
-  const scenarios = [
-    {
-      label: 'Enterprise Qualification',
-      query: 'We have 200+ employees and need SOC2 compliance. Can we trial?',
-      reply:
-        'Yes! We are SOC2 Type II certified with complete end-to-end encryption. I can spin up a sandbox enterprise workspace and connect you with our compliance architect right away.',
-      score: '98/100 · Enterprise Tier',
-    },
-    {
-      label: 'Pricing & ROI',
-      query: 'What is the cost for 5 agents and 20,000 conversations/month?',
-      reply:
-        'Our Growth Plan covers unlimited visitor engagement with up to 10 agents at $149/mo (or $119/mo paid annually). That includes full WhatsApp, CRM sync, and custom knowledge ingestion!',
-      score: '88/100 · Ready to Purchase',
-    },
-    {
-      label: 'WhatsApp & Omnichannel',
-      query: 'Can the same AI agent answer our WhatsApp inbound inquiries?',
-      reply:
-        'Yes, seamlessly! Any chat started on WhatsApp links directly to the same customer CRM record, with automated message triggers and live human agent handoff.',
-      score: '92/100 · High Intent',
-    },
-  ];
-
-  const handleScenarioClick = (idx: number) => {
-    setActiveScenario(idx);
-    const s = scenarios[idx];
-    setSimulatedChat((prev) => [
-      ...prev,
-      { sender: 'visitor', text: s.query, time: 'Just now' },
-      { sender: 'ai', text: s.reply, time: 'Just now', badge: s.score },
-    ]);
-  };
-
-  const handleCustomSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customInput.trim()) return;
-    const text = customInput;
-    setCustomInput('');
-    setSimulatedChat((prev) => [
-      ...prev,
-      { sender: 'visitor', text, time: 'Just now' },
-      {
-        sender: 'ai',
-        text: `Thanks for asking! Our autonomous agent analyzes "${text}" in real time, applies your company knowledge base, and executes your conversion playbook instantly.`,
-        time: 'Just now',
-        badge: 'Intent Analyzed · Live Response',
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasRun.current) {
+          hasRun.current = true;
+          const start = performance.now();
+          const step = (now: number) => {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+            setValue(Math.round(eased * end));
+            if (progress < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }
       },
-    ]);
-  };
+      { threshold: 0.3 },
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [end, duration]);
 
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
+  return { ref, value, suffix };
+}
+
+/* ============================================================ */
+/* Scroll-triggered fade-in section                              */
+/* ============================================================ */
+function AnimatedSection({
+  children,
+  className = '',
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setVisible(true);
+      },
+      { threshold: 0.12 },
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary transition-colors duration-300">
-      {/* Subtle Background Glow Elements */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[1000px] h-[550px] bg-gradient-to-tr from-primary/15 via-violet-500/10 to-transparent blur-[140px] rounded-full" />
-        <div className="absolute top-[45%] -left-40 w-[600px] h-[500px] bg-primary/10 blur-[130px] rounded-full" />
-        <div className="absolute top-[75%] -right-40 w-[600px] h-[500px] bg-violet-600/10 blur-[130px] rounded-full" />
-      </div>
+    <div
+      ref={ref}
+      className={`transition-all duration-700 ease-out ${
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+      } ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ============================================================ */
+/* Typewriter component for hero headline                        */
+/* ============================================================ */
+function Typewriter({ words, className = '' }: { words: string[]; className?: string }) {
+  const [index, setIndex] = useState(0);
+  const [displayed, setDisplayed] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const word = words[index];
+    const timeout = deleting ? 40 : 80;
+
+    if (!deleting && displayed === word) {
+      setTimeout(() => setDeleting(true), 2200);
+      return;
+    }
+    if (deleting && displayed === '') {
+      setDeleting(false);
+      setIndex((prev) => (prev + 1) % words.length);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setDisplayed(deleting ? word.slice(0, displayed.length - 1) : word.slice(0, displayed.length + 1));
+    }, timeout);
+
+    return () => clearTimeout(timer);
+  }, [displayed, deleting, index, words]);
+
+  return (
+    <span className={className}>
+      {displayed}
+      <span className="animate-pulse text-primary">|</span>
+    </span>
+  );
+}
+
+/* ============================================================ */
+/* Floating Orb Background Animation                             */
+/* ============================================================ */
+function FloatingOrbs() {
+  return (
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      <div
+        className="absolute w-[800px] h-[800px] rounded-full opacity-[0.07]"
+        style={{
+          background: 'radial-gradient(circle, var(--color-primary) 0%, transparent 70%)',
+          top: '-20%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          animation: 'float 8s ease-in-out infinite',
+        }}
+      />
+      <div
+        className="absolute w-[600px] h-[600px] rounded-full opacity-[0.05]"
+        style={{
+          background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)',
+          top: '40%',
+          left: '-10%',
+          animation: 'float 10s ease-in-out infinite 2s',
+        }}
+      />
+      <div
+        className="absolute w-[500px] h-[500px] rounded-full opacity-[0.05]"
+        style={{
+          background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)',
+          bottom: '-5%',
+          right: '-5%',
+          animation: 'float 12s ease-in-out infinite 4s',
+        }}
+      />
+    </div>
+  );
+}
+
+/* ============================================================ */
+/* Auto-rotating testimonial with crossfade                      */
+/* ============================================================ */
+const testimonials = [
+  {
+    quote:
+      'LeadAI replaced our static forms and skyrocketed inbound demos from 42 to 178 in month one—without touching our ad budget.',
+    name: 'Sarah Jenkins',
+    role: 'VP Demand Gen · CloudScale',
+    metric: '+324%',
+    metricLabel: 'Demo Bookings',
+  },
+  {
+    quote:
+      'The WhatsApp handoff is pure magic. A visitor asks a question at 11 PM and wakes up to a confirmed meeting. Zero human effort.',
+    name: 'Marcus Vance',
+    role: 'CRO · FinVantage',
+    metric: '4x',
+    metricLabel: 'Pipeline Speed',
+  },
+  {
+    quote:
+      'Fluent conversations in French, Japanese, and Spanish with zero latency transformed our international revenue overnight.',
+    name: 'Elena Rostova',
+    role: 'Head of Growth · NexusTech',
+    metric: '$2.1M',
+    metricLabel: 'Added Pipeline',
+  },
+];
+
+/* ============================================================ */
+/* Main Page Component                                           */
+/* ============================================================ */
+export default function LandingPage() {
+  const { theme, setTheme } = useUIStore();
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
+
+  // Auto-rotate testimonials
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Animated counters
+  const counter1 = useCountUp(340, 2000);
+  const counter2 = useCountUp(1800000, 2500);
+  const counter3 = useCountUp(95, 1500);
+  const counter4 = useCountUp(850, 1800);
+
+  const formatBigNumber = (n: number) => {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+    return n.toString();
+  };
+
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
+  return (
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary transition-colors duration-300 overflow-x-hidden">
+      <FloatingOrbs />
 
       {/* ============================================================ */}
-      {/* 1. TOP NAVIGATION BAR                                         */}
+      {/* NAVIGATION                                                    */}
       {/* ============================================================ */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border/60 transition-all duration-200">
+      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-background/70 border-b border-border/40 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo & Version */}
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center text-white shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center text-white shadow-lg shadow-primary/30 group-hover:scale-110 transition-transform duration-300">
                 <Bot className="h-5 w-5" />
               </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/80 group-hover:text-primary transition-colors">
-                  LeadAI<span className="text-primary font-black">.</span>
-                </span>
-              </div>
+              <span className="font-extrabold text-lg tracking-tight">
+                LeadAI<span className="text-primary">.</span>
+              </span>
             </Link>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              v2.4 Live
+              LIVE
             </span>
           </div>
 
-          {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">
-              Features
-            </a>
-            <a href="#simulator" className="hover:text-foreground transition-colors">
-              Live AI Demo
-            </a>
-            <a href="#calculator" className="hover:text-foreground transition-colors">
-              ROI Calculator
-            </a>
-            <a href="#integrations" className="hover:text-foreground transition-colors">
-              Integrations
-            </a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">
-              Pricing
-            </a>
-            <a href="#faq" className="hover:text-foreground transition-colors">
-              FAQ
-            </a>
+          <nav className="hidden lg:flex items-center gap-8 text-[13px] font-medium text-muted-foreground">
+            {['Features', 'How It Works', 'Results', 'Pricing', 'FAQ'].map((item) => (
+              <a
+                key={item}
+                href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
+                className="hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-primary after:transition-all hover:after:w-full"
+              >
+                {item}
+              </a>
+            ))}
           </nav>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-3">
-            {/* Theme Toggle */}
+          <div className="flex items-center gap-2.5">
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              className="h-9 w-9 rounded-xl border border-border/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-primary/40 transition-all duration-200"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
-
             <Link href="/auth/login">
-              <Button variant="ghost" size="sm" className="font-semibold text-sm">
+              <Button variant="ghost" size="sm" className="font-semibold text-[13px]">
                 Sign In
               </Button>
             </Link>
-
             <Link href="/auth/register">
-              <Button
-                variant="gradient"
-                size="sm"
-                className="font-semibold text-sm shadow-md shadow-primary/25 hover:shadow-primary/40 gap-1.5"
-              >
-                <span>Get Started Free</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+              <Button variant="gradient" size="sm" className="font-bold text-[13px] shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all gap-1.5">
+                Start Free <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>
@@ -226,1017 +310,567 @@ export default function LandingPage() {
       </header>
 
       {/* ============================================================ */}
-      {/* 2. HERO SECTION                                              */}
+      {/* HERO                                                          */}
       {/* ============================================================ */}
-      <section className="relative z-10 pt-16 sm:pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
-        {/* Shimmer Announcement Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-primary/10 border border-primary/25 text-primary mb-8 shadow-sm backdrop-blur-md animate-fade-in">
-          <Sparkles className="h-3.5 w-3.5 text-primary animate-spin" style={{ animationDuration: '8s' }} />
-          <span>Next-Generation Autonomous Inbound AI Platform</span>
-          <span className="text-muted-foreground">·</span>
-          <a href="#features" className="text-primary underline cursor-pointer">Explore Capabilities &rarr;</a>
-        </div>
+      <section className="relative z-10 pt-20 sm:pt-28 pb-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
+        <AnimatedSection>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-primary/15 to-violet-500/15 border border-primary/20 text-primary mb-8 backdrop-blur-md">
+            <Sparkles className="h-3.5 w-3.5" style={{ animation: 'float 3s ease-in-out infinite' }} />
+            <span>Autonomous AI Sales Agents — Now Generally Available</span>
+          </div>
+        </AnimatedSection>
 
-        {/* Hero Title */}
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight max-w-5xl mx-auto leading-[1.12]">
-          Turn Anonymous Website Visitors Into{' '}
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-violet-500 to-indigo-400">
-            High-Value Paying Deals
-          </span>{' '}
-          on Autopilot.
-        </h1>
+        <AnimatedSection delay={100}>
+          <h1 className="text-4xl sm:text-6xl lg:text-[4.5rem] font-black tracking-tight max-w-5xl mx-auto leading-[1.08]">
+            Your Website Deserves An{' '}
+            <span className="relative inline-block">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-violet-500 to-indigo-400">
+                <Typewriter words={['AI Sales Rep', 'Revenue Engine', 'Lead Machine', 'Deal Closer']} />
+              </span>
+              <span
+                className="absolute -bottom-1.5 left-0 w-full h-1 rounded-full bg-gradient-to-r from-primary to-violet-500 opacity-40"
+                style={{ animation: 'shimmer 3s linear infinite', backgroundSize: '200% 100%' }}
+              />
+            </span>{' '}
+            That Never Sleeps.
+          </h1>
+        </AnimatedSection>
 
-        {/* Hero Subtitle */}
-        <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto font-normal leading-relaxed">
-          Deploy intelligent AI sales agents trained on your business knowledge. Engage inbound traffic 24/7 across web &
-          WhatsApp, automatically qualify enterprise intent, book calendar demos, and close pipeline while you sleep.
-        </p>
-
-        {/* CTA Buttons */}
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto">
-          <Link href="/auth/register" className="w-full sm:w-auto">
-            <Button
-              variant="gradient"
-              size="lg"
-              className="w-full sm:w-auto text-base font-semibold h-12 px-8 shadow-lg shadow-primary/30 hover:scale-[1.02] transition-transform gap-2"
-            >
-              <span>Start 14-Day Free Trial</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <a href="#simulator" className="w-full sm:w-auto">
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto text-base font-semibold h-12 px-6 border-border hover:bg-muted/60 gap-2"
-            >
-              <Play className="h-4 w-4 fill-current text-primary" />
-              <span>Try Live Simulator</span>
-            </Button>
-          </a>
-        </div>
-
-        {/* Trust Badges */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span>No credit card required</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span>2-minute script embed</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span>SOC2 Type II & GDPR Ready</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex text-amber-400">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="h-3.5 w-3.5 fill-current" />
-              ))}
-            </div>
-            <span className="font-semibold text-foreground">4.9/5</span>
-            <span>(850+ reviews)</span>
-          </div>
-        </div>
-
-        {/* Hero Stats */}
-        <div className="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-          <div className="p-4 rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md text-left shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Conversion Boost</span>
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-foreground">+340%</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Average inbound demo jump</div>
-          </div>
-          <div className="p-4 rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md text-left shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Avg Latency</span>
-              <Zap className="h-4 w-4 text-amber-500" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-foreground">&lt; 1.1s</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Instant visitor engagement</div>
-          </div>
-          <div className="p-4 rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md text-left shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Leads Qualified</span>
-              <Users className="h-4 w-4 text-primary" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-foreground">1.8M+</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Scored & synced to CRM</div>
-          </div>
-          <div className="p-4 rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md text-left shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider">Global Languages</span>
-              <Globe2 className="h-4 w-4 text-violet-500" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-foreground">95+</div>
-            <div className="text-xs text-muted-foreground mt-0.5">Native multi-language chat</div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 3. LOGO MARQUEE                                              */}
-      {/* ============================================================ */}
-      <section className="py-12 border-y border-border/60 bg-muted/20 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-6">
-            Empowering modern high-growth sales teams & enterprises globally
+        <AnimatedSection delay={200}>
+          <p className="mt-7 text-lg sm:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed font-light">
+            Deploy intelligent conversational agents trained on your product docs, pricing, and playbooks.
+            They engage every visitor across <strong className="text-foreground font-medium">web & WhatsApp</strong>, qualify intent in real-time,
+            book meetings on your calendar, and pipe warm leads straight into your CRM — <strong className="text-foreground font-medium">24 hours a day, 365 days a year</strong>.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 opacity-70 grayscale hover:grayscale-0 transition-all duration-300">
-            {['TrackBells', 'NexusTech', 'CloudPulse', 'HyperScale', 'FinVantage', 'OmniData', 'CyberFlow'].map(
-              (brand, idx) => (
-                <div key={idx} className="flex items-center gap-2 font-bold text-lg tracking-tight">
-                  <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-black">
-                    {brand.charAt(0)}
-                  </div>
-                  <span>{brand}</span>
+        </AnimatedSection>
+
+        <AnimatedSection delay={300}>
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/auth/register">
+              <Button variant="gradient" size="lg" className="h-13 px-9 text-base font-bold shadow-xl shadow-primary/30 hover:scale-[1.03] transition-all duration-300 gap-2.5">
+                <Rocket className="h-4.5 w-4.5" />
+                Deploy Your Agent Free
+              </Button>
+            </Link>
+            <a href="#how-it-works">
+              <Button variant="outline" size="lg" className="h-13 px-7 text-base font-semibold border-border/60 hover:bg-muted/50 hover:border-primary/40 gap-2.5 transition-all duration-300">
+                <Play className="h-4 w-4 fill-primary text-primary" />
+                See How It Works
+              </Button>
+            </a>
+          </div>
+        </AnimatedSection>
+
+        <AnimatedSection delay={400}>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+            {['No credit card needed', 'Live in under 2 minutes', 'SOC2 & GDPR compliant'].map((t) => (
+              <span key={t} className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                {t}
+              </span>
+            ))}
+          </div>
+        </AnimatedSection>
+
+        {/* ---- Animated Counter Stats ---- */}
+        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 max-w-4xl mx-auto">
+          {[
+            { ref: counter1.ref, label: 'Avg Conversion Lift', prefix: '+', value: counter1.value, suffix: '%', icon: TrendingUp, color: 'text-emerald-500' },
+            { ref: counter2.ref, label: 'Leads Qualified', value: counter2.value, format: true, suffix: '+', icon: Users, color: 'text-primary' },
+            { ref: counter3.ref, label: 'Languages Supported', value: counter3.value, suffix: '+', icon: Globe2, color: 'text-violet-500' },
+            { ref: counter4.ref, label: 'Customer Reviews', value: counter4.value, suffix: '+', icon: Star, color: 'text-amber-500', rating: true },
+          ].map((stat, i) => (
+            <AnimatedSection key={i} delay={500 + i * 100}>
+              <div
+                ref={stat.ref}
+                className="relative p-5 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-md text-left overflow-hidden group hover:border-primary/40 hover:shadow-lg transition-all duration-300"
+              >
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-primary/5 to-transparent rounded-bl-full" />
+                <stat.icon className={`h-5 w-5 mb-3 ${stat.color} group-hover:scale-110 transition-transform`} />
+                <div className="text-2xl sm:text-3xl font-black text-foreground tracking-tight">
+                  {stat.prefix || ''}{stat.format ? formatBigNumber(stat.value) : stat.value}{stat.suffix || ''}
                 </div>
-              ),
-            )}
+                <div className="text-[11px] text-muted-foreground mt-1 font-medium uppercase tracking-wider">{stat.label}</div>
+                {stat.rating && (
+                  <div className="flex mt-1.5 text-amber-400 gap-0.5">
+                    {[...Array(5)].map((_, j) => <Star key={j} className="h-3 w-3 fill-current" />)}
+                    <span className="text-[10px] text-muted-foreground ml-1 font-semibold">4.9/5</span>
+                  </div>
+                )}
+              </div>
+            </AnimatedSection>
+          ))}
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* TRUSTED BY MARQUEE                                            */}
+      {/* ============================================================ */}
+      <section className="py-10 border-y border-border/40 bg-muted/10 relative z-10 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-5">
+            Trusted by revenue teams at
+          </p>
+          <div className="relative overflow-hidden" style={{ maskImage: 'linear-gradient(90deg, transparent, black 15%, black 85%, transparent)' }}>
+            <div className="flex gap-12 sm:gap-16 items-center justify-center animate-[shimmer_20s_linear_infinite]" style={{ width: 'max-content' }}>
+              {[...['TrackBells', 'NexusTech', 'CloudPulse', 'HyperScale', 'FinVantage', 'OmniData', 'CyberFlow', 'DataForge'], ...['TrackBells', 'NexusTech', 'CloudPulse', 'HyperScale']].map(
+                (brand, idx) => (
+                  <div key={idx} className="flex items-center gap-2 font-bold text-base tracking-tight text-muted-foreground/60 hover:text-foreground/80 transition-colors shrink-0">
+                    <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center text-xs text-primary font-black">
+                      {brand.charAt(0)}
+                    </div>
+                    <span>{brand}</span>
+                  </div>
+                ),
+              )}
+            </div>
           </div>
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* 4. LIVE INTERACTIVE AGENT SIMULATOR                         */}
+      {/* HOW IT WORKS — 3-STEP VISUAL                                  */}
       {/* ============================================================ */}
-      <section id="simulator" className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Interactive Live Sandbox
+      <section id="how-it-works" className="py-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-3xl mx-auto mb-20">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            Simple 3-Step Setup
           </Badge>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            See How Your Autonomous Agent Converts In Real-Time.
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight">
+            From Zero to Autonomous Agent in{' '}
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-violet-500">
+              Under 2 Minutes.
+            </span>
+          </h2>
+        </AnimatedSection>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+          {/* Connecting line */}
+          <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-0.5 bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20" />
+
+          {[
+            {
+              step: '01',
+              icon: Brain,
+              title: 'Train Your Agent',
+              desc: 'Upload your product docs, pricing PDFs, FAQ pages, or simply paste your website URL. The AI ingests everything and becomes your product expert in seconds.',
+              color: 'from-primary to-indigo-500',
+            },
+            {
+              step: '02',
+              icon: Workflow,
+              title: 'Customize The Playbook',
+              desc: 'Define your agent\u0027s persona, set qualification rules (BANT, MEDDIC), connect your Google Calendar, CRM, WhatsApp, and Slack for instant handoff.',
+              color: 'from-violet-500 to-purple-500',
+            },
+            {
+              step: '03',
+              icon: Rocket,
+              title: 'Go Live & Close Deals',
+              desc: 'Paste one script tag on your site. Your agent starts engaging visitors, scoring intent, booking demos, and pushing warm leads to your pipeline immediately.',
+              color: 'from-emerald-500 to-teal-500',
+            },
+          ].map((item, i) => (
+            <AnimatedSection key={i} delay={i * 150} className="relative">
+              <div className="p-8 rounded-3xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/30 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 group h-full">
+                <div className={`h-14 w-14 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white shadow-lg mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
+                  <item.icon className="h-7 w-7" />
+                </div>
+                <div className="text-[11px] font-black text-primary tracking-widest uppercase mb-2">Step {item.step}</div>
+                <h3 className="text-xl font-bold tracking-tight mb-3">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+              </div>
+            </AnimatedSection>
+          ))}
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* FEATURES SHOWCASE — BENTO GRID                                */}
+      {/* ============================================================ */}
+      <section id="features" className="py-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-3xl mx-auto mb-16">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            Platform Capabilities
+          </Badge>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight">
+            Every Weapon Your Revenue Team Needs.
           </h2>
           <p className="mt-4 text-base sm:text-lg text-muted-foreground">
-            Test the live reasoning engine. Watch the agent evaluate buyer intent, calculate lead score, and trigger calendar
-            scheduling in split seconds.
+            One platform replaces your chatbot, lead forms, SDR qualification calls, and meeting scheduler.
           </p>
+        </AnimatedSection>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[
+            { icon: Bot, title: 'Custom Agent Personas', desc: 'Design specialists for Sales, Technical Pre-Sales, Pricing, or Support. Each with unique tone, guardrails, and conversion objectives.', color: 'bg-primary/10 text-primary', hoverColor: 'group-hover:bg-primary group-hover:text-white' },
+            { icon: Flame, title: 'Predictive Lead Scoring', desc: 'Dynamic BANT scoring powered by conversation analysis and website behavior. Automatically route hot leads to your top closers.', color: 'bg-amber-500/10 text-amber-500', hoverColor: 'group-hover:bg-amber-500 group-hover:text-white' },
+            { icon: Calendar, title: 'Calendar Auto-Booking', desc: 'Native Google Calendar & Outlook integration. Proposes real-time availability and sends confirmed calendar invites mid-conversation.', color: 'bg-emerald-500/10 text-emerald-500', hoverColor: 'group-hover:bg-emerald-500 group-hover:text-white' },
+            { icon: MessageSquare, title: 'WhatsApp Business API', desc: 'Seamless web-to-WhatsApp handoff. Continue conversations, send automated follow-ups, and never lose a lead who navigates away.', color: 'bg-violet-500/10 text-violet-500', hoverColor: 'group-hover:bg-violet-500 group-hover:text-white' },
+            { icon: Target, title: 'Visitor Intelligence', desc: 'IP geolocation, referrer tracking, scroll depth, and page-level intent signals feed your agent before the first message is sent.', color: 'bg-rose-500/10 text-rose-500', hoverColor: 'group-hover:bg-rose-500 group-hover:text-white' },
+            { icon: ShieldCheck, title: 'Enterprise Security', desc: 'SOC2 Type II compliant. Multi-tenant workspace isolation, role-based access, data purge policies, and full audit logging.', color: 'bg-sky-500/10 text-sky-500', hoverColor: 'group-hover:bg-sky-500 group-hover:text-white' },
+            { icon: Headphones, title: 'Live Human Takeover', desc: 'Instant Slack/WhatsApp/SMS pings when a VIP lead hits your threshold. Human reps seamlessly step into any conversation.', color: 'bg-pink-500/10 text-pink-500', hoverColor: 'group-hover:bg-pink-500 group-hover:text-white' },
+            { icon: LineChart, title: 'Revenue Analytics', desc: 'Real-time dashboards tracking agent conversations, lead scores, booking rates, conversion funnels, and ROI by source.', color: 'bg-teal-500/10 text-teal-500', hoverColor: 'group-hover:bg-teal-500 group-hover:text-white' },
+            { icon: Globe2, title: '95+ Languages', desc: 'Auto-detect visitor language and reply fluently in French, Japanese, Spanish, Arabic, Hindi and 90+ more — zero configuration.', color: 'bg-indigo-500/10 text-indigo-500', hoverColor: 'group-hover:bg-indigo-500 group-hover:text-white' },
+          ].map((f, i) => (
+            <AnimatedSection key={i} delay={i * 80}>
+              <div className="p-7 rounded-3xl border border-border/50 bg-card/40 backdrop-blur-sm hover:bg-card/80 hover:border-primary/30 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-400 group h-full">
+                <div className={`h-12 w-12 rounded-2xl ${f.color} ${f.hoverColor} flex items-center justify-center mb-5 transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg`}>
+                  <f.icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold tracking-tight mb-2">{f.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+              </div>
+            </AnimatedSection>
+          ))}
         </div>
+      </section>
 
-        {/* Simulator Container */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left: Chat Window */}
-          <div className="lg:col-span-7 rounded-3xl border border-border/90 bg-card shadow-2xl shadow-primary/10 overflow-hidden flex flex-col h-[560px]">
-            {/* Window Header */}
-            <div className="px-5 py-3.5 border-b border-border bg-muted/40 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center text-white font-bold">
-                    <Bot className="h-5 w-5" />
-                  </div>
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-card" />
+      {/* ============================================================ */}
+      {/* INTEGRATIONS GRID                                             */}
+      {/* ============================================================ */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-3xl mx-auto mb-14">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            Ecosystem
+          </Badge>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight">
+            Plugs Into Your Entire Stack.
+          </h2>
+        </AnimatedSection>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+          {[
+            { name: 'WhatsApp', icon: MessageSquare, color: 'text-emerald-500' },
+            { name: 'HubSpot', icon: Building2, color: 'text-amber-500' },
+            { name: 'Salesforce', icon: Layers, color: 'text-sky-500' },
+            { name: 'Slack', icon: MessageSquare, color: 'text-violet-500' },
+            { name: 'Google Cal', icon: Calendar, color: 'text-rose-500' },
+            { name: 'Outlook', icon: Calendar, color: 'text-blue-500' },
+            { name: 'Zapier', icon: Zap, color: 'text-orange-500' },
+            { name: 'Webhooks', icon: Cpu, color: 'text-indigo-500' },
+            { name: 'Stripe', icon: DollarSign, color: 'text-purple-500' },
+            { name: 'Segment', icon: BarChart3, color: 'text-teal-500' },
+          ].map((t, i) => (
+            <AnimatedSection key={i} delay={i * 50}>
+              <div className="p-4 rounded-2xl border border-border/50 bg-card/40 hover:bg-card/80 hover:border-primary/30 hover:shadow-md transition-all duration-300 text-center flex flex-col items-center group">
+                <div className={`h-10 w-10 rounded-xl bg-muted/40 group-hover:bg-muted/80 flex items-center justify-center mb-2.5 ${t.color} transition-all group-hover:scale-110`}>
+                  <t.icon className="h-5 w-5" />
                 </div>
-                <div>
-                  <div className="font-bold text-sm flex items-center gap-2">
-                    <span>Alex · Inbound SDR Agent</span>
-                    <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.2 rounded font-medium">AI Active</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground">Trained on Product Docs & Enterprise Playbook</div>
-                </div>
+                <div className="font-bold text-xs text-foreground">{t.name}</div>
               </div>
+            </AnimatedSection>
+          ))}
+        </div>
+      </section>
 
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="hidden sm:inline">Active Session #9241</span>
-              </div>
-            </div>
+      {/* ============================================================ */}
+      {/* TESTIMONIALS — AUTO-ROTATING CROSSFADE                        */}
+      {/* ============================================================ */}
+      <section id="results" className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-3xl mx-auto mb-16">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            Real Results
+          </Badge>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight">
+            Revenue Leaders Love LeadAI.
+          </h2>
+        </AnimatedSection>
 
-            {/* Chat Body */}
-            <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-background/50">
-              {simulatedChat.map((msg, index) => (
+        <AnimatedSection>
+          <div className="max-w-4xl mx-auto">
+            <div className="relative rounded-3xl border border-border/60 bg-card/50 backdrop-blur-md p-8 sm:p-12 overflow-hidden">
+              {/* Decorative glow */}
+              <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl" />
+
+              {testimonials.map((t, i) => (
                 <div
-                  key={index}
-                  className={`flex flex-col ${msg.sender === 'visitor' ? 'items-end' : 'items-start'} animate-fade-in`}
+                  key={i}
+                  className={`transition-all duration-700 ${
+                    activeTestimonial === i ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 absolute inset-0 p-8 sm:p-12 pointer-events-none'
+                  }`}
                 >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.sender === 'visitor'
-                        ? 'bg-primary text-primary-foreground rounded-br-xs shadow-md'
-                        : 'bg-card border border-border/80 text-card-foreground rounded-bl-xs shadow-sm'
-                    }`}
-                  >
-                    {msg.text}
+                  <div className="flex text-amber-400 mb-6 gap-1">
+                    {[...Array(5)].map((_, j) => <Star key={j} className="h-5 w-5 fill-current" />)}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 px-1 text-[11px] text-muted-foreground">
-                    <span>{msg.time}</span>
-                    {msg.badge && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        {msg.badge}
-                      </span>
-                    )}
+                  <p className="text-lg sm:text-2xl font-medium text-foreground leading-relaxed mb-8">
+                    &ldquo;{t.quote}&rdquo;
+                  </p>
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <div className="font-bold text-foreground">{t.name}</div>
+                      <div className="text-sm text-muted-foreground">{t.role}</div>
+                    </div>
+                    <div className="px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                      <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{t.metric}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/70">{t.metricLabel}</div>
+                    </div>
                   </div>
                 </div>
               ))}
-            </div>
 
-            {/* Prompt Buttons & Input Form */}
-            <div className="p-3 border-t border-border bg-card/90">
-              <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-1 text-xs">
-                <span className="text-muted-foreground text-[11px] shrink-0 font-medium">Quick Prompts:</span>
-                {scenarios.map((sc, i) => (
+              {/* Dots navigation */}
+              <div className="flex justify-center gap-2 mt-8">
+                {testimonials.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => handleScenarioClick(i)}
-                    className={`px-2.5 py-1 rounded-full border text-xs whitespace-nowrap transition-all ${
-                      activeScenario === i
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground'
+                    onClick={() => setActiveTestimonial(i)}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      activeTestimonial === i ? 'w-8 bg-primary' : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
                     }`}
-                  >
-                    {sc.label}
-                  </button>
+                  />
                 ))}
               </div>
-
-              <form onSubmit={handleCustomSend} className="flex gap-2">
-                <input
-                  type="text"
-                  value={customInput}
-                  onChange={(e) => setCustomInput(e.target.value)}
-                  placeholder="Type your question or objection here..."
-                  className="flex-1 bg-background border border-border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <Button type="submit" size="sm" variant="gradient" className="rounded-xl px-4">
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
             </div>
           </div>
-
-          {/* Right: Telemetry Cards */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="p-5 rounded-3xl border border-border bg-card/80 backdrop-blur-md shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Flame className="h-4 w-4 text-rose-500" />
-                  Real-time Intent Scoring
-                </span>
-                <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 font-bold">HOT BUYER</Badge>
-              </div>
-              <div className="flex items-end gap-3">
-                <div className="text-4xl font-black text-foreground">96</div>
-                <div className="text-sm text-muted-foreground pb-1">/ 100 Intent Confidence</div>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2.5 mt-3 overflow-hidden">
-                <div className="bg-gradient-to-r from-amber-500 via-rose-500 to-primary h-full w-[96%] rounded-full" />
-              </div>
-              <div className="mt-3 text-xs text-muted-foreground">
-                Trigger factors: AWS high spend ($15k/mo), enterprise deployment bottleneck, direct architecture inquiry.
-              </div>
-            </div>
-
-            <div className="p-5 rounded-3xl border border-border bg-card/80 backdrop-blur-md shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-primary" />
-                Automated Entity Extraction
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <div className="text-muted-foreground text-[11px]">Estimated Size</div>
-                  <div className="font-bold text-foreground mt-0.5">50 - 200 Employees</div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <div className="text-muted-foreground text-[11px]">Primary Tech Stack</div>
-                  <div className="font-bold text-foreground mt-0.5">AWS & Kubernetes</div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <div className="text-muted-foreground text-[11px]">Annual Value</div>
-                  <div className="font-bold text-foreground mt-0.5">$24,000 ARR</div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/50">
-                  <div className="text-muted-foreground text-[11px]">Conversion Step</div>
-                  <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">Demo Scheduled</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 rounded-3xl border border-border bg-card/80 backdrop-blur-md shadow-sm">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                <Zap className="h-4 w-4 text-amber-500" />
-                Autonomous Automation Handshake
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Google Calendar invite dispatched with Google Meet link</span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Lead record created in HubSpot / Salesforce with 96 score</span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-3.5 w-3.5" />
-                  <span>VIP alert triggered in Slack #sales-enterprise channel</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        </AnimatedSection>
       </section>
 
       {/* ============================================================ */}
-      {/* 5. CORE PLATFORM CAPABILITIES                                */}
+      {/* PRICING                                                       */}
       {/* ============================================================ */}
-      <section id="features" className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10 border-t border-border/60">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Engineered For Revenue Teams
+      <section id="pricing" className="py-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-3xl mx-auto mb-14">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            Transparent Pricing
           </Badge>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            Everything You Need To Dominate Inbound Pipeline.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-muted-foreground">
-            Say goodbye to static forms that kill conversion rates. Replace them with proactive, human-grade conversational AI.
-          </p>
-        </div>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight">Start Free. Scale When Ready.</h2>
+          <p className="mt-4 text-muted-foreground">14-day free trial on every plan. No setup fees. Cancel anytime.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-primary group-hover:text-white transition-all">
-              <Bot className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">Custom AI Agent Personas</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Design distinct agents for Sales, Technical Architecture, Pricing, or Customer Support. Set exact tone, guardrails,
-              and conversion objectives.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition-all">
-              <Flame className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">Predictive Lead Scoring</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Dynamically scores visitors based on BANT criteria (Budget, Authority, Need, Timeline) and website behavior to
-              prioritize high-value buyers.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-              <Calendar className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">1-Click Calendar Booking</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Connects directly to Google Calendar & Outlook. Proposes real-time availability and confirms appointments directly
-              inside the conversation window.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-violet-500/10 text-violet-500 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-violet-500 group-hover:text-white transition-all">
-              <MessageSquare className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">WhatsApp & Multi-Channel</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Never lose a lead who navigates away. Automatically transition website chats to official WhatsApp Business numbers
-              with automated follow-up sequences.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition-all">
-              <BarChart3 className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">Visitor Journey Tracking</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Uncover visitor IP geolocation, referring campaigns, pages visited, time spent, and scroll depth before the AI
-              engages.
-            </p>
-          </div>
-
-          <div className="p-8 rounded-3xl border border-border bg-card/60 hover:bg-card/90 hover:border-primary/40 hover:shadow-xl transition-all duration-300 group">
-            <div className="h-12 w-12 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-sky-500 group-hover:text-white transition-all">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold tracking-tight mb-2">Enterprise Multi-Tenant Security</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Multi-workspace isolation, strict role-based access control, automated data purge policies, audit trails, and zero
-              data leakage guarantees.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 6. INTERACTIVE PIPELINE & ROI CALCULATOR                     */}
-      {/* ============================================================ */}
-      <section id="calculator" className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto relative z-10">
-        <div className="rounded-3xl border border-border bg-gradient-to-b from-card to-background p-8 sm:p-12 shadow-2xl shadow-primary/10">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-2">
-              ROI Projection Engine
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-              Calculate Your Revenue Upside With LeadAI.
-            </h2>
-            <p className="mt-2 text-sm sm:text-base text-muted-foreground">
-              Adjust your monthly visitor traffic and average deal size to see the immediate pipeline you are leaving on the
-              table.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-            {/* Left: Sliders */}
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-semibold text-foreground">Monthly Website Visitors</label>
-                  <span className="text-sm font-bold text-primary">{monthlyVisitors.toLocaleString()} visits/mo</span>
-                </div>
-                <input
-                  type="range"
-                  min="2000"
-                  max="150000"
-                  step="1000"
-                  value={monthlyVisitors}
-                  onChange={(e) => setMonthlyVisitors(Number(e.target.value))}
-                  className="w-full accent-primary cursor-pointer"
-                />
-                <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
-                  <span>2,000</span>
-                  <span>75,000</span>
-                  <span>150,000+</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-semibold text-foreground">Average Deal Value (ACV)</label>
-                  <span className="text-sm font-bold text-primary">${dealValue.toLocaleString()}</span>
-                </div>
-                <input
-                  type="range"
-                  min="500"
-                  max="20000"
-                  step="250"
-                  value={dealValue}
-                  onChange={(e) => setDealValue(Number(e.target.value))}
-                  className="w-full accent-primary cursor-pointer"
-                />
-                <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
-                  <span>$500</span>
-                  <span>$10,000</span>
-                  <span>$20,000+</span>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-muted/40 border border-border text-xs text-muted-foreground space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Assumes a modest +2.4% net qualification uplift based on 800+ customer data sets.</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <span>Saves approximately 320 SDR qualification hours each month.</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Projected Revenue Card */}
-            <div className="rounded-3xl border border-primary/30 bg-primary/5 p-8 text-center flex flex-col justify-center items-center shadow-lg">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary mb-2">Projected Added Pipeline</span>
-              <div className="text-4xl sm:text-5xl font-black text-foreground tracking-tight">
-                ${(estimatedPipeline / 1000).toFixed(1)}k
-                <span className="text-lg font-bold text-muted-foreground"> / mo</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1 mb-6">
-                Estimated from <strong className="text-foreground">{estimatedLeads} new qualified buyers</strong> every month.
-              </p>
-
-              <div className="w-full pt-4 border-t border-border/80 flex items-center justify-around text-center">
-                <div>
-                  <div className="text-lg font-bold text-emerald-500">28x</div>
-                  <div className="text-[11px] text-muted-foreground">Estimated ROI</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-foreground">100%</div>
-                  <div className="text-[11px] text-muted-foreground">24/7 Coverage</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-foreground">&lt; 2 mins</div>
-                  <div className="text-[11px] text-muted-foreground">Deployment Time</div>
-                </div>
-              </div>
-
-              <Link href="/auth/register" className="w-full mt-6">
-                <Button variant="gradient" className="w-full font-semibold shadow-md">
-                  Capture This Pipeline Now &rarr;
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 7. INTEGRATIONS ECOSYSTEM                                    */}
-      {/* ============================================================ */}
-      <section id="integrations" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Connected Everywhere
-          </Badge>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            Syncs Seamlessly With Your Modern Tech Stack.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-muted-foreground">
-            No messy duct-tape scripts. Plug into your favorite CRM, calendar, communication tools, and webhooks in 1 click.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 max-w-5xl mx-auto">
-          {[
-            { name: 'WhatsApp Business', desc: 'Real-time 2-way chat', icon: MessageSquare, color: 'text-emerald-500' },
-            { name: 'HubSpot CRM', desc: 'Auto contact & deal sync', icon: Building2, color: 'text-amber-500' },
-            { name: 'Salesforce', desc: 'Enterprise lead routing', icon: Layers, color: 'text-sky-500' },
-            { name: 'Slack', desc: 'Instant VIP buyer pings', icon: MessageSquare, color: 'text-violet-500' },
-            { name: 'Google Calendar', desc: 'Auto demo scheduling', icon: Calendar, color: 'text-rose-500' },
-            { name: 'Outlook 365', desc: 'Meeting sync & invites', icon: Calendar, color: 'text-blue-500' },
-            { name: 'Zapier', desc: '5,000+ app connectors', icon: Zap, color: 'text-orange-500' },
-            { name: 'Custom Webhooks', desc: 'REST JSON payloads', icon: Cpu, color: 'text-indigo-500' },
-            { name: 'Stripe', desc: 'In-chat payment links', icon: DollarSign, color: 'text-purple-500' },
-            { name: 'Segment', desc: 'Unified customer data', icon: BarChart3, color: 'text-teal-500' },
-          ].map((tool, i) => (
-            <div
-              key={i}
-              className="p-5 rounded-2xl border border-border bg-card/60 hover:bg-card hover:border-primary/40 hover:shadow-md transition-all text-center flex flex-col items-center"
-            >
-              <div className={`h-10 w-10 rounded-xl bg-muted/60 flex items-center justify-center mb-3 ${tool.color}`}>
-                <tool.icon className="h-5 w-5" />
-              </div>
-              <div className="font-bold text-sm text-foreground">{tool.name}</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">{tool.desc}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 8. CUSTOMER TESTIMONIALS                                     */}
-      {/* ============================================================ */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10 border-t border-border/60">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Customer Success Stories
-          </Badge>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">Loved By High-Performing Revenue Leaders.</h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[
-            {
-              quote:
-                'LeadAI replaced our boring static contact forms. In the very first month, our inbound demo bookings went from 42 to 178 without increasing ad spend by a single dollar.',
-              name: 'Sarah Jenkins',
-              role: 'VP of Demand Gen, CloudScale',
-              metric: '+324% Demos Booked',
-            },
-            {
-              quote:
-                'The WhatsApp handoff feature is pure magic. A visitor asks a question on our site at 11 PM, and our agent books a meeting and sends them a WhatsApp confirmation in under 60 seconds.',
-              name: 'Marcus Vance',
-              role: 'Chief Revenue Officer, FinVantage',
-              metric: '4x Faster Pipeline Speed',
-            },
-            {
-              quote:
-                'We sell globally across Europe, Japan, and Latin America. Having an agent that speaks fluent French, Japanese, and Spanish with zero latency transformed our international ARR.',
-              name: 'Elena Rostova',
-              role: 'Head of Global Growth, Nexus Tech',
-              metric: '$2.1M Added Pipeline',
-            },
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className="p-8 rounded-3xl border border-border bg-card/70 flex flex-col justify-between shadow-sm hover:shadow-lg transition-all"
-            >
-              <div>
-                <div className="flex text-amber-400 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-current" />
-                  ))}
-                </div>
-                <p className="text-sm sm:text-base text-muted-foreground italic leading-relaxed">"{item.quote}"</p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-border/70 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-sm text-foreground">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">{item.role}</div>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  {item.metric}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 9. TRANSPARENT PRICING                                       */}
-      {/* ============================================================ */}
-      <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Predictable Plans
-          </Badge>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight">Simple Pricing Built For Every Stage.</h2>
-          <p className="mt-4 text-base sm:text-lg text-muted-foreground">
-            No hidden setup charges. 14-day free trial on all plans. Cancel anytime.
-          </p>
-
-          <div className="mt-8 inline-flex items-center p-1 rounded-full border border-border bg-muted/50">
+          <div className="mt-8 inline-flex items-center p-1 rounded-full border border-border/60 bg-muted/30 backdrop-blur-sm">
             <button
               onClick={() => setBillingCycle('monthly')}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                billingCycle === 'monthly' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              className={`px-5 py-1.5 rounded-full text-xs font-bold transition-all duration-300 ${
+                billingCycle === 'monthly' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Monthly Billing
+              Monthly
             </button>
             <button
               onClick={() => setBillingCycle('annual')}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                billingCycle === 'annual' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              className={`px-5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all duration-300 ${
+                billingCycle === 'annual' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span>Annual Billing</span>
-              <span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">Save 20%</span>
+              Annual <span className="bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black">-20%</span>
             </button>
           </div>
-        </div>
+        </AnimatedSection>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
-          {/* Starter Plan */}
-          <div className="p-8 rounded-3xl border border-border bg-card/60 flex flex-col justify-between shadow-sm">
-            <div>
-              <div className="font-bold text-lg text-foreground">Starter</div>
-              <p className="text-xs text-muted-foreground mt-1">Perfect for founders and single product teams.</p>
-              <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-black text-foreground">{billingCycle === 'annual' ? '$39' : '$49'}</span>
-                <span className="text-xs text-muted-foreground">/ month</span>
-              </div>
-
-              <div className="mt-6 space-y-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>1 Autonomous AI Agent Persona</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>1,500 Inbound Conversations / mo</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Website Chat Widget</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Basic Lead Scoring & Email Alerts</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Knowledge base upload (up to 10 docs)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <Link href="/auth/register">
-                <Button variant="outline" className="w-full font-semibold">
-                  Start Starter Trial
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Growth Plan */}
-          <div className="p-8 rounded-3xl border-2 border-primary bg-card shadow-xl shadow-primary/15 relative flex flex-col justify-between scale-[1.03]">
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-primary text-white text-xs font-bold tracking-wide uppercase shadow-sm">
-              Most Popular
-            </div>
-            <div>
-              <div className="font-bold text-lg text-foreground">Growth Scale</div>
-              <p className="text-xs text-muted-foreground mt-1">For expanding sales & marketing teams.</p>
-              <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-black text-foreground">{billingCycle === 'annual' ? '$119' : '$149'}</span>
-                <span className="text-xs text-muted-foreground">/ month</span>
-              </div>
-
-              <div className="mt-6 space-y-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Up to 5 Specialized AI Agents</span>
-                </div>
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>15,000 Inbound Conversations / mo</span>
-                </div>
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Full WhatsApp Business Integration</span>
-                </div>
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Google & Outlook Calendar Booking</span>
-                </div>
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>HubSpot, Salesforce & Slack Sync</span>
-                </div>
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Unlimited Knowledge Docs & Website Crawling</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <Link href="/auth/register">
-                <Button variant="gradient" className="w-full font-semibold shadow-md shadow-primary/30">
-                  Start 14-Day Free Trial
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Enterprise Plan */}
-          <div className="p-8 rounded-3xl border border-border bg-card/60 flex flex-col justify-between shadow-sm">
-            <div>
-              <div className="font-bold text-lg text-foreground">Enterprise</div>
-              <p className="text-xs text-muted-foreground mt-1">For large companies demanding maximum compliance & volume.</p>
-              <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-black text-foreground">{billingCycle === 'annual' ? '$399' : '$499'}</span>
-                <span className="text-xs text-muted-foreground">/ month</span>
-              </div>
-
-              <div className="mt-6 space-y-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Unlimited Custom AI Agents</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Unlimited Conversations & Visitors</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Custom LLM Fine-Tuning & Private Models</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>SOC2 Type II & Custom DPA Agreement</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span>Dedicated Account Manager & 99.99% SLA</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <Link href="/auth/register">
-                <Button variant="outline" className="w-full font-semibold">
-                  Contact Enterprise Sales
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* 10. FAQ ACCORDION                                            */}
-      {/* ============================================================ */}
-      <section id="faq" className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto relative z-10 border-t border-border/60">
-        <div className="text-center max-w-2xl mx-auto mb-14">
-          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold text-primary border-primary/30 mb-3">
-            Got Questions?
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Frequently Asked Questions</h2>
-        </div>
-
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto items-stretch">
           {[
             {
-              q: 'How fast can I deploy LeadAI on my website?',
-              a: 'You can deploy in less than 2 minutes. Just paste a single script tag before the closing </body> tag of your website or install via Google Tag Manager, WordPress, Webflow, or Shopify.',
+              name: 'Starter',
+              desc: 'For founders & small teams.',
+              price: billingCycle === 'annual' ? 39 : 49,
+              features: ['1 AI Agent', '1,500 Conversations/mo', 'Website Widget', 'Basic Lead Scoring', '10 Knowledge Docs'],
+              cta: 'Start Starter Trial',
+              variant: 'outline' as const,
+              popular: false,
             },
             {
-              q: 'How does the AI know about our specific pricing and product?',
-              a: 'You can upload your PDF manuals, sales decks, pricing sheets, or simply paste your website URL. LeadAI securely digests your knowledge base and only gives answers strictly bounded by your documents.',
+              name: 'Growth',
+              desc: 'For scaling revenue teams.',
+              price: billingCycle === 'annual' ? 119 : 149,
+              features: ['5 AI Agents', '15,000 Conversations/mo', 'WhatsApp Integration', 'Calendar Booking', 'CRM & Slack Sync', 'Unlimited Knowledge Base'],
+              cta: 'Start 14-Day Free Trial',
+              variant: 'gradient' as const,
+              popular: true,
             },
             {
-              q: 'Can human sales reps take over the live chat at any time?',
-              a: 'Yes, absolutely. The instant a visitor requests a human or their lead score crosses your threshold, LeadAI notifies your sales team via Slack, WhatsApp, or SMS, allowing a human rep to step in seamlessly.',
+              name: 'Enterprise',
+              desc: 'For maximum scale & compliance.',
+              price: billingCycle === 'annual' ? 399 : 499,
+              features: ['Unlimited Agents', 'Unlimited Conversations', 'Custom LLM Models', 'SOC2 & DPA', 'Dedicated Manager', '99.99% SLA'],
+              cta: 'Contact Sales',
+              variant: 'outline' as const,
+              popular: false,
             },
-            {
-              q: 'Does it support WhatsApp and multi-lingual conversations?',
-              a: 'Yes! LeadAI natively supports over 95 languages with automatic language detection, and connects directly with official WhatsApp Business API numbers for continuous engagement.',
-            },
-            {
-              q: 'Is my data safe and used to train public models?',
-              a: 'Never. All customer data and proprietary knowledge bases are isolated in isolated tenant containers with zero public LLM training, fully adhering to SOC2, GDPR, and enterprise security standards.',
-            },
-          ].map((item, i) => (
-            <div
-              key={i}
-              className="rounded-2xl border border-border bg-card/60 overflow-hidden transition-colors"
-            >
-              <button
-                onClick={() => setExpandedFaq(expandedFaq === i ? null : i)}
-                className="w-full px-6 py-4 text-left flex items-center justify-between font-bold text-sm sm:text-base text-foreground"
+          ].map((plan, i) => (
+            <AnimatedSection key={i} delay={i * 120}>
+              <div
+                className={`p-8 rounded-3xl flex flex-col justify-between h-full transition-all duration-300 ${
+                  plan.popular
+                    ? 'border-2 border-primary bg-card shadow-2xl shadow-primary/15 relative scale-[1.03] hover:shadow-primary/25'
+                    : 'border border-border/60 bg-card/40 backdrop-blur-sm hover:bg-card/70 hover:border-primary/30 hover:shadow-xl'
+                }`}
               >
-                <span>{item.q}</span>
-                <ChevronDown
-                  className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                    expandedFaq === i ? 'rotate-180 text-primary' : ''
-                  }`}
-                />
-              </button>
-              {expandedFaq === i && (
-                <div className="px-6 pb-5 pt-1 text-sm text-muted-foreground leading-relaxed animate-fade-in">
-                  {item.a}
+                {plan.popular && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-0.5 rounded-full bg-gradient-to-r from-primary to-violet-500 text-white text-[10px] font-black tracking-widest uppercase shadow-lg">
+                    Most Popular
+                  </div>
+                )}
+                <div>
+                  <div className="font-bold text-lg">{plan.name}</div>
+                  <p className="text-xs text-muted-foreground mt-1">{plan.desc}</p>
+                  <div className="mt-6 flex items-baseline gap-1">
+                    <span className="text-5xl font-black tracking-tight">${plan.price}</span>
+                    <span className="text-sm text-muted-foreground font-medium">/mo</span>
+                  </div>
+                  <div className="mt-6 space-y-3">
+                    {plan.features.map((f) => (
+                      <div key={f} className={`flex items-center gap-2.5 text-sm ${plan.popular ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                        <Check className="h-4 w-4 text-primary shrink-0" />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
+                <div className="mt-8">
+                  <Link href="/auth/register">
+                    <Button variant={plan.variant} className={`w-full font-bold h-11 ${plan.popular ? 'shadow-lg shadow-primary/25' : ''}`}>
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </AnimatedSection>
           ))}
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* 11. FINAL HIGH-CONVERSION CTA BANNER                         */}
+      {/* FAQ                                                           */}
       {/* ============================================================ */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
-        <div className="relative rounded-3xl overflow-hidden p-8 sm:p-16 text-center border border-primary/40 bg-gradient-to-tr from-primary/20 via-violet-600/20 to-primary/10 backdrop-blur-2xl shadow-2xl">
-          <div className="absolute inset-0 bg-radial from-primary/20 to-transparent blur-2xl pointer-events-none" />
+      <section id="faq" className="py-24 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto relative z-10">
+        <AnimatedSection className="text-center max-w-2xl mx-auto mb-14">
+          <Badge variant="outline" className="px-3 py-1 text-xs font-bold text-primary border-primary/25 mb-4">
+            FAQ
+          </Badge>
+          <h2 className="text-3xl sm:text-4xl font-black tracking-tight">Common Questions, Straight Answers.</h2>
+        </AnimatedSection>
 
-          <div className="relative z-10 max-w-3xl mx-auto">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/20 text-primary border border-primary/30 mb-6">
-              <Sparkles className="h-3.5 w-3.5" />
-              Start Capturing Inbound Revenue Today
-            </span>
-
-            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-              Ready To Turn Every Website Visitor Into A Closed Deal?
-            </h2>
-
-            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-              Join 2,000+ fast-moving revenue teams that trust LeadAI to generate qualified pipeline around the clock.
-            </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/auth/register" className="w-full sm:w-auto">
-                <Button
-                  variant="gradient"
-                  size="lg"
-                  className="w-full sm:w-auto font-bold h-12 px-8 text-base shadow-lg shadow-primary/30"
+        <div className="space-y-3">
+          {[
+            { q: 'How fast can I go live?', a: 'Under 2 minutes. Paste one script tag before your closing </body> tag, or install via Google Tag Manager, WordPress, Webflow, or Shopify. Your agent starts engaging visitors immediately.' },
+            { q: 'How does the AI learn about my product?', a: 'Upload PDFs, sales decks, pricing sheets, or paste your website URL. LeadAI securely digests your knowledge base and strictly answers within your documented boundaries — no hallucinations.' },
+            { q: 'Can my sales reps take over a live chat?', a: 'Yes. When a visitor asks for a human or their lead score crosses your threshold, your team gets an instant Slack, WhatsApp, or SMS notification and can seamlessly step into any conversation.' },
+            { q: 'Does it work with WhatsApp?', a: 'Natively. Connect your official WhatsApp Business API number and continue conversations, send automated follow-up sequences, and link every chat to the same CRM contact record.' },
+            { q: 'Is my data used to train public AI models?', a: 'Never. All data is isolated in private tenant containers with zero public LLM training. We are SOC2 Type II certified, GDPR compliant, and offer custom DPA agreements for Enterprise plans.' },
+          ].map((item, i) => (
+            <AnimatedSection key={i} delay={i * 60}>
+              <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden hover:border-primary/20 transition-colors">
+                <button
+                  onClick={() => setExpandedFaq(expandedFaq === i ? null : i)}
+                  className="w-full px-6 py-4.5 text-left flex items-center justify-between font-bold text-sm sm:text-[15px] text-foreground"
                 >
-                  Create Your Free AI Agent Now &rarr;
-                </Button>
-              </Link>
-              <Link href="/auth/login" className="w-full sm:w-auto">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto font-semibold h-12 px-6">
-                  Sign In To Dashboard
-                </Button>
-              </Link>
-            </div>
-
-            <p className="mt-4 text-xs text-muted-foreground">
-              No credit card required · 14-day free trial · Setup in 2 minutes
-            </p>
-          </div>
+                  <span>{item.q}</span>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ml-4 transition-transform duration-300 ${expandedFaq === i ? 'rotate-180 text-primary' : ''}`} />
+                </button>
+                <div className={`overflow-hidden transition-all duration-300 ${expandedFaq === i ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="px-6 pb-5 text-sm text-muted-foreground leading-relaxed">{item.a}</div>
+                </div>
+              </div>
+            </AnimatedSection>
+          ))}
         </div>
       </section>
 
       {/* ============================================================ */}
-      {/* 12. COMPREHENSIVE FOOTER                                     */}
+      {/* FINAL CTA                                                     */}
       {/* ============================================================ */}
-      <footer className="border-t border-border/80 bg-muted/20 py-16 px-4 sm:px-6 lg:px-8 relative z-10">
+      <section className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto relative z-10">
+        <AnimatedSection>
+          <div className="relative rounded-[2rem] overflow-hidden p-10 sm:p-20 text-center border border-primary/30">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary/15 via-violet-600/15 to-indigo-500/10" />
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                background: 'radial-gradient(600px circle at 50% 50%, var(--color-primary), transparent 70%)',
+                animation: 'float 6s ease-in-out infinite',
+              }}
+            />
+
+            <div className="relative z-10 max-w-3xl mx-auto">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-primary/20 text-primary border border-primary/25 mb-8">
+                <Sparkles className="h-3.5 w-3.5" style={{ animation: 'float 3s ease-in-out infinite' }} />
+                Limited: First 100 signups get 30 days free
+              </div>
+
+              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-foreground leading-[1.1]">
+                Stop Losing Visitors.<br />
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-violet-500">
+                  Start Closing Deals.
+                </span>
+              </h2>
+
+              <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+                Join 2,000+ revenue teams generating qualified pipeline 24/7 with zero SDR overhead.
+              </p>
+
+              <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link href="/auth/register">
+                  <Button variant="gradient" size="lg" className="h-14 px-10 text-base font-black shadow-2xl shadow-primary/30 hover:scale-[1.03] transition-all duration-300 gap-2.5">
+                    <Rocket className="h-5 w-5" />
+                    Create Your Free Agent
+                  </Button>
+                </Link>
+                <Link href="/auth/login">
+                  <Button variant="outline" size="lg" className="h-14 px-8 font-bold border-border/60">
+                    Sign In To Dashboard
+                  </Button>
+                </Link>
+              </div>
+
+              <p className="mt-5 text-xs text-muted-foreground">
+                No credit card required · Deploy in 2 minutes · Cancel anytime
+              </p>
+            </div>
+          </div>
+        </AnimatedSection>
+      </section>
+
+      {/* ============================================================ */}
+      {/* FOOTER                                                        */}
+      {/* ============================================================ */}
+      <footer className="border-t border-border/40 bg-muted/10 py-16 px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-8">
           <div className="col-span-2 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center text-white font-bold">
+              <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center text-white font-bold shadow-md">
                 <Bot className="h-4 w-4" />
               </div>
               <span className="font-extrabold text-lg tracking-tight">
-                LeadAI<span className="text-primary font-black">.</span>
+                LeadAI<span className="text-primary">.</span>
               </span>
             </Link>
             <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
-              The autonomous AI agent platform that turns anonymous website traffic into verified calendar meetings, qualified
-              leads, and accelerated pipeline.
+              The autonomous AI agent platform that turns anonymous website traffic into verified calendar meetings,
+              qualified leads, and accelerated pipeline — on complete autopilot.
             </p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span>All Systems Operational (99.98% SLA)</span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              All Systems Operational · 99.98% Uptime SLA
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-foreground">Product</div>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>
-                <a href="#features" className="hover:text-foreground transition-colors">
-                  Autonomous Agents
-                </a>
-              </li>
-              <li>
-                <a href="#simulator" className="hover:text-foreground transition-colors">
-                  Live Simulator
-                </a>
-              </li>
-              <li>
-                <a href="#calculator" className="hover:text-foreground transition-colors">
-                  ROI Calculator
-                </a>
-              </li>
-              <li>
-                <a href="#integrations" className="hover:text-foreground transition-colors">
-                  WhatsApp & CRM Sync
-                </a>
-              </li>
-              <li>
-                <a href="#pricing" className="hover:text-foreground transition-colors">
-                  Pricing Plans
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-foreground">Resources</div>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>
-                <Link href="/auth/login" className="hover:text-foreground transition-colors">
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <a href="#faq" className="hover:text-foreground transition-colors">
-                  Documentation & FAQ
-                </a>
-              </li>
-              <li>
-                <Link href="/privacy" className="hover:text-foreground transition-colors">
-                  Security & Privacy
-                </Link>
-              </li>
-              <li>
-                <a href="#features" className="hover:text-foreground transition-colors">
-                  API Reference
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-foreground">Company</div>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>
-                <Link href="/privacy" className="hover:text-foreground transition-colors">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <a href="#faq" className="hover:text-foreground transition-colors">
-                  Terms of Service
-                </a>
-              </li>
-              <li>
-                <a href="#features" className="hover:text-foreground transition-colors">
-                  SOC2 Compliance
-                </a>
-              </li>
-              <li>
-                <Link href="/auth/login" className="hover:text-foreground transition-colors">
-                  Contact Support
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {[
+            { title: 'Product', links: [{ label: 'Features', href: '#features' }, { label: 'How It Works', href: '#how-it-works' }, { label: 'Pricing', href: '#pricing' }, { label: 'FAQ', href: '#faq' }] },
+            { title: 'Resources', links: [{ label: 'Dashboard', href: '/auth/login' }, { label: 'Privacy Policy', href: '/privacy' }, { label: 'Security', href: '#features' }] },
+            { title: 'Company', links: [{ label: 'Terms of Service', href: '#faq' }, { label: 'SOC2 Compliance', href: '#features' }, { label: 'Contact', href: '/auth/login' }] },
+          ].map((col) => (
+            <div key={col.title} className="space-y-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground">{col.title}</div>
+              <ul className="space-y-2 text-xs text-muted-foreground">
+                {col.links.map((link) => (
+                  <li key={link.label}>
+                    <Link href={link.href} className="hover:text-foreground transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="max-w-7xl mx-auto mt-12 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground gap-4">
+        <div className="max-w-7xl mx-auto mt-12 pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground gap-4">
           <div>&copy; {new Date().getFullYear()} LeadAI Technologies Inc. All rights reserved.</div>
           <div className="flex items-center gap-6">
-            <Link href="/privacy" className="hover:text-foreground transition-colors">
-              Privacy
-            </Link>
-            <a href="#faq" className="hover:text-foreground transition-colors">
-              Terms
-            </a>
-            <a href="#features" className="hover:text-foreground transition-colors">
-              Security
-            </a>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <a href="#faq" className="hover:text-foreground transition-colors">Terms</a>
+            <a href="#features" className="hover:text-foreground transition-colors">Security</a>
           </div>
         </div>
       </footer>
