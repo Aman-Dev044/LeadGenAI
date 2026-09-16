@@ -31,10 +31,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Redirect root to dashboard or login
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL(isLoggedIn ? '/dashboard' : '/auth/login', request.url));
-  }
 
   // Security headers for all responses
   const response = NextResponse.next();
