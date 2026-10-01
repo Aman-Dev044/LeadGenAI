@@ -41,4 +41,5 @@ USER nestjs
 # Listens on API_PORT (default 4000)
 EXPOSE 4000
 
-CMD ["node", "apps/api/dist/main"]
+# nest build emits dist/src/main.js (tsconfig includes jest.config at the package root)
+CMD ["node", "apps/api/dist/src/main"]
