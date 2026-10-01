@@ -1654,7 +1654,7 @@ export class CallingService implements OnModuleInit {
       : { 1: leadName, 2: agentName, 3: companyName };
 
     const sent = await this.notifications.sendToLead(tenantId, 'whatsapp', lead, {
-      title: '',
+      title: 'WhatsApp',
       body,
       type: 'follow_up',
       data: { ...meta, leadId: String(lead._id), ...(sid ? { template: { sid, variables } } : {}) },
@@ -1750,7 +1750,7 @@ export class CallingService implements OnModuleInit {
       }
 
       const sent = await this.notifications.sendToLead(tenantId, 'whatsapp', lead, {
-        title: '',
+        title: 'WhatsApp',
         body,
         type: 'follow_up',
         data: { leadId: String(lead._id), callId: String(call._id), postCall: kind, ...(template ? { template } : {}) },

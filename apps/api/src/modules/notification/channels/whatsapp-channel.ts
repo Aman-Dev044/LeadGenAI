@@ -79,7 +79,9 @@ export class WhatsAppChannel {
         body.set('ContentSid', tpl.sid);
         body.set('ContentVariables', JSON.stringify(tpl.variables || {}));
       } else {
-        body.set('Body', notification.title ? `*${notification.title}*\n${notification.body || ''}` : notification.body || '');
+        // 'WhatsApp' is a placeholder title (the schema requires one) - never prefix it
+        const title = notification.title && notification.title !== 'WhatsApp' ? notification.title : '';
+        body.set('Body', title ? `*${title}*\n${notification.body || ''}` : notification.body || '');
       }
 
       const response = await fetch(url, {
