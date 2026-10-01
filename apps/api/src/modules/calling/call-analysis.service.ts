@@ -213,6 +213,11 @@ Output JSON only. No markdown.`,
         : 'none';
     }
     let dueInHours = clamp(na.dueInHours ?? raw.nextActionInHours, 0.25, 24 * 30, 24);
+    // "Send it right away" means now, not tomorrow - whatever the model put in dueInHours
+    const urgency = `${na.reason ?? raw.nextActionReason ?? ''} ${raw.summary ?? ''}`;
+    if (/(immediately|right away|right now|asap|at once|urgent(ly)?|turant|abhi)/i.test(urgency)) {
+      dueInHours = Math.min(dueInHours, 0.25);
+    }
     if (callbackAt) dueInHours = Math.max(0.25, (callbackAt.getTime() - Date.now()) / 3_600_000);
     if (meetingAt && actionType === 'meeting') {
       dueInHours = Math.max(0.25, (meetingAt.getTime() - Date.now()) / 3_600_000);

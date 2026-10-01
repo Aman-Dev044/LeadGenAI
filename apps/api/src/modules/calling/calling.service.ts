@@ -1722,7 +1722,7 @@ export class CallingService implements OnModuleInit {
         leadName: lead.firstName || this.leadName(lead),
         agentName: settings.assistant.agentName,
         companyName: settings.assistant.companyName || 'our team',
-        summary: analysis.nextAction?.type !== 'none' && analysis.nextAction?.title ? `Next step: ${analysis.nextAction.title}.` : '',
+        summary: this.leadFacingNextStep(analysis),
         meetingDate: meetingAt ? dateOf(meetingAt) : '',
         meetingTime: meetingAt ? timeOf(meetingAt) : '',
         callbackDate: callbackAt ? dateOf(callbackAt) : '',
@@ -1745,7 +1745,7 @@ export class CallingService implements OnModuleInit {
       } else if (kind === 'callback' && tpls.callback && callbackAt) {
         template = { sid: tpls.callback, variables: { 1: leadFirst, 2: dateOf(callbackAt), 3: timeOf(callbackAt), 4: settings.assistant.agentName, 5: company } };
       } else if (tpls.thank_you) {
-        const next = analysis.nextAction?.type !== 'none' && analysis.nextAction?.title ? `Next step: ${analysis.nextAction.title}.` : 'We will be in touch shortly.';
+        const next = this.leadFacingNextStep(analysis) || 'We will be in touch shortly.';
         template = { sid: tpls.thank_you, variables: { 1: leadFirst, 2: settings.assistant.agentName, 3: company, 4: next } };
       }
 
@@ -1767,6 +1767,27 @@ export class CallingService implements OnModuleInit {
     } catch (err: any) {
       this.logger.warn(`Post-call WhatsApp failed for lead ${lead._id}: ${err?.message}`);
       return { sent: false, kind: 'error' };
+    }
+  }
+
+  /**
+   * The next step as the LEAD should hear it. Task titles are written for our
+   * team ("Send a WhatsApp follow-up"), which reads oddly in a message to the
+   * customer - so translate the action type into a promise we will keep.
+   */
+  private leadFacingNextStep(analysis: CallAnalysis): string {
+    const t = analysis.nextAction?.type;
+    switch (t) {
+      case 'whatsapp':
+        return 'Our team will send you the details here on WhatsApp shortly.';
+      case 'email':
+        return 'You will receive the details by email shortly.';
+      case 'call':
+        return analysis.callbackAt ? '' : 'Our team will call you shortly to take this forward.';
+      case 'meeting':
+        return 'We look forward to the meeting.';
+      default:
+        return 'We will be in touch shortly.';
     }
   }
 

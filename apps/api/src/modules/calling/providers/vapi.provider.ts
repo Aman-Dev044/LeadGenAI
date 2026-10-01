@@ -436,6 +436,7 @@ export class VapiProvider implements IVoiceProvider {
       '- If they want a meeting or demo, propose a slot and confirm the exact date and time.',
       '- If they are not interested, thank them politely and end the call. Do not push.',
       '- Never invent prices, discounts or commitments. Say a specialist will confirm details.',
+      '- You cannot send documents, quotes, options or links yourself. Never say "I am sending it now". Say: "our team will share the details with you on WhatsApp shortly" - and note it as the next action.',
       '- If this is a wrong number, apologise and end the call.',
       '- Keep the call under 5 minutes. Close by summarising the next step.',
       `- Today is ${new Date().toLocaleString('en-IN', { timeZone: req.timezone, dateStyle: 'full', timeStyle: 'short' })} (${req.timezone}). Convert "kal", "tomorrow", "next Monday" into real dates before booking anything.`,
