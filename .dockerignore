@@ -1,0 +1,17 @@
+# Keep the build context small and never ship host artefacts or secrets
+.git
+.turbo
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+landing
+apps/web
+*.png
+*.md
+documentation.html
+start.bat
