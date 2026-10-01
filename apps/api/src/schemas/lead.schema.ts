@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { LEAD_STATUSES } from '../common/constants/pipeline';
 
 export type LeadDocument = HydratedDocument<Lead>;
 
@@ -25,7 +26,7 @@ export class Lead {
 
   @Prop({
     type: String,
-    enum: ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'],
+    enum: LEAD_STATUSES,
     default: 'new',
   })
   status: string;
@@ -139,9 +140,61 @@ export class Lead {
     generatedAt?: Date;
   };
 
+  // ─── AI calling & follow-up pipeline ───────────────────────────────
+  // Where the automatic first call stands for this lead
+  @Prop({ type: String, enum: ['none', 'queued', 'calling', 'done', 'failed', 'skipped'], default: 'none' })
+  aiCallStatus: string;
+
+  // Outbound dial attempts (AI + human) so retries stop at the tenant's limit
+  @Prop({ default: 0 })
+  callAttempts: number;
+
+  @Prop()
+  lastCallAt: Date;
+
+  // Outcome of the most recent analysed call (interested, no_answer, callback, ...)
+  @Prop({ type: String })
+  lastCallOutcome: string;
+
+  // First moment a real conversation (call answered / message delivered) happened
+  @Prop()
+  lastContactedAt: Date;
+
+  // Earliest pending follow-up task - drives the "Follow-up" stage and overdue alerts
+  @Prop()
+  nextFollowUpAt: Date;
+
+  // How many times the cold-lead re-engagement loop reached out
+  @Prop({ default: 0 })
+  reengageAttempts: number;
+
+  @Prop()
+  lastReengagedAt: Date;
+
+  // Latest structured read of the lead from a call transcript
+  @Prop({ type: Object })
+  aiCallInsights: {
+    interestLevel?: number;
+    outcome?: string;
+    summary?: string;
+    requirement?: string;
+    budget?: string;
+    timeline?: string;
+    objections?: string[];
+    nextAction?: string;
+    nextActionReason?: string;
+    callbackAt?: Date;
+    callId?: string;
+    analysedAt?: Date;
+  };
+
+  @Prop({ type: String })
+  lostReason: string;
+
   @Prop()
   lastActivityAt: Date;
 
+  // Set when the lead is marked Won (kept under its historical name)
   @Prop()
   convertedAt: Date;
 
@@ -156,3 +209,5 @@ LeadSchema.index({ tenantId: 1, status: 1 });
 LeadSchema.index({ tenantId: 1, score: -1 });
 LeadSchema.index({ tenantId: 1, assignedTo: 1 });
 LeadSchema.index({ tenantId: 1, createdAt: -1 });
+LeadSchema.index({ tenantId: 1, nextFollowUpAt: 1 });
+LeadSchema.index({ tenantId: 1, status: 1, lastActivityAt: 1 });

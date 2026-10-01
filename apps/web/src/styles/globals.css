@@ -232,6 +232,102 @@ body {
 /* Tabular numbers everywhere numbers line up */
 .tabular { font-variant-numeric: tabular-nums; }
 
+/* ------------------------------------------------------------------ */
+/* Landing page motion                                                  */
+/* Everything here is ambient (runs on its own, no input) and is muted   */
+/* by the reduced-motion block at the bottom of this file.               */
+/* ------------------------------------------------------------------ */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(4%, -6%, 0) scale(1.12); }
+  66%      { transform: translate3d(-5%, 4%, 0) scale(0.94); }
+}
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes gradient-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes beam-fall {
+  0%       { transform: translateY(-110%); opacity: 0; }
+  12%, 78% { opacity: 1; }
+  100%     { transform: translateY(420%); opacity: 0; }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+@keyframes caret-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+}
+@keyframes ping-ring {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  70%  { transform: scale(1.8);  opacity: 0; }
+  100% { transform: scale(1.8);  opacity: 0; }
+}
+@keyframes tick-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@utility animate-aurora { animation: aurora-drift 18s ease-in-out infinite; }
+@utility animate-marquee-x { animation: marquee-x 38s linear infinite; }
+@utility animate-gradient-pan {
+  background-size: 200% 200%;
+  animation: gradient-pan 7s ease infinite;
+}
+@utility animate-beam { animation: beam-fall 3.6s cubic-bezier(0.45, 0, 0.3, 1) infinite; }
+@utility animate-spin-slow { animation: spin-slow 22s linear infinite; }
+@utility animate-caret { animation: caret-blink 1.05s step-end infinite; }
+@utility animate-ping-ring { animation: ping-ring 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@utility animate-tick-up { animation: tick-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Conic "lit edge" for the landing bento cards: the ring lives on a
+   pseudo-element so the card keeps its own background and radius, and only
+   fades in on hover. */
+@utility lit-border {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from 120deg,
+      transparent 0deg,
+      color-mix(in srgb, var(--color-brand-from) 75%, transparent) 70deg,
+      color-mix(in srgb, var(--color-brand-to) 80%, transparent) 140deg,
+      transparent 230deg,
+      color-mix(in srgb, var(--color-brand-from) 45%, transparent) 320deg,
+      transparent 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+/* The landing grid backdrop, theme-aware so it reads on both surfaces. */
+@utility bg-grid-fine {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

@@ -1,8 +1,8 @@
 // User Roles: Platform owner is SUPER_ADMIN. Workspace roles are strictly ADMIN and SALESPERSON.
 export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'SALESPERSON'] as const;
 
-// Lead Statuses
-export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'] as const;
+// Lead pipeline: Lead -> Contacted -> Interested -> Follow-up -> Meeting -> Won / Lost
+export const LEAD_STATUSES = ['new', 'contacted', 'interested', 'follow_up', 'meeting', 'won', 'lost'] as const;
 export const LEAD_TEMPERATURES = ['hot', 'warm', 'cold'] as const;
 
 // Conversation

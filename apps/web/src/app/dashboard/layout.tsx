@@ -11,6 +11,8 @@ import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { Loading } from '@/components/shared/loading';
 import { canAccessPath, homePathFor } from '@/lib/permissions';
 import { AccessDenied } from '@/components/shared/access-denied';
+import { PoweredBy } from '@/components/brand/logo';
+import { BRAND } from '@/lib/brand';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -60,6 +62,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <ErrorBoundary>{allowed ? children : <AccessDenied homeHref={homePathFor(effectiveRole)} />}</ErrorBoundary>
           </div>
         </main>
+        <footer className="border-t border-border/50 px-4 py-4 md:px-6 lg:px-8">
+          <div className="mx-auto flex w-full max-w-[1600px] flex-col items-center justify-between gap-2 text-[11.5px] text-muted-foreground sm:flex-row">
+            <p>
+              {BRAND.name} · {BRAND.tagline}
+            </p>
+            <PoweredBy className="text-[11.5px]" />
+          </div>
+        </footer>
       </div>
     </div>
   );

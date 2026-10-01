@@ -3,6 +3,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
 import { LeadService } from './lead.service';
 import { EventBusService } from '../../common/events';
+import { AssignmentService } from './assignment.service';
+import { AIProviderFactory } from '../../providers/ai/ai-provider.factory';
 
 describe('LeadService', () => {
   let service: LeadService;
@@ -51,6 +53,8 @@ describe('LeadService', () => {
           useValue: { updateOne: jest.fn().mockResolvedValue({}) },
         },
         EventBusService,
+        { provide: AssignmentService, useValue: { pickAssignee: jest.fn().mockResolvedValue(null) } },
+        { provide: AIProviderFactory, useValue: { getProvider: jest.fn(), getProviderForTenant: jest.fn() } },
       ],
     }).compile();
 

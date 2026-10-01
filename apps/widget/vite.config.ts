@@ -6,7 +6,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: 'src/main.tsx',
-      name: 'LeadAIWidget',
+      name: 'LeadBellsWidget',
       fileName: () => 'widget.js',
       formats: ['iife'],
     },

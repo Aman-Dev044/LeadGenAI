@@ -6,8 +6,9 @@ import {
   LayoutDashboard, Users, MessageSquare, Bot, BookOpen, BarChart3,
   Bell, Settings, CreditCard, Ticket, ArrowLeftRight, Calendar,
   Workflow, Globe, Key, Webhook, Target, UserCog, ChevronLeft,
-  ChevronRight, Sparkles, Crown, Building2, Gauge, ScrollText,
-  Megaphone, SlidersHorizontal, Activity, ShieldCheck, Plug, UserX, type LucideIcon,
+  ChevronRight, Crown, Building2, Gauge, ScrollText,
+  Megaphone, SlidersHorizontal, Activity, ShieldCheck, Plug, UserX, Radar, Radio, KeyRound,
+  PhoneCall, ListChecks, type LucideIcon,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -18,6 +19,8 @@ import { PAGE_ACCESS } from '@/lib/permissions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LogoMark, PoweredBy } from '@/components/brand/logo';
+import { BRAND } from '@/lib/brand';
 
 export type NavItem = {
   label: string;
@@ -46,6 +49,8 @@ export const navGroups: NavGroup[] = [
     title: 'Pipeline',
     items: [
       { label: 'Leads', href: '/dashboard/leads', icon: Users, badgeKey: 'leads', roles: PAGE_ACCESS['/dashboard/leads'] },
+      { label: 'Follow-up Tasks', href: '/dashboard/follow-up-tasks', icon: ListChecks, badgeKey: 'tasks', roles: PAGE_ACCESS['/dashboard/follow-up-tasks'] },
+      { label: 'Calls', href: '/dashboard/calls', icon: PhoneCall, roles: PAGE_ACCESS['/dashboard/calls'] },
       { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare, roles: PAGE_ACCESS['/dashboard/conversations'] },
       { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs', roles: PAGE_ACCESS['/dashboard/handoffs'] },
       { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar, roles: PAGE_ACCESS['/dashboard/appointments'] },
@@ -62,7 +67,9 @@ export const navGroups: NavGroup[] = [
   {
     title: 'Automation',
     items: [
-      { label: 'Follow-ups', href: '/dashboard/follow-ups', icon: Workflow, roles: PAGE_ACCESS['/dashboard/follow-ups'] },
+      { label: 'AI Automation', href: '/dashboard/ai-automation', icon: Radar, badgeKey: 'aiAutomation', roles: PAGE_ACCESS['/dashboard/ai-automation'] },
+      { label: 'Leads Scrap AI', href: '/dashboard/leads-scrap-ai', icon: Radio, badgeKey: 'leadsScrapAi', roles: PAGE_ACCESS['/dashboard/leads-scrap-ai'] },
+      { label: 'Workflows', href: '/dashboard/follow-ups', icon: Workflow, roles: PAGE_ACCESS['/dashboard/follow-ups'] },
       { label: 'Integrations', href: '/dashboard/integrations', icon: Plug, roles: PAGE_ACCESS['/dashboard/integrations'] },
       { label: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, roles: PAGE_ACCESS['/dashboard/webhooks'] },
       { label: 'API Keys', href: '/dashboard/api-keys', icon: Key, roles: PAGE_ACCESS['/dashboard/api-keys'] },
@@ -82,7 +89,8 @@ export const navGroups: NavGroup[] = [
       { label: 'Users', href: '/dashboard/users', icon: UserCog, roles: PAGE_ACCESS['/dashboard/users'] },
       { label: 'Support Tickets', href: '/dashboard/support-tickets', icon: Ticket, roles: PAGE_ACCESS['/dashboard/support-tickets'] },
       { label: 'Billing', href: '/dashboard/billing', icon: CreditCard, roles: PAGE_ACCESS['/dashboard/billing'] },
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, roles: PAGE_ACCESS['/dashboard/settings'] },
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, roles: PAGE_ACCESS['/dashboard/settings'] },
+      { label: 'API Credentials', href: '/dashboard/settings/credentials', icon: KeyRound, roles: PAGE_ACCESS['/dashboard/settings/credentials'] },
     ],
   },
 ];
@@ -126,6 +134,8 @@ export function Sidebar() {
     newLeadsCount,
     clearHandoffBadge,
     clearLeadBadge,
+    seenCounts,
+    markSeen,
   } = useUIStore();
 
   const isOwner = user?.role === 'SUPER_ADMIN' && !impersonation;
@@ -141,11 +151,70 @@ export function Sidebar() {
   });
   const pendingDeletionCount = typeof adminDeletionData === 'number' ? adminDeletionData : 0;
 
+  // Prospects waiting to be reviewed in AI Automation (admins and the owner only)
+  const canSeeAutomation = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const { data: automationPending } = useQuery({
+    queryKey: ['ai-automation-pending'],
+    queryFn: async () => {
+      const res: any = await api.get('/lead-automation/prospects/stats');
+      return res?.data?.pending ?? res?.pending ?? 0;
+    },
+    enabled: !!canSeeAutomation,
+    refetchInterval: 60_000,
+  });
+  const pendingProspectCount = typeof automationPending === 'number' ? automationPending : 0;
+
+  // Posts waiting to be reviewed in Leads Scrap AI (admins and the owner only)
+  const { data: scrapPending } = useQuery({
+    queryKey: ['leads-scrap-ai-pending'],
+    queryFn: async () => {
+      const res: any = await api.get('/social-prospecting/posts/stats');
+      return res?.data?.pending ?? res?.pending ?? 0;
+    },
+    enabled: !!canSeeAutomation,
+    refetchInterval: 60_000,
+  });
+  const pendingScrapCount = typeof scrapPending === 'number' ? scrapPending : 0;
+
+  // Follow-ups that are due or overdue for this user (managers: whole team)
+  const canSeeTasks = user?.role === 'ADMIN' || user?.role === 'SALESPERSON' || user?.role === 'SUPER_ADMIN';
+  const { data: taskStats } = useQuery({
+    queryKey: ['follow-up-task-stats'],
+    queryFn: async () => {
+      const res: any = await api.get('/follow-up-tasks/stats');
+      const s = res?.data || res || {};
+      return (Number(s.overdue) || 0) + (Number(s.dueToday) || 0);
+    },
+    enabled: !!canSeeTasks && !(isOwner && (!useAuthStore.getState().activeTenantId || useAuthStore.getState().activeTenantId === 'all')),
+    refetchInterval: 60_000,
+  });
+  const dueTaskCount = typeof taskStats === 'number' ? taskStats : 0;
+
   // Clear badges when active section is viewed
   useEffect(() => {
     if (pathname.startsWith('/dashboard/handoffs')) clearHandoffBadge();
-    if (pathname.startsWith('/dashboard/leads')) clearLeadBadge();
+    // `/dashboard/leads` must not swallow `/dashboard/leads-scrap-ai`.
+    if (pathname === '/dashboard/leads' || pathname.startsWith('/dashboard/leads/')) clearLeadBadge();
   }, [pathname, clearHandoffBadge, clearLeadBadge]);
+
+  /**
+   * Badges backed by a live server count cannot simply be zeroed on click - the
+   * next refetch would bring them straight back. Instead, record what the user
+   * has seen and badge only what arrived after that. The watermark also follows
+   * the count downwards, so items cleared elsewhere do not mute future arrivals.
+   */
+  useEffect(() => {
+    const sync = (key: string, href: string, count: number) => {
+      if (pathname === href || pathname.startsWith(href + '/') || count < (seenCounts[key] ?? 0)) {
+        markSeen(key, count);
+      }
+    };
+    sync('leadsScrapAi', '/dashboard/leads-scrap-ai', pendingScrapCount);
+    sync('aiAutomation', '/dashboard/ai-automation', pendingProspectCount);
+  }, [pathname, pendingScrapCount, pendingProspectCount, seenCounts, markSeen]);
+
+  /** Items that arrived since the user last looked at that section. */
+  const unseen = (key: string, count: number) => Math.max(0, count - (seenCounts[key] ?? 0));
 
   const getBadge = (key?: string) => {
     if (key === 'notifications' && unreadNotificationsCount > 0) {
@@ -158,6 +227,17 @@ export function Sidebar() {
     if (key === 'leads' && (hasNewLead || newLeadsCount > 0)) {
       const cnt = newLeadsCount > 0 ? newLeadsCount : 1;
       return { count: cnt, label: cnt > 99 ? '99+' : `${cnt}` };
+    }
+    if (key === 'aiAutomation') {
+      const cnt = unseen('aiAutomation', pendingProspectCount);
+      if (cnt > 0) return { count: cnt, label: cnt > 99 ? '99+' : `${cnt}` };
+    }
+    if (key === 'leadsScrapAi') {
+      const cnt = unseen('leadsScrapAi', pendingScrapCount);
+      if (cnt > 0) return { count: cnt, label: cnt > 99 ? '99+' : `${cnt}` };
+    }
+    if (key === 'tasks' && dueTaskCount > 0) {
+      return { count: dueTaskCount, label: dueTaskCount > 99 ? '99+' : `${dueTaskCount}` };
     }
     if (key === 'deletionRequests' && pendingDeletionCount > 0) {
       return { count: pendingDeletionCount, label: pendingDeletionCount > 99 ? '99+' : `${pendingDeletionCount}` };
@@ -258,22 +338,19 @@ export function Sidebar() {
       {/* Brand */}
       <div className={cn('flex h-16 items-center border-b px-4', !sidebarOpen && 'justify-center px-0')}>
         <Link href={isOwner ? '/dashboard/admin' : '/dashboard'} className="flex items-center gap-2.5">
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-md shadow-primary/30">
-            <Sparkles className="h-[18px] w-[18px]" />
-            <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20" />
-          </div>
+          <LogoMark className="h-9 w-9 shrink-0" />
           {sidebarOpen && (
             <div className="leading-tight">
               <div className="flex items-center gap-1.5">
-                <span className="text-[17px] font-bold tracking-tight">LeadAI</span>
+                <span className="text-[17px] font-bold tracking-tight">{BRAND.name}</span>
                 {isOwner && (
                   <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                     Owner
                   </span>
                 )}
               </div>
-              <p className="text-[10.5px] text-muted-foreground truncate max-w-[150px]">
-                {tenant?.name || 'AI sales workspace'}
+              <p className="max-w-[150px] truncate text-[10.5px] text-muted-foreground">
+                {tenant?.name || BRAND.taglineShort}
               </p>
             </div>
           )}
@@ -328,12 +405,19 @@ export function Sidebar() {
                 <ChevronLeft className="h-4 w-4" />
               </button>
             </div>
-            <div className="mt-2 flex items-center justify-between px-1.5 text-[11px] text-muted-foreground/75">
-              <Link href="/privacy" target="_blank" className="hover:text-foreground hover:underline transition-colors">
-                Privacy Policy
-              </Link>
-              <span>·</span>
-              <span className="font-mono text-[10px]">LeadAI Secure</span>
+            <div className="mt-2 space-y-1 px-1.5 text-[11px] text-muted-foreground/75">
+              <div className="flex items-center justify-between">
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="transition-colors hover:text-foreground hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+                <span>·</span>
+                <span className="font-mono text-[10px]">{BRAND.taglineShort}</span>
+              </div>
+              <PoweredBy className="text-[9.5px] leading-tight text-muted-foreground/70" />
             </div>
           </>
         ) : (

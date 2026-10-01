@@ -6,6 +6,9 @@ import { CreateWorkflowDto } from './dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/paginate';
 import { NotificationService } from '../notification/notification.service';
+import { CallingService } from '../calling/calling.service';
+import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
+import { normalizeLeadStatus } from '../../common/constants/pipeline';
 import {
   EventBusService,
   PlatformEvents,
@@ -42,6 +45,8 @@ export class FollowUpService implements OnModuleInit, OnModuleDestroy {
     private readonly notificationService: NotificationService,
     private readonly bus: EventBusService,
     private readonly configService: ConfigService,
+    private readonly calling: CallingService,
+    private readonly tasks: FollowUpTaskService,
   ) {}
 
   // ─── Lifecycle: event subscriptions + scheduler ───────────────────
@@ -263,13 +268,42 @@ export class FollowUpService implements OnModuleInit, OnModuleDestroy {
     const data = { leadId, workflowId };
 
     switch (step.action) {
+      case 'ai_call': {
+        if (!lead.phone) return { skipped: true, reason: 'Lead has no phone' };
+        const call = await this.calling.queueAiCall(tenantId, lead.toObject(), 'workflow', {
+          ignoreCallingHours: cfg.ignoreCallingHours === true,
+        });
+        return { callId: String(call._id), scheduledAt: call.scheduledAt };
+      }
+
+      case 'create_task': {
+        const dueInHours = Number(cfg.dueInHours) > 0 ? Number(cfg.dueInHours) : 24;
+        const task = await this.tasks.create(
+          tenantId,
+          {
+            leadId,
+            title: this.render(cfg.title || `Follow up with ${name}`, lead),
+            description: cfg.description ? this.render(cfg.description, lead) : undefined,
+            type: cfg.type || 'call',
+            priority: cfg.priority || 'normal',
+            dueAt: new Date(Date.now() + dueInHours * 3_600_000),
+            assignedTo: cfg.assignTo || lead.assignedTo,
+            source: 'workflow',
+          },
+          'ai',
+        );
+        return { taskId: String(task._id), dueAt: task.dueAt };
+      }
+
       case 'change_status': {
-        if (!cfg.status) throw new Error('actionConfig.status is required');
+        const target = normalizeLeadStatus(cfg.status);
+        if (!target) throw new Error('actionConfig.status is required');
+        cfg.status = target;
         const from = lead.status;
         if (from === cfg.status) return { skipped: true, reason: 'Already in status' };
         lead.status = cfg.status;
         lead.lastActivityAt = new Date();
-        if (cfg.status === 'converted') lead.convertedAt = new Date();
+        if (cfg.status === 'won') lead.convertedAt = new Date();
         await lead.save();
         await this.activityModel.create({
           tenantId,

@@ -12,13 +12,23 @@ import {
   UploadOptions,
   DownloadResult,
 } from '../../common/interfaces';
+import { CredentialsService } from '../../modules/credentials/credentials.service';
+
+/** Bounded so a platform with many workspaces cannot grow clients without limit. */
+const MAX_TENANT_CLIENTS = 25;
 
 @Injectable()
 export class S3Provider implements IStorageProvider {
   private readonly client: S3Client;
   private readonly logger = new Logger(S3Provider.name);
 
-  constructor(private readonly configService: ConfigService) {
+  /** Clients for workspaces that brought their own bucket. */
+  private readonly tenantClients = new Map<string, { client: S3Client; bucket?: string }>();
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly credentials: CredentialsService,
+  ) {
     this.client = new S3Client({
       region: this.configService.get<string>('storage.s3.region') || 'us-east-1',
       endpoint: this.configService.get<string>('storage.s3.endpoint'),
@@ -28,6 +38,46 @@ export class S3Provider implements IStorageProvider {
         secretAccessKey: this.configService.get<string>('storage.s3.secretAccessKey') || '',
       },
     });
+  }
+
+  /**
+   * The S3 client for one workspace: its own bucket when it saved credentials,
+   * otherwise the platform's. Clients hold connection state, so they are cached.
+   */
+  async clientFor(tenantId?: string): Promise<{ client: S3Client; bucket?: string }> {
+    if (!tenantId || tenantId === 'all') {
+      return { client: this.client, bucket: this.configService.get<string>('storage.s3.bucket') };
+    }
+
+    const creds = await this.credentials.resolve(tenantId, 's3');
+    if (!creds.accessKeyId || !creds.secretAccessKey) {
+      return { client: this.client, bucket: this.configService.get<string>('storage.s3.bucket') };
+    }
+
+    const cacheKey = `${creds.accessKeyId}|${creds.region || ''}|${creds.endpoint || ''}|${creds.bucket || ''}`;
+    const cached = this.tenantClients.get(cacheKey);
+    if (cached) return cached;
+
+    const entry = {
+      client: new S3Client({
+        region: creds.region || 'us-east-1',
+        endpoint: creds.endpoint || undefined,
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId: creds.accessKeyId,
+          secretAccessKey: creds.secretAccessKey,
+        },
+      }),
+      bucket: creds.bucket,
+    };
+
+    if (this.tenantClients.size >= MAX_TENANT_CLIENTS) {
+      const oldest = this.tenantClients.keys().next().value as string;
+      this.tenantClients.get(oldest)?.client.destroy();
+      this.tenantClients.delete(oldest);
+    }
+    this.tenantClients.set(cacheKey, entry);
+    return entry;
   }
 
   async upload(options: UploadOptions): Promise<{ url: string; key: string }> {

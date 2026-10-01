@@ -5,6 +5,7 @@ import { Model } from 'mongoose';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { NotificationService } from '../notification/notification.service';
+import { EMAIL_FOOTER_HTML, EMAIL_FOOTER_TEXT } from '../../common/constants/brand';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_POLL_MS = 60 * 60 * 1000; // hourly
@@ -188,7 +189,7 @@ export class PlanExpiryReminderService implements OnModuleInit, OnModuleDestroy 
         await this.emailProvider.sendEmail({
           to: admin.email,
           subject: `${title} - action needed for ${c.tenant.name}`,
-          text: `Hi ${admin.firstName || ''},\n\n${body}\n\nRenew here: ${billingUrl}\n\nAI Lead Generation Platform`,
+          text: `Hi ${admin.firstName || ''},\n\n${body}\n\nRenew here: ${billingUrl}\n\n${EMAIL_FOOTER_TEXT}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #333;">${title}</h2>
@@ -206,7 +207,7 @@ export class PlanExpiryReminderService implements OnModuleInit, OnModuleDestroy 
               </p>
               <p style="color: #666; font-size: 14px;">After the ${c.kind === 'trial' ? 'trial ends' : 'plan expires'}, your workspace drops to the free tier limits until you renew.</p>
               <hr style="border: 1px solid #eee;" />
-              <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+              ${EMAIL_FOOTER_HTML}
             </div>
           `,
         });

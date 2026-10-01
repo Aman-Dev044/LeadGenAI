@@ -1,4 +1,5 @@
 import { IsArray, IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { LEAD_STATUSES } from '../../../common/constants/pipeline';
 
 export class UpdateLeadDto {
   @IsOptional()
@@ -22,7 +23,7 @@ export class UpdateLeadDto {
   company?: string;
 
   @IsOptional()
-  @IsEnum(['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'])
+  @IsEnum(LEAD_STATUSES)
   status?: string;
 
   @IsOptional()
@@ -41,4 +42,8 @@ export class UpdateLeadDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @IsOptional()
+  @IsString()
+  lostReason?: string;
 }

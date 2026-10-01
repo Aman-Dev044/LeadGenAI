@@ -10,11 +10,14 @@ import {
   MessageCreatedPayload,
   HandoffPayload,
   AppointmentPayload,
+  CallPayload,
+  TaskPayload,
 } from '../../common/events';
 import { WebhookDispatcherService } from '../webhook/webhook-dispatcher.service';
 import { NotificationService } from '../notification/notification.service';
 import { LeadScoreService } from '../lead-score/lead-score.service';
 import { ChatGateway } from '../../gateways/chat.gateway';
+import { NotificationGateway } from '../../gateways/notification.gateway';
 
 /**
  * Small concurrency limiter so bursts (bulk imports, traffic spikes) do not
@@ -62,6 +65,7 @@ export class EventsListenerService implements OnModuleInit {
     private readonly notifications: NotificationService,
     private readonly leadScore: LeadScoreService,
     private readonly chatGateway: ChatGateway,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
 
   onModuleInit() {
@@ -81,6 +85,13 @@ export class EventsListenerService implements OnModuleInit {
 
     this.bus.on<AppointmentPayload>(PlatformEvents.APPOINTMENT_CREATED, (p) => this.onAppointmentCreated(p));
     this.bus.on<AppointmentPayload>(PlatformEvents.APPOINTMENT_UPDATED, (p) => this.onAppointmentUpdated(p));
+
+    this.bus.on<CallPayload>(PlatformEvents.CALL_STARTED, (p) => this.onCall(p, 'call.started'));
+    this.bus.on<CallPayload>(PlatformEvents.CALL_UPDATED, (p) => this.onCall(p, 'call.updated', { webhook: false }));
+    this.bus.on<CallPayload>(PlatformEvents.CALL_ENDED, (p) => this.onCall(p, 'call.ended'));
+    this.bus.on<TaskPayload>(PlatformEvents.TASK_CREATED, (p) => this.onTask(p, 'task.created'));
+    this.bus.on<TaskPayload>(PlatformEvents.TASK_COMPLETED, (p) => this.onTask(p, 'task.completed'));
+    this.bus.on<TaskPayload>(PlatformEvents.TASK_OVERDUE, (p) => this.onTask(p, 'task.overdue'));
 
     this.logger.log('Platform event listeners registered');
   }
@@ -321,6 +332,44 @@ export class EventsListenerService implements OnModuleInit {
     // 3. Outbound webhook
     await this.safe('webhook appointment.updated', () =>
       this.queue.run(() => this.webhooks.dispatch(tenantId, 'appointment.updated', plain)),
+    );
+  }
+
+  // ─── Calls & follow-up tasks ──────────────────────────────────────
+
+  private async onCall({ tenantId, call, lead }: CallPayload, event: string, opts: { webhook?: boolean } = {}) {
+    const plain = this.toPlain(call);
+    const { raw, transcriptSegments, ...payload } = plain || {};
+    // Dashboard sockets live on the /notifications namespace (tenant room)
+    await this.safe('socket ' + event, async () =>
+      this.notificationGateway.sendToTenant(tenantId, event.replace('.', ':'), {
+        callId: String(payload._id),
+        leadId: payload.leadId,
+        status: payload.status,
+        outcome: payload.outcome,
+        type: payload.type,
+        durationSeconds: payload.durationSeconds,
+      }),
+    );
+    if (opts.webhook === false) return;
+    await this.safe('webhook ' + event, () =>
+      this.queue.run(() => this.webhooks.dispatch(tenantId, event, { ...payload, lead: lead ? this.leadSummary(this.toPlain(lead)) : undefined })),
+    );
+  }
+
+  private async onTask({ tenantId, task, lead }: TaskPayload, event: string) {
+    const plain = this.toPlain(task);
+    await this.safe('socket ' + event, async () =>
+      this.notificationGateway.sendToTenant(tenantId, event.replace('.', ':'), {
+        taskId: String(plain._id),
+        leadId: plain.leadId,
+        assignedTo: plain.assignedTo,
+        status: plain.status,
+        dueAt: plain.dueAt,
+      }),
+    );
+    await this.safe('webhook ' + event, () =>
+      this.queue.run(() => this.webhooks.dispatch(tenantId, event, { ...plain, lead: lead ? this.leadSummary(this.toPlain(lead)) : undefined })),
     );
   }
 

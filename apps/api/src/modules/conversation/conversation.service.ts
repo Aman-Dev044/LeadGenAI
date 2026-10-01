@@ -14,6 +14,7 @@ import { ChatGateway } from '../../gateways/chat.gateway';
 import { AssignmentService } from '../lead/assignment.service';
 import { LeadService } from '../lead/lead.service';
 import { EventBusService, PlatformEvents } from '../../common/events';
+import { normalizeLeadStatus } from '../../common/constants/pipeline';
 
 @Injectable()
 export class ConversationService {
@@ -738,7 +739,7 @@ Never invent facts. Use null for unknown fields.`,
           properties: {
             status: {
               type: 'string',
-              enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'],
+              enum: ['new', 'contacted', 'interested', 'follow_up', 'meeting', 'won', 'lost'],
               description: 'New lead pipeline status',
             },
             temperature: {
@@ -1095,7 +1096,7 @@ Never invent facts. Use null for unknown fields.`,
           }
 
           const updateData: any = {};
-          if (args.status) updateData.status = args.status;
+          if (args.status) updateData.status = normalizeLeadStatus(args.status) || 'contacted';
           if (args.temperature) updateData.temperature = args.temperature;
           updateData.lastActivityAt = new Date();
 

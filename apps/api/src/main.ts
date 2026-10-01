@@ -51,7 +51,11 @@ async function bootstrap() {
   const allowAllDashboard = rawOrigins.includes('*');
   const dashboardOrigins = rawOrigins.map((o) => o.trim()).filter((o) => o && o !== '*');
   const isWidgetRequest = (url: string) =>
-    url.startsWith('/api/v1/widget') || url.startsWith('/widget.js') || url.startsWith('/api/v1/health');
+    url.startsWith('/api/v1/widget') ||
+    url.startsWith('/widget.js') ||
+    url.startsWith('/api/v1/health') ||
+    // Telephony providers post call reports here from their own servers
+    url.startsWith('/api/v1/calling/webhooks');
 
   app.enableCors((req: any, callback: (err: Error | null, options?: any) => void) => {
     const origin = req.headers?.origin as string | undefined;
@@ -121,7 +125,12 @@ async function bootstrap() {
     .addTag('analytics', 'Analytics & Reporting')
     .addTag('appointments', 'Appointment Scheduling')
     .addTag('follow-ups', 'Follow-up Workflows')
+    .addTag('follow-up-tasks', 'Follow-up tasks - due nudges and overdue escalation')
+    .addTag('calling', 'AI calling (Vapi), salesperson click-to-call (Twilio), call analysis')
     .addTag('visitor-tracking', 'Visitor Tracking')
+    .addTag('lead-automation', 'AI Automation - Google Maps prospecting (ADMIN)')
+    .addTag('social-prospecting', 'Leads Scrap AI - Reddit/HN/Quora/web prospecting (ADMIN)')
+    .addTag('credentials', 'Per-workspace API credentials (ADMIN, write-only secrets)')
     .addTag('billing', 'Billing & Subscriptions')
     .addTag('super-admin', 'Owner Console (SUPER_ADMIN only, cross-tenant)')
     .addTag('platform', 'Public platform status')

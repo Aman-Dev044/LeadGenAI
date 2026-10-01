@@ -37,6 +37,9 @@ export class Notification {
       'support_ticket',
       'billing',
       'deletion_request',
+      'call',
+      'follow_up_task',
+      'follow_up_overdue',
     ],
     required: true,
   })

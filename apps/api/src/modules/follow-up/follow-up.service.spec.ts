@@ -5,6 +5,8 @@ import { FollowUpService } from './follow-up.service';
 import { NotificationService } from '../notification/notification.service';
 import { ConfigService } from '@nestjs/config';
 import { EventBusService } from '../../common/events';
+import { CallingService } from '../calling/calling.service';
+import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 
 describe('FollowUpService', () => {
   let service: FollowUpService;
@@ -74,6 +76,8 @@ describe('FollowUpService', () => {
         },
         EventBusService,
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: CallingService, useValue: { queueAiCall: jest.fn().mockResolvedValue({ _id: 'call-1', scheduledAt: new Date() }) } },
+        { provide: FollowUpTaskService, useValue: { create: jest.fn().mockResolvedValue({ _id: 'task-1', dueAt: new Date() }) } },
       ],
     }).compile();
 

@@ -1,4 +1,6 @@
-import { Bot, MessageSquare, ShieldCheck, Sparkles, Target, Zap } from 'lucide-react';
+import { Bot, MessageSquare, ShieldCheck, Target, Zap } from 'lucide-react';
+import { Logo, LogoMark, PoweredBy } from '@/components/brand/logo';
+import { BRAND } from '@/lib/brand';
 
 const HIGHLIGHTS = [
   { icon: Bot, title: 'AI sales agent', text: 'Chats with every visitor, answers from your knowledge base and captures leads 24/7.' },
@@ -18,11 +20,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <div className="relative flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-inset ring-white/30 backdrop-blur">
-            <Sparkles className="h-6 w-6" />
+            <LogoMark tone="plain" className="h-6 w-6 text-white" />
           </div>
           <div>
-            <p className="text-xl font-bold tracking-tight">LeadAI</p>
-            <p className="text-xs text-white/70">Conversational lead generation</p>
+            <p className="text-xl font-bold tracking-tight">{BRAND.name}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.13em] text-white/70">
+              {BRAND.tagline}
+            </p>
           </div>
         </div>
 
@@ -48,21 +52,24 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </ul>
         </div>
 
-        <div className="relative flex items-center gap-2 text-xs text-white/70">
-          <ShieldCheck className="h-4 w-4" /> Multi-tenant isolation · Role-based access · Full audit trail
+        <div className="relative space-y-2 text-xs text-white/70">
+          <p className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" /> Multi-tenant isolation · Role-based access · Full audit trail
+          </p>
+          <PoweredBy className="text-white/70" linkClassName="text-white hover:text-white hover:underline" />
         </div>
       </aside>
 
       {/* Form panel */}
-      <main className="flex min-h-screen items-center justify-center p-4 sm:p-8">
+      <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-md page-enter">
-          <div className="mb-6 flex items-center justify-center gap-2 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-md shadow-primary/30">
-              <Sparkles className="h-4.5 w-4.5" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">LeadAI</span>
+          <div className="mb-6 flex justify-center lg:hidden">
+            <Logo size="md" showTagline />
           </div>
           {children}
+        </div>
+        <div className="mt-8 lg:hidden">
+          <PoweredBy className="text-muted-foreground" />
         </div>
       </main>
     </div>

@@ -73,6 +73,15 @@ export class LeadScoreService {
       }
     }
 
+    // A phone conversation is the strongest signal we have: the interest level
+    // the AI read from the latest call floors the rule-based score, so a lead
+    // who said "yes, send me a quote" stays hot even with no scoring rules.
+    const aiInterest = Number(lead.aiCallInsights?.interestLevel);
+    if (Number.isFinite(aiInterest) && aiInterest > totalScore) {
+      appliedRules.push({ rule: 'AI call interest', points: Math.round(aiInterest - totalScore) });
+      totalScore = Math.min(100, Math.round(aiInterest));
+    }
+
     // Determine temperature based on score
     let temperature = 'cold';
     if (totalScore >= 70) temperature = 'hot';

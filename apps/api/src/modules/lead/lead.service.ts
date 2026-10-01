@@ -1,6 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as XLSX from 'xlsx';
 import { CreateLeadDto, UpdateLeadDto } from './dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/paginate';
@@ -8,9 +9,17 @@ import { escapeRegex } from '../../common/utils/sanitize';
 import { EventBusService, PlatformEvents, LeadChanges } from '../../common/events';
 import { AssignmentService } from './assignment.service';
 import { AIProviderFactory } from '../../providers/ai/ai-provider.factory';
+import {
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
+  LEGACY_LEAD_STATUS_MAP,
+  normalizeLeadStatus,
+} from '../../common/constants/pipeline';
 
 @Injectable()
-export class LeadService {
+export class LeadService implements OnModuleInit {
+  private readonly logger = new Logger(LeadService.name);
+
   constructor(
     @InjectModel('Lead') private readonly leadModel: Model<any>,
     @InjectModel('LeadActivity') private readonly activityModel: Model<any>,
@@ -19,6 +28,24 @@ export class LeadService {
     private readonly assignment: AssignmentService,
     private readonly aiFactory: AIProviderFactory,
   ) {}
+
+  /**
+   * One-off, idempotent migration of the old `qualified / unqualified /
+   * converted` values into the current pipeline stages. Cheap enough to run on
+   * every boot: each update is a filtered `updateMany` on an indexed field.
+   */
+  async onModuleInit() {
+    try {
+      for (const [legacy, current] of Object.entries(LEGACY_LEAD_STATUS_MAP)) {
+        const res = await this.leadModel.updateMany({ status: legacy }, { $set: { status: current } });
+        if (res.modifiedCount > 0) {
+          this.logger.log(`Pipeline migration: ${res.modifiedCount} lead(s) ${legacy} -> ${current}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Pipeline migration skipped: ${err?.message}`);
+    }
+  }
 
   /** Auto-assign a freshly created lead when the tenant has assignment enabled. */
   private async autoAssign(tenantId: string, lead: any): Promise<void> {
@@ -149,12 +176,27 @@ export class LeadService {
       query.tenantId = tenantId;
     }
 
-    if (filters?.status) query.status = filters.status;
+    if (filters?.status) {
+      const statuses = String(filters.status)
+        .split(',')
+        .map((s) => normalizeLeadStatus(s))
+        .filter(Boolean);
+      if (statuses.length === 1) query.status = statuses[0];
+      else if (statuses.length > 1) query.status = { $in: statuses };
+    }
     if (filters?.temperature) query.temperature = filters.temperature;
     if (filters?.assignedTo) query.assignedTo = filters.assignedTo;
     if (ownerId) query.assignedTo = ownerId;
     if (filters?.source) query.source = filters.source;
     if (filters?.tags) query.tags = { $in: filters.tags.split(',') };
+    if (filters?.aiCallStatus) query.aiCallStatus = filters.aiCallStatus;
+    // Follow-up windows: what needs attention now
+    if (filters?.followUp === 'overdue') query.nextFollowUpAt = { $lt: new Date() };
+    else if (filters?.followUp === 'today') {
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      query.nextFollowUpAt = { $lte: end };
+    } else if (filters?.followUp === 'upcoming') query.nextFollowUpAt = { $gt: new Date() };
 
     if (paginationDto.search) {
       const safeSearch = escapeRegex(paginationDto.search);
@@ -167,6 +209,44 @@ export class LeadService {
     }
 
     return paginate(this.leadModel, query, paginationDto);
+  }
+
+  /**
+   * Kanban view: every pipeline stage with its count and the most recently
+   * active leads in it. Bounded per column so a big workspace stays fast.
+   */
+  async getPipeline(tenantId: string, ownerId?: string, perStage = 40) {
+    const match: any = { deletedAt: null };
+    if (tenantId && tenantId !== 'all') match.tenantId = tenantId;
+    if (ownerId) match.assignedTo = ownerId;
+
+    const [counts, overdue] = await Promise.all([
+      this.leadModel.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      this.leadModel.countDocuments({ ...match, nextFollowUpAt: { $lt: new Date() } }),
+    ]);
+    const countByStatus = new Map<string, number>(counts.map((c: any) => [c._id, c.count]));
+
+    const stages = await Promise.all(
+      LEAD_STATUSES.map(async (status) => {
+        const leads = await this.leadModel
+          .find({ ...match, status })
+          .sort({ lastActivityAt: -1, createdAt: -1 })
+          .limit(perStage)
+          .select(
+            'firstName lastName email phone company status temperature score source assignedTo ' +
+              'aiCallStatus lastCallOutcome nextFollowUpAt lastActivityAt createdAt tags',
+          )
+          .lean();
+        return {
+          status,
+          label: LEAD_STATUS_LABELS[status],
+          count: countByStatus.get(status) || 0,
+          leads,
+        };
+      }),
+    );
+
+    return { stages, overdueFollowUps: overdue, total: [...countByStatus.values()].reduce((a, b) => a + b, 0) };
   }
 
   async findById(tenantId: string, leadId: string, ownerId?: string) {
@@ -201,7 +281,7 @@ export class LeadService {
         performedBy,
       });
 
-      if (dto.status === 'converted') {
+      if (dto.status === 'won') {
         dto['convertedAt'] = new Date();
       }
     }
@@ -353,23 +433,65 @@ export class LeadService {
     return field;
   }
 
-  // ─── CSV Import ───────────────────────────────────────────────────
-  async importFromCsv(tenantId: string, csvContent: string, performedBy: string): Promise<{ imported: number; skipped: number; errors: string[] }> {
-    const lines = csvContent.split('\n').filter((line) => line.trim());
-    if (lines.length < 2) {
-      return { imported: 0, skipped: 0, errors: ['CSV file is empty or has no data rows'] };
+  // ─── Sheet import (CSV / Excel) ───────────────────────────────────
+
+  /** Rows of strings from a CSV or an Excel workbook (first sheet). */
+  private parseSheet(buffer: Buffer, fileName: string): string[][] {
+    const isExcel = /\.(xlsx|xlsm|xls)$/i.test(fileName || '');
+    if (isExcel) {
+      const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) return [];
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: false, defval: '' });
+      return rows.map((r) => (Array.isArray(r) ? r.map((c) => (c == null ? '' : String(c))) : []));
+    }
+    return buffer
+      .toString('utf-8')
+      .replace(/^﻿/, '')
+      .split(/\r?\n/)
+      .filter((line) => line.trim())
+      .map((line) => this.parseCsvLine(line));
+  }
+
+  /**
+   * Bulk import from a CSV or Excel sheet. Columns are matched by header name
+   * (name / phone / email / description ...). Each row becomes a lead; when
+   * `autoCall` is set the AI phones every imported lead with the row's
+   * description as context, one after another, within calling hours.
+   */
+  async importFromSheet(
+    tenantId: string,
+    buffer: Buffer,
+    fileName: string,
+    performedBy: string,
+    opts: { autoCall?: boolean } = {},
+  ): Promise<{ imported: number; skipped: number; errors: string[]; callsQueued: number }> {
+    let rows: string[][];
+    try {
+      rows = this.parseSheet(buffer, fileName);
+    } catch (err: any) {
+      return { imported: 0, skipped: 0, errors: [`Could not read the file: ${err?.message}`], callsQueued: 0 };
+    }
+    if (rows.length < 2) {
+      return { imported: 0, skipped: 0, errors: ['The sheet is empty or has no data rows'], callsQueued: 0 };
     }
 
-    const headerLine = lines[0];
-    const headers = this.parseCsvLine(headerLine).map((h) => h.toLowerCase().trim());
+    const headers = rows[0].map((h) => String(h || '').toLowerCase().replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim());
 
     // Map common header names to lead fields
     const fieldMap: Record<string, string> = {
-      'first name': 'firstName', 'firstname': 'firstName', 'first_name': 'firstName', 'name': 'firstName',
-      'last name': 'lastName', 'lastname': 'lastName', 'last_name': 'lastName',
-      'email': 'email', 'email address': 'email', 'e-mail': 'email',
-      'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'contact': 'phone',
-      'company': 'company', 'company name': 'company', 'organization': 'company',
+      'first name': 'firstName', 'firstname': 'firstName', 'name': 'fullName', 'full name': 'fullName',
+      'lead name': 'fullName', 'client name': 'fullName', 'customer name': 'fullName', 'contact name': 'fullName',
+      'last name': 'lastName', 'lastname': 'lastName', 'surname': 'lastName',
+      'email': 'email', 'email address': 'email', 'e mail': 'email', 'mail': 'email',
+      'phone': 'phone', 'phone number': 'phone', 'mobile': 'phone', 'mobile number': 'phone', 'contact': 'phone',
+      'contact number': 'phone', 'number': 'phone', 'whatsapp': 'phone', 'cell': 'phone', 'telephone': 'phone',
+      'company': 'company', 'company name': 'company', 'organization': 'company', 'organisation': 'company', 'business': 'company',
+      'description': 'requirement', 'short description': 'requirement', 'requirement': 'requirement', 'requirements': 'requirement',
+      'notes': 'requirement', 'note': 'requirement', 'remark': 'requirement', 'remarks': 'requirement', 'details': 'requirement',
+      'comment': 'requirement', 'comments': 'requirement', 'interest': 'requirement', 'interested in': 'requirement',
+      'service': 'requirement', 'query': 'requirement', 'enquiry': 'requirement', 'inquiry': 'requirement', 'message': 'requirement',
+      'city': 'city', 'location': 'city', 'address': 'address',
       'status': 'status',
       'temperature': 'temperature', 'temp': 'temperature',
       'source': 'source',
@@ -378,72 +500,99 @@ export class LeadService {
 
     const columnMapping: Record<number, string> = {};
     headers.forEach((header, index) => {
-      if (fieldMap[header]) {
-        columnMapping[index] = fieldMap[header];
-      }
+      if (fieldMap[header]) columnMapping[index] = fieldMap[header];
     });
 
-    if (Object.keys(columnMapping).length === 0) {
-      return { imported: 0, skipped: 0, errors: ['Could not map any CSV columns. Use headers like: First Name, Last Name, Email, Phone, Company, Status, Temperature, Source, Tags'] };
+    const mapped = new Set(Object.values(columnMapping));
+    if (!mapped.has('phone') && !mapped.has('email') && !mapped.has('fullName') && !mapped.has('firstName')) {
+      return {
+        imported: 0,
+        skipped: 0,
+        errors: ['Could not find a Name, Phone or Email column. Use headers like: Name, Phone, Email, Description, Company, City'],
+        callsQueued: 0,
+      };
     }
 
     let imported = 0;
     let skipped = 0;
+    let callsQueued = 0;
     const errors: string[] = [];
-    const validStatuses = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'];
     const validTemps = ['hot', 'warm', 'cold'];
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 1; i < rows.length; i++) {
       try {
-        const values = this.parseCsvLine(lines[i]);
+        const values = rows[i];
+        if (!values.some((v) => String(v || '').trim())) continue; // blank line
         const leadData: any = {};
+        const custom: Record<string, any> = {};
 
         for (const [colIndex, field] of Object.entries(columnMapping)) {
-          const value = values[Number(colIndex)]?.trim();
+          const value = String(values[Number(colIndex)] ?? '').trim();
           if (!value) continue;
 
           if (field === 'tags') {
-            leadData.tags = value.split(',').map((t: string) => t.trim()).filter(Boolean);
+            leadData.tags = value.split(/[,;]/).map((t: string) => t.trim()).filter(Boolean);
           } else if (field === 'status') {
-            leadData.status = validStatuses.includes(value.toLowerCase()) ? value.toLowerCase() : 'new';
+            leadData.status = normalizeLeadStatus(value) || 'new';
           } else if (field === 'temperature') {
             leadData.temperature = validTemps.includes(value.toLowerCase()) ? value.toLowerCase() : 'cold';
+          } else if (field === 'fullName') {
+            const parts = value.split(/\s+/);
+            leadData.firstName = leadData.firstName || parts[0];
+            if (parts.length > 1 && !leadData.lastName) leadData.lastName = parts.slice(1).join(' ');
+          } else if (field === 'requirement' || field === 'city' || field === 'address') {
+            custom[field] = custom[field] ? `${custom[field]} ${value}` : value;
+          } else if (field === 'phone') {
+            leadData.phone = this.normalisePhone(value) || value;
           } else {
             leadData[field] = value;
           }
         }
 
-        // Must have at least a name or email
-        if (!leadData.firstName && !leadData.email) {
+        // Must have at least a name, a phone or an email
+        if (!leadData.firstName && !leadData.email && !leadData.phone) {
           skipped++;
           continue;
         }
 
-        // Check for duplicate emails
-        if (leadData.email) {
-          const existing = await this.leadModel.findOne({
-            tenantId,
-            email: leadData.email.toLowerCase(),
-            deletedAt: null,
-          });
+        // Duplicates: within the sheet and against the workspace (phone or email)
+        const emailKey = leadData.email ? String(leadData.email).toLowerCase() : '';
+        const phoneKey = leadData.phone || '';
+        if ((emailKey && seenEmails.has(emailKey)) || (phoneKey && seenPhones.has(phoneKey))) {
+          skipped++;
+          continue;
+        }
+        const dupQuery: any[] = [];
+        if (emailKey) dupQuery.push({ email: emailKey });
+        if (phoneKey) dupQuery.push({ phone: phoneKey });
+        if (dupQuery.length) {
+          const existing = await this.leadModel.findOne({ tenantId, deletedAt: null, $or: dupQuery }).select('_id');
           if (existing) {
             skipped++;
             continue;
           }
         }
+        if (emailKey) seenEmails.add(emailKey);
+        if (phoneKey) seenPhones.add(phoneKey);
 
         const created = await this.leadModel.create({
           tenantId,
           ...leadData,
           source: leadData.source || 'import',
+          customFields: custom,
+          metadata: custom.city ? { city: custom.city } : {},
           lastActivityAt: new Date(),
         });
         await this.autoAssign(tenantId, created);
-        // Listeners treat source "import" as bulk: scoring + webhooks, no per-lead alerts
-        this.bus.emit(PlatformEvents.LEAD_CREATED, { tenantId, lead: created });
+        // Listeners treat source "import" as bulk: scoring + webhooks, no per-lead alerts.
+        // `autoCall` tells the calling engine to dial even if auto-call is off for this workspace.
+        this.bus.emit(PlatformEvents.LEAD_CREATED, { tenantId, lead: created, autoCall: opts.autoCall });
+        if (opts.autoCall && created.phone) callsQueued++;
 
         imported++;
-      } catch (err) {
+      } catch (err: any) {
         errors.push(`Row ${i + 1}: ${err.message}`);
       }
     }
@@ -454,12 +603,30 @@ export class LeadService {
         tenantId,
         leadId: 'bulk_import',
         type: 'created',
-        description: `CSV import: ${imported} leads imported, ${skipped} skipped`,
+        description: `Sheet import (${fileName}): ${imported} leads imported, ${skipped} skipped${opts.autoCall ? `, ${callsQueued} AI calls queued` : ''}`,
         performedBy,
       });
     }
 
-    return { imported, skipped, errors };
+    return { imported, skipped, errors, callsQueued };
+  }
+
+  /** E.164-ish: digits with a leading +. Indian 10-digit numbers get +91. */
+  private normalisePhone(raw?: string): string | null {
+    if (!raw) return null;
+    let s = String(raw).replace(/[^\d+]/g, '');
+    if (!s) return null;
+    if (s.startsWith('00')) s = `+${s.slice(2)}`;
+    if (!s.startsWith('+')) {
+      const digits = s.replace(/\D/g, '');
+      if (digits.length === 10) s = `+91${digits}`;
+      else if (digits.length === 11 && digits.startsWith('0')) s = `+91${digits.slice(1)}`;
+      else if (digits.length === 12 && digits.startsWith('91')) s = `+${digits}`;
+      else s = `+${digits}`;
+    }
+    const digits = s.slice(1);
+    if (digits.length < 8 || digits.length > 15) return null;
+    return `+${digits}`;
   }
 
   private parseCsvLine(line: string): string[] {

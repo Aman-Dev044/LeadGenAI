@@ -5,8 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth-store';
 import {
   Users, MessageSquare, Bot, Target, TrendingUp, Flame, Sparkles, ArrowRight,
-  Plus, CalendarDays, Gauge, UserCheck, Globe,
+  Plus, CalendarDays, Gauge, UserCheck, Globe, AlertTriangle, ListChecks, PhoneCall,
 } from 'lucide-react';
+import { statusLabel } from '@/lib/pipeline';
 import { api } from '@/lib/api-client';
 import { StatCard } from '@/components/shared/stat-card';
 import { PageHeader } from '@/components/shared/page-header';
@@ -67,6 +68,20 @@ export default function DashboardPage() {
     enabled: canView,
   });
 
+  const { data: taskStatsData } = useQuery({
+    queryKey: ['follow-up-task-stats', activeTenantId],
+    queryFn: () => api.get<any>('/follow-up-tasks/stats'),
+    refetchInterval: 30000,
+    enabled: canView,
+  });
+
+  const { data: callStatsData } = useQuery({
+    queryKey: ['call-stats', activeTenantId],
+    queryFn: () => api.get<any>('/calling/stats'),
+    refetchInterval: 30000,
+    enabled: canView,
+  });
+
   if (isLoading || !canView) return <Loading label="Loading your dashboard" />;
 
   // Backend overview returns: totalLeads, totalConversations, activeAgents, totalUsers, totalAppointments, isScoped, leadsByStatus (object), leadsByTemperature (object)
@@ -76,9 +91,13 @@ export default function DashboardPage() {
 
   // Derive stats from available data
   const hotLeads = leadsByTemp.hot || 0;
-  const qualifiedLeads = leadsByStatus.qualified || 0;
-  const convertedLeads = leadsByStatus.converted || 0;
+  const qualifiedLeads = (leadsByStatus.interested || 0) + (leadsByStatus.follow_up || 0) + (leadsByStatus.meeting || 0);
+  const convertedLeads = leadsByStatus.won || 0;
   const conversionRate = raw.totalLeads > 0 ? ((convertedLeads / raw.totalLeads) * 100) : 0;
+
+  // Follow-up + calling health (AI engine)
+  const taskStats = (taskStatsData as any)?.data || {};
+  const callStats = (callStatsData as any)?.data || {};
 
   // leadStats returns: { dailyLeads, topSources, averageScore }
   const leadStatsData = (leadStats as any)?.data || {};
@@ -90,7 +109,7 @@ export default function DashboardPage() {
   const convStatsData = (convStats as any)?.data || {};
 
   // Convert leadsByStatus object to array for chart: { new: 5, qualified: 3 } → [{ _id: 'new', count: 5 }, ...]
-  const statusChartData = Object.entries(leadsByStatus).map(([key, val]) => ({ _id: key, count: val as number }));
+  const statusChartData = Object.entries(leadsByStatus).map(([key, val]) => ({ _id: statusLabel(key), count: val as number }));
 
   // dailyConversations is array of { _id: "2025-01-01", count: 5 }
   const dailyConversations = convStatsData.dailyConversations || [];
@@ -168,11 +187,47 @@ export default function DashboardPage() {
           tone="danger"
         />
         <StatCard
-          title={isSalesperson ? 'My Conversion Rate' : 'Conversion Rate'}
+          title={isSalesperson ? 'My Win Rate' : 'Win Rate'}
           value={`${conversionRate.toFixed(1)}%`}
           icon={TrendingUp}
-          description={isSalesperson ? 'assigned → converted' : 'leads → converted'}
+          description={isSalesperson ? 'assigned → won' : 'leads → won'}
           tone="success"
+        />
+      </div>
+
+      {/* Follow-up & calling health */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title={isSalesperson ? 'My Overdue Follow-ups' : 'Overdue Follow-ups'}
+          value={taskStats.overdue || 0}
+          icon={AlertTriangle}
+          description={taskStats.overdue ? (isSalesperson ? 'do these first' : 'leads going cold — team alerted') : 'nothing slipping'}
+          tone={taskStats.overdue ? 'danger' : 'success'}
+          onClick={() => router.push('/dashboard/follow-up-tasks')}
+        />
+        <StatCard
+          title="Due Today"
+          value={taskStats.dueToday || 0}
+          icon={ListChecks}
+          description={`${taskStats.doneToday || 0} done today`}
+          tone="warning"
+          onClick={() => router.push('/dashboard/follow-up-tasks')}
+        />
+        <StatCard
+          title="AI Calls Today"
+          value={callStats.today || 0}
+          icon={PhoneCall}
+          description={`${callStats.pending || 0} queued or live · ${callStats.answerRate || 0}% answered this week`}
+          tone="primary"
+          onClick={() => router.push('/dashboard/calls')}
+        />
+        <StatCard
+          title="Interested on Calls"
+          value={`${callStats.interestRate || 0}%`}
+          icon={Flame}
+          description="of answered calls this week"
+          tone="violet"
+          onClick={() => router.push('/dashboard/calls')}
         />
       </div>
 
@@ -213,10 +268,10 @@ export default function DashboardPage() {
           onClick={isSalesperson ? undefined : () => router.push('/dashboard/users')}
         />
         <StatCard
-          title={isSalesperson ? 'My Qualified Leads' : 'Qualified Leads'}
+          title={isSalesperson ? 'My Leads in Progress' : 'Leads in Progress'}
           value={qualifiedLeads}
           icon={TrendingUp}
-          description={isSalesperson ? 'ready to close' : 'ready for sales'}
+          description="interested, follow-up or meeting"
           tone="success"
         />
       </div>

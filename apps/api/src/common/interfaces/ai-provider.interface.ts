@@ -64,4 +64,10 @@ export interface IAIProvider {
   generateEmbedding(text: string): Promise<EmbeddingResult>;
 
   generateEmbeddings(texts: string[]): Promise<EmbeddingResult[]>;
+
+  /**
+   * Speech-to-text for call recordings. Optional: only OpenAI (Whisper) offers
+   * it, so callers must handle `undefined` and fall back to manual notes.
+   */
+  transcribeAudio?(audio: Buffer, fileName: string, language?: string): Promise<string>;
 }

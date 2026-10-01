@@ -87,6 +87,8 @@ export class Tenant {
       emailOnNewLead: { type: Boolean, default: true },
       emailOnHotLead: { type: Boolean, default: true },
       emailOnHandoff: { type: Boolean, default: true },
+      emailOnCallSummary: { type: Boolean, default: true },
+      emailOnOverdueFollowUp: { type: Boolean, default: true },
       slackWebhookUrl: { type: String, default: '' },
       teamsWebhookUrl: { type: String, default: '' },
       notifyRoles: { type: [String], default: ['ADMIN', 'SALES_MANAGER'] },
@@ -97,10 +99,20 @@ export class Tenant {
     emailOnNewLead: boolean;
     emailOnHotLead: boolean;
     emailOnHandoff: boolean;
+    emailOnCallSummary: boolean;
+    emailOnOverdueFollowUp: boolean;
     slackWebhookUrl?: string;
     teamsWebhookUrl?: string;
     notifyRoles: string[];
   };
+
+  /**
+   * AI calling + follow-up engine. Everything the automation needs to run a
+   * lead from "just added" to a booked meeting without a human touching it.
+   * Defaults are applied in CallingSettingsService so older tenants work too.
+   */
+  @Prop({ type: Object, default: {} })
+  callingSettings: Record<string, any>;
 
   @Prop({
     type: {

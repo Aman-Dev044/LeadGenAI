@@ -51,6 +51,11 @@ import { PlatformModule } from './modules/platform/platform.module';
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { AccountDeletionModule } from './modules/account-deletion/account-deletion.module';
+import { LeadAutomationModule } from './modules/lead-automation/lead-automation.module';
+import { CredentialsModule } from './modules/credentials/credentials.module';
+import { SocialProspectingModule } from './modules/social-prospecting/social-prospecting.module';
+import { FollowUpTaskModule } from './modules/follow-up-task/follow-up-task.module';
+import { CallingModule } from './modules/calling/calling.module';
 
 // Gateways (WebSocket)
 import { GatewayModule } from './gateways/gateway.module';
@@ -109,6 +114,9 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     // Event bus (global) - must be registered before feature modules that emit on it
     EventBusModule,
 
+    // Per-tenant API credentials (global): every provider resolves keys through this
+    CredentialsModule,
+
     // Platform-wide settings (global): maintenance mode, signup toggle, announcement, plan limits
     PlatformModule,
 
@@ -143,6 +151,16 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     BillingModule,
     IntegrationsModule,
     AccountDeletionModule,
+
+    // Google Maps prospecting (ADMIN + owner)
+    LeadAutomationModule,
+
+    // Leads Scrap AI - Reddit/HN/Quora/web buying-intent prospecting (ADMIN + owner)
+    SocialProspectingModule,
+
+    // Follow-up tasks (due nudges, overdue escalation) + AI calling engine
+    FollowUpTaskModule,
+    CallingModule,
 
     // Owner console (SUPER_ADMIN only, cross-tenant)
     SuperAdminModule,

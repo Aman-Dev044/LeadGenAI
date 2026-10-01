@@ -88,7 +88,7 @@ function VerifyEmailContent() {
     try {
       const res: any = await api.post('/auth/verify-email', { email, tenantSlug, code: value });
       setAuth(res.data.user, res.data.accessToken, res.data.refreshToken, res.data.tenant);
-      toast.success('Email verified! Welcome to LeadAI.');
+      toast.success('Email verified! Welcome to LeadBells.');
       router.push('/dashboard');
     } catch (err: any) {
       const apiCode = err?.data?.code as string | undefined;

@@ -10,7 +10,7 @@ import { Widget } from './components/Widget';
   const position = (scriptTag.getAttribute('data-position') || 'bottom-right') as 'bottom-right' | 'bottom-left';
 
   if (!agentId) {
-    console.error('LeadAI Widget: data-agent-id is required');
+    console.error('LeadBells Widget: data-agent-id is required');
     return;
   }
 

@@ -49,7 +49,7 @@ export default function RegisterPage() {
         return;
       }
       setAuth(res.data.user, res.data.accessToken, res.data.refreshToken, res.data.tenant);
-      toast.success('Account created! Welcome to LeadAI.');
+      toast.success('Account created! Welcome to LeadBells.');
       router.push('/dashboard');
     } catch (err: any) {
       toast.error(err.message || 'Registration failed');
@@ -113,7 +113,7 @@ export default function RegisterPage() {
             </p>
 
             <p className="text-[11px] text-muted-foreground text-center pt-2 border-t border-border/50">
-              By creating an account, you agree to LeadAI's{' '}
+              By creating an account, you agree to LeadBells's{' '}
               <Link href="/privacy" className="text-primary font-medium underline-offset-2 hover:underline">
                 Privacy Policy
               </Link>

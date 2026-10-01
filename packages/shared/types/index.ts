@@ -2,7 +2,7 @@
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON';
 
 // Lead
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'unqualified' | 'converted' | 'lost';
+export type LeadStatus = 'new' | 'contacted' | 'interested' | 'follow_up' | 'meeting' | 'won' | 'lost';
 export type LeadTemperature = 'hot' | 'warm' | 'cold';
 export type LeadSource = 'widget' | 'api' | 'import' | 'manual' | 'referral';
 

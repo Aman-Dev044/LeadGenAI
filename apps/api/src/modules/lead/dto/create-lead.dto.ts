@@ -1,4 +1,5 @@
 import { IsArray, IsEmail, IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { LEAD_STATUSES } from '../../../common/constants/pipeline';
 
 export class CreateLeadDto {
   @IsOptional()
@@ -22,7 +23,7 @@ export class CreateLeadDto {
   company?: string;
 
   @IsOptional()
-  @IsEnum(['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'])
+  @IsEnum(LEAD_STATUSES)
   status?: string;
 
   @IsOptional()

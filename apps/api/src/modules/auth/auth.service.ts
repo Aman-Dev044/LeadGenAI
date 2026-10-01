@@ -26,6 +26,7 @@ export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { PlatformSettingsService } from '../platform/platform-settings.service';
+import { EMAIL_FOOTER_HTML, EMAIL_FOOTER_TEXT } from '../../common/constants/brand';
 
 export interface IssueTokenOptions {
   userAgent?: string;
@@ -159,7 +160,7 @@ export class AuthService {
             <p style="color: #666; font-size: 14px;">This code expires in <strong>5 minutes</strong>.</p>
             <p style="color: #666; font-size: 14px;">If you didn't sign up, you can safely ignore this email.</p>
             <hr style="border: 1px solid #eee;" />
-            <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+            ${EMAIL_FOOTER_HTML}
           </div>
         `,
       });
@@ -276,7 +277,7 @@ export class AuthService {
       : '';
     await this.emailProvider.sendEmail({
       to: user.email,
-      subject: `Welcome to LeadAI, ${user.firstName || 'there'}!`,
+      subject: `Welcome to LeadBells, ${user.firstName || 'there'}!`,
       text: `Hi ${user.firstName || ''},
 
 Your workspace "${tenant.name}" is ready.
@@ -285,10 +286,10 @@ Dashboard: ${appUrl}/dashboard
 
 Next steps: create an AI agent, add your knowledge base, and embed the chat widget on your website.
 
-AI Lead Generation Platform`,
+${EMAIL_FOOTER_TEXT}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Welcome to LeadAI 🎉</h2>
+          <h2 style="color: #333;">Welcome to LeadBells 🎉</h2>
           <p>Hi ${user.firstName || ''},</p>
           <p>Your workspace <strong>${tenant.name}</strong> is ready. Here is what you need to sign in:</p>
           <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
@@ -309,7 +310,7 @@ AI Lead Generation Platform`,
           </p>
           <p style="color: #666; font-size: 14px;">Need help? Just reply to this email.</p>
           <hr style="border: 1px solid #eee;" />
-          <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+          ${EMAIL_FOOTER_HTML}
         </div>
       `,
     });
@@ -640,7 +641,7 @@ AI Lead Generation Platform`,
             <p style="color: #666; font-size: 14px;">This link expires in 1 hour.</p>
             <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
             <hr style="border: 1px solid #eee;" />
-            <p style="color: #999; font-size: 12px;">AI Lead Generation Platform</p>
+            ${EMAIL_FOOTER_HTML}
           </div>
         `,
       });
@@ -735,7 +736,7 @@ AI Lead Generation Platform`,
             <p style="color: #DC2626; font-size: 14px; font-weight: 600;">⚠️ This code expires in exactly 2 minutes.</p>
             <p style="color: #6B7280; font-size: 13px;">If you did not request this, please ignore this email or change your password immediately.</p>
             <hr style="border: 1px solid #E5E7EB; margin: 24px 0;" />
-            <p style="color: #9CA3AF; font-size: 12px;">AI Lead Generation Platform</p>
+            ${EMAIL_FOOTER_HTML}
           </div>
         `,
       });
@@ -830,7 +831,7 @@ AI Lead Generation Platform`,
             <p style="color: #DC2626; font-size: 14px; font-weight: 600;">⚠️ This code expires in exactly 2 minutes.</p>
             <p style="color: #6B7280; font-size: 13px;">Once confirmed, your old email will be replaced and you will be signed out to log in with this new email.</p>
             <hr style="border: 1px solid #E5E7EB; margin: 24px 0;" />
-            <p style="color: #9CA3AF; font-size: 12px;">AI Lead Generation Platform</p>
+            ${EMAIL_FOOTER_HTML}
           </div>
         `,
       });

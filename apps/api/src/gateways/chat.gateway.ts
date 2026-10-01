@@ -204,6 +204,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.server?.to(`tenant:${tenantId}`).emit('appointment:updated', appointment);
   }
 
+  /** Generic tenant-wide event (calls, follow-up tasks). */
+  emitToTenant(tenantId: string, event: string, payload: any) {
+    this.server?.to(`tenant:${tenantId}`).emit(event, payload);
+  }
+
   getOnlineAgentCount(tenantId: string): number {
     let count = 0;
     for (const [, client] of this.clients) {

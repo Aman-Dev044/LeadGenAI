@@ -1,11 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CredentialsService } from '../../credentials/credentials.service';
 
 @Injectable()
 export class SmsChannel {
   private readonly logger = new Logger(SmsChannel.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly credentials: CredentialsService,
+  ) {}
+
+  /**
+   * The workspace's own Twilio account when it saved one, the platform's
+   * otherwise. `tenantId` is optional so existing callers keep working.
+   */
+  private async twilioSettings(tenantId?: string) {
+    const own = tenantId ? await this.credentials.resolve(tenantId, 'twilio') : {};
+    return {
+      accountSid: own.accountSid || this.configService.get<string>('TWILIO_ACCOUNT_SID'),
+      authToken: own.authToken || this.configService.get<string>('TWILIO_AUTH_TOKEN'),
+      phoneNumber: own.phoneNumber || this.configService.get<string>('TWILIO_PHONE_NUMBER'),
+      whatsappNumber:
+        own.whatsappNumber || this.configService.get<string>('TWILIO_WHATSAPP_NUMBER'),
+    };
+  }
 
   async send(notification: any, phoneNumber: string): Promise<boolean> {
     if (!phoneNumber) {
@@ -13,10 +32,10 @@ export class SmsChannel {
       return false;
     }
 
-    const provider = this.configService.get<string>('SMS_PROVIDER') || 'twilio';
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
-    const fromNumber = this.configService.get<string>('TWILIO_PHONE_NUMBER');
+    // The workspace's own Twilio account when it saved one
+    const { accountSid, authToken, phoneNumber: fromNumber } = await this.twilioSettings(
+      notification?.tenantId,
+    );
 
     if (!accountSid || !authToken || !fromNumber) {
       this.logger.warn('SMS provider (Twilio) not configured');

@@ -30,7 +30,7 @@ export class FollowUpWorkflow {
       delayMinutes: Number,
       action: {
         type: String,
-        enum: ['send_email', 'send_sms', 'send_whatsapp', 'notify_salesperson', 'change_status', 'assign_lead'],
+        enum: ['send_email', 'send_sms', 'send_whatsapp', 'notify_salesperson', 'change_status', 'assign_lead', 'ai_call', 'create_task'],
       },
       actionConfig: Object,
       skipCondition: Object,

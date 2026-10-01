@@ -11,13 +11,17 @@ import {
   EmbeddingResult,
 } from '../../common/interfaces';
 
+/** Bounded so a platform with many workspaces cannot grow clones without limit. */
+const MAX_TENANT_CLIENTS = 50;
+
 @Injectable()
 export class AnthropicProvider implements IAIProvider {
-  private readonly client: Anthropic;
+  protected readonly client: Anthropic;
   private readonly openaiClient: OpenAI;
   private readonly logger = new Logger(AnthropicProvider.name);
-  private readonly defaultModel: string;
+  protected readonly defaultModel: string;
   private readonly embeddingModel: string;
+  private readonly tenantClients = new Map<string, AnthropicProvider>();
 
   constructor(private readonly configService: ConfigService) {
     this.client = new Anthropic({
@@ -33,6 +37,39 @@ export class AnthropicProvider implements IAIProvider {
     });
     this.defaultModel = this.configService.get<string>('ai.anthropic.model') || 'claude-sonnet-4-20250514';
     this.embeddingModel = this.configService.get<string>('ai.openai.embeddingModel') || 'text-embedding-3-small';
+  }
+
+
+  /**
+   * A view of this provider bound to one workspace's own API key.
+   *
+   * The clone delegates to this instance through the prototype chain and only
+   * overrides `client` and `defaultModel`, so every method keeps working without
+   * being rewritten. Clones are cached per key+model because constructing an SDK
+   * client on each call would drop connection pooling.
+   */
+  withCredentials(creds: { apiKey?: string; model?: string }): AnthropicProvider {
+    if (!creds?.apiKey && !creds?.model) return this;
+
+    const cacheKey = `${creds.apiKey || ''}|${creds.model || ''}`;
+    const cached = this.tenantClients.get(cacheKey);
+    if (cached) return cached;
+
+    const clone: AnthropicProvider = Object.create(this);
+    if (creds.apiKey) {
+      Object.defineProperty(clone, 'client', {
+        value: new Anthropic({ apiKey: creds.apiKey, timeout: 30000, maxRetries: 1 }),
+      });
+    }
+    if (creds.model) {
+      Object.defineProperty(clone, 'defaultModel', { value: creds.model });
+    }
+
+    if (this.tenantClients.size >= MAX_TENANT_CLIENTS) {
+      this.tenantClients.delete(this.tenantClients.keys().next().value as string);
+    }
+    this.tenantClients.set(cacheKey, clone);
+    return clone;
   }
 
   private splitMessages(messages: ChatMessage[]) {

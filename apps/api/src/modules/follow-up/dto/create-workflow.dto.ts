@@ -9,7 +9,7 @@ export class WorkflowStepDto {
   delayMinutes: number;
 
   @IsNotEmpty()
-  @IsEnum(['send_email', 'send_sms', 'send_whatsapp', 'notify_salesperson', 'change_status', 'assign_lead'])
+  @IsEnum(['send_email', 'send_sms', 'send_whatsapp', 'notify_salesperson', 'change_status', 'assign_lead', 'ai_call', 'create_task'])
   action: string;
 
   @IsNotEmpty()

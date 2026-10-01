@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import {
   IAIProvider,
   ChatMessage,
@@ -10,12 +10,16 @@ import {
   EmbeddingResult,
 } from '../../common/interfaces';
 
+/** Bounded so a platform with many workspaces cannot grow clones without limit. */
+const MAX_TENANT_CLIENTS = 50;
+
 @Injectable()
 export class OpenAIProvider implements IAIProvider {
-  private readonly client: OpenAI;
+  protected readonly client: OpenAI;
   private readonly logger = new Logger(OpenAIProvider.name);
-  private readonly defaultModel: string;
+  protected readonly defaultModel: string;
   private readonly embeddingModel: string;
+  private readonly tenantClients = new Map<string, OpenAIProvider>();
 
   constructor(private readonly configService: ConfigService) {
     this.client = new OpenAI({
@@ -25,6 +29,39 @@ export class OpenAIProvider implements IAIProvider {
     });
     this.defaultModel = this.configService.get<string>('ai.openai.model') || 'gpt-4o';
     this.embeddingModel = this.configService.get<string>('ai.openai.embeddingModel') || 'text-embedding-3-small';
+  }
+
+
+  /**
+   * A view of this provider bound to one workspace's own API key.
+   *
+   * The clone delegates to this instance through the prototype chain and only
+   * overrides `client` and `defaultModel`, so every method keeps working without
+   * being rewritten. Clones are cached per key+model because constructing an SDK
+   * client on each call would drop connection pooling.
+   */
+  withCredentials(creds: { apiKey?: string; model?: string }): OpenAIProvider {
+    if (!creds?.apiKey && !creds?.model) return this;
+
+    const cacheKey = `${creds.apiKey || ''}|${creds.model || ''}`;
+    const cached = this.tenantClients.get(cacheKey);
+    if (cached) return cached;
+
+    const clone: OpenAIProvider = Object.create(this);
+    if (creds.apiKey) {
+      Object.defineProperty(clone, 'client', {
+        value: new OpenAI({ apiKey: creds.apiKey, timeout: 30000, maxRetries: 1 }),
+      });
+    }
+    if (creds.model) {
+      Object.defineProperty(clone, 'defaultModel', { value: creds.model });
+    }
+
+    if (this.tenantClients.size >= MAX_TENANT_CLIENTS) {
+      this.tenantClients.delete(this.tenantClients.keys().next().value as string);
+    }
+    this.tenantClients.set(cacheKey, clone);
+    return clone;
   }
 
   private mapTools(options?: ChatCompletionOptions) {
@@ -159,6 +196,20 @@ export class OpenAIProvider implements IAIProvider {
         totalTokens: response.usage.total_tokens,
       },
     };
+  }
+
+  /** Whisper transcription of a call recording (mp3/wav, up to 25MB). */
+  async transcribeAudio(audio: Buffer, fileName: string, language?: string): Promise<string> {
+    const file = await toFile(audio, fileName || 'recording.mp3');
+    const result = await this.client.audio.transcriptions.create({
+      file,
+      model: 'whisper-1',
+      // Whisper handles Hindi/Hinglish well when a language hint is omitted; only
+      // pass one when the tenant pinned a language for its calls.
+      ...(language && language !== 'auto' ? { language } : {}),
+      response_format: 'text',
+    });
+    return typeof result === 'string' ? result : (result as any)?.text || '';
   }
 
   async generateEmbeddings(texts: string[]): Promise<EmbeddingResult[]> {

@@ -7,7 +7,11 @@ import {
   ArrowLeft, Mail, Phone, Building2, Globe, Tag, MessageSquare, Pencil, Trash2, X, Plus,
   Activity, StickyNote, Flame, MapPin, Megaphone, Clock, CheckCircle2, UserRound, ArrowRight,
   Sparkles, Mic, Volume2, VolumeX, Copy, Check, ExternalLink, RefreshCw, Briefcase, Target,
+  PhoneCall, ListChecks, Bot, AlertTriangle, MessageCircle, Repeat, Bell,
 } from 'lucide-react';
+import { LEAD_STATUSES, statusLabel, statusTone } from '@/lib/pipeline';
+import { LeadCallActions, AiCallInsightsCard, LeadCallsTab, LeadTasksTab } from '@/components/leads/lead-calling-panel';
+import type { FollowUpTask } from '@/types';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { perms } from '@/lib/permissions';
@@ -25,9 +29,6 @@ import { Loading } from '@/components/shared/loading';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatDate, getInitials, cn } from '@/lib/utils';
 
-const statusColors: Record<string, 'default' | 'info' | 'success' | 'warning' | 'destructive'> = {
-  new: 'default', contacted: 'info', qualified: 'success', unqualified: 'warning', converted: 'success', lost: 'destructive',
-};
 const tempColors: Record<string, 'destructive' | 'warning' | 'info'> = { hot: 'destructive', warm: 'warning', cold: 'info' };
 
 function ScoreRing({ score }: { score: number }) {
@@ -69,6 +70,16 @@ const ACTIVITY_ICON: Record<string, { icon: any; cls: string }> = {
   assigned: { icon: UserRound, cls: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
   conversation: { icon: MessageSquare, cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
   score_changed: { icon: Flame, cls: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  score_updated: { icon: Flame, cls: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  call_placed: { icon: Bot, cls: 'bg-primary/10 text-primary' },
+  call_completed: { icon: PhoneCall, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  whatsapp_sent: { icon: MessageCircle, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  sms_sent: { icon: MessageCircle, cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
+  task_created: { icon: ListChecks, cls: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+  task_completed: { icon: CheckCircle2, cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  ai_next_action: { icon: Target, cls: 'bg-primary/10 text-primary' },
+  reengaged: { icon: Repeat, cls: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  manager_alerted: { icon: Bell, cls: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
 };
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -103,6 +114,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const { data: usersData } = useQuery({
     queryKey: ['users', 'assignable'],
     queryFn: () => api.get<any>('/users/assignable'),
+  });
+
+  const { data: tasksData } = useQuery({
+    queryKey: ['lead-tasks', id],
+    queryFn: () => api.get<any>(`/follow-up-tasks/lead/${id}`),
+  });
+  const { data: callsData } = useQuery({
+    queryKey: ['lead-calls', id],
+    queryFn: () => api.get<any>(`/calling/leads/${id}/calls`),
+    refetchInterval: 15_000,
   });
 
   const updateMutation = useMutation({
@@ -202,6 +223,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const noteActivities = activityList.filter((a: any) => a.type === 'note_added');
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email || 'Unnamed lead';
   const assignedUser = users.find((u: any) => u._id === lead.assignedTo);
+  const leadTasks: FollowUpTask[] = (tasksData as any)?.data || [];
+  const pendingTasks = leadTasks.filter((t) => t.status === 'pending');
+  const nextTask = [...pendingTasks].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0] || null;
+  const callCount = ((callsData as any)?.data || []).length;
 
   const openEdit = () => {
     setEditForm({
@@ -259,6 +284,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <ArrowLeft className="h-4 w-4" /> Back to Leads
         </Button>
         <div className="flex gap-2">
+          <LeadCallActions lead={lead} canCall={canEdit} />
           {canEdit && (
             <Button variant="outline" size="sm" onClick={openEdit}>
               <Pencil className="h-4 w-4" /> Edit
@@ -284,11 +310,26 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <div className="min-w-0">
                 <h1 className="text-2xl font-bold tracking-tight truncate">{fullName}</h1>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <Badge variant={statusColors[lead.status] || 'secondary'} dot>{lead.status}</Badge>
+                  <Badge variant={statusTone(lead.status)} dot>{statusLabel(lead.status)}</Badge>
+                  {lead.nextFollowUpAt && new Date(lead.nextFollowUpAt).getTime() < Date.now() && (
+                    <Badge variant="destructive"><AlertTriangle className="h-3 w-3" /> Follow-up overdue</Badge>
+                  )}
                   <Badge variant={tempColors[lead.temperature] || 'secondary'}>
                     <Flame className="h-3 w-3" /> {lead.temperature}
                   </Badge>
-                  {lead.source && <Badge variant="outline" className="capitalize">{lead.source}</Badge>}
+                  {lead.source && <Badge variant="outline" className="capitalize">{lead.source.replace(/_/g, ' ')}</Badge>}
+                  {/* Prospected leads keep a link to the public page they came from, so the
+                      salesperson can confirm the business is real before reaching out. */}
+                  {lead.metadata?.url && ['ai_automation', 'leads_scrap_ai'].includes(lead.metadata?.utmSource ?? '') && (
+                    <a
+                      href={lead.metadata.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                    >
+                      <ExternalLink className="h-3 w-3" /> See original
+                    </a>
+                  )}
                   {assignedUser && (
                     <Badge variant="violet"><UserRound className="h-3 w-3" /> {assignedUser.firstName} {assignedUser.lastName}</Badge>
                   )}
@@ -310,7 +351,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 )}
                 {lead.phone && (
                   <Button variant="outline" size="sm" asChild>
-                    <a href={`tel:${lead.phone}`}><Phone className="h-4 w-4" /> Call</a>
+                    <a href={`https://wa.me/${lead.phone.replace(/[^\d]/g, '')}`} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /> WhatsApp</a>
                   </Button>
                 )}
               </div>
@@ -322,6 +363,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* AI calling + follow-up state */}
+          <AiCallInsightsCard lead={lead} nextTask={nextTask} canEdit={canEdit} />
+
           {/* Contact + tags */}
           <Card>
             <CardHeader className="pb-4">
@@ -663,12 +707,30 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </Card>
 
           {/* Tabs: Activity, Conversations, Notes */}
-          <Tabs defaultValue="activity">
-            <TabsList>
+          <Tabs defaultValue={pendingTasks.length ? 'tasks' : 'activity'}>
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="tasks"><ListChecks className="h-4 w-4" /> Follow-ups{pendingTasks.length ? ` (${pendingTasks.length})` : ''}</TabsTrigger>
+              <TabsTrigger value="calls"><PhoneCall className="h-4 w-4" /> Calls{callCount ? ` (${callCount})` : ''}</TabsTrigger>
               <TabsTrigger value="activity"><Activity className="h-4 w-4" /> Activity</TabsTrigger>
               <TabsTrigger value="conversations"><MessageSquare className="h-4 w-4" /> Conversations ({lead.conversationIds?.length || 0})</TabsTrigger>
               <TabsTrigger value="notes"><StickyNote className="h-4 w-4" /> Notes ({noteActivities.length})</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="tasks">
+              <Card>
+                <CardContent className="p-6">
+                  <LeadTasksTab leadId={id} canEdit={canEdit} users={users} defaultAssignee={lead.assignedTo} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="calls">
+              <Card>
+                <CardContent className="p-6">
+                  <LeadCallsTab leadId={id} />
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="activity">
               <Card>
@@ -770,8 +832,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <Select value={lead.status} onValueChange={(v) => updateMutation.mutate({ status: v })} disabled={!canEdit}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'].map((s) => (
-                      <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                    {LEAD_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -810,7 +872,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               <InfoRow label="Created" value={formatDate(lead.createdAt)} />
               <InfoRow label="Updated" value={formatDate(lead.updatedAt)} />
               <InfoRow label="Last activity" value={lead.lastActivityAt ? formatDate(lead.lastActivityAt) : '—'} />
-              {lead.convertedAt && <InfoRow label="Converted" value={formatDate(lead.convertedAt)} />}
+              {lead.convertedAt && <InfoRow label="Won" value={formatDate(lead.convertedAt)} />}
+              {lead.lostReason && <InfoRow label="Lost reason" value={lead.lostReason} />}
+              {lead.lastCallAt && <InfoRow label="Last call" value={formatDate(lead.lastCallAt)} />}
+              {lead.lastContactedAt && <InfoRow label="Last contact" value={formatDate(lead.lastContactedAt)} />}
+              {lead.nextFollowUpAt && <InfoRow label="Next follow-up" value={formatDate(lead.nextFollowUpAt)} />}
               {(lead.metadata?.country || lead.metadata?.city) && (
                 <InfoRow
                   label="Location"

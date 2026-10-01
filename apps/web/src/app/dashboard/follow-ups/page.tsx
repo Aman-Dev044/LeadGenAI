@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Workflow, Trash2, Pencil, X, History, Zap, Mail, MessageSquare, Phone, Bell, Tag, UserPlus, Clock, PlayCircle, Layers, type LucideIcon } from 'lucide-react';
+import { Plus, Workflow, Trash2, Pencil, X, History, Zap, Mail, MessageSquare, Phone, Bell, Tag, UserPlus, Clock, PlayCircle, Layers, Bot, ListChecks, type LucideIcon } from 'lucide-react';
+import { LEAD_STATUSES as PIPELINE_STATUSES, statusLabel, TASK_TYPE_LABELS } from '@/lib/pipeline';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,15 +36,18 @@ const ACTIONS = [
   { value: 'send_sms', label: 'Send SMS', desc: 'Send SMS notification' },
   { value: 'send_whatsapp', label: 'Send WhatsApp', desc: 'Send WhatsApp message' },
   { value: 'notify_salesperson', label: 'Notify Salesperson', desc: 'In-app notification to assigned salesperson' },
-  { value: 'change_status', label: 'Change Lead Status', desc: 'Update lead status automatically' },
+  { value: 'change_status', label: 'Change Lead Stage', desc: 'Move the lead to a pipeline stage' },
   { value: 'assign_lead', label: 'Assign Lead', desc: 'Assign lead to a user' },
+  { value: 'ai_call', label: 'AI Call', desc: 'The AI agent phones the lead and qualifies it' },
+  { value: 'create_task', label: 'Schedule Follow-up', desc: 'Create a follow-up task for the lead owner' },
 ];
 
-const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'];
+const LEAD_STATUSES: string[] = [...PIPELINE_STATUSES];
 
 const ACTION_ICONS: Record<string, LucideIcon> = {
   send_email: Mail, send_sms: Phone, send_whatsapp: MessageSquare,
   notify_salesperson: Bell, change_status: Tag, assign_lead: UserPlus,
+  ai_call: Bot, create_task: ListChecks,
 };
 const ACTION_TONES: Record<string, string> = {
   send_email: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
@@ -52,6 +56,8 @@ const ACTION_TONES: Record<string, string> = {
   notify_salesperson: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   change_status: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
   assign_lead: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  ai_call: 'bg-primary/10 text-primary',
+  create_task: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
 };
 const fmtDelay = (m: number) => (m === 0 ? 'Immediately' : m >= 1440 ? `${(m / 1440).toFixed(m % 1440 ? 1 : 0)}d` : m >= 60 ? `${(m / 60).toFixed(m % 60 ? 1 : 0)}h` : `${m}m`);
 
@@ -592,13 +598,64 @@ function ActionConfigFields({
       return (
         <div className="space-y-2 border-t pt-3">
           <div className="space-y-1">
-            <Label className="text-xs">Change Status To</Label>
+            <Label className="text-xs">Move To Stage</Label>
             <Select value={step.actionConfig.status || ''} onValueChange={(v) => update('status', v)}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select status" /></SelectTrigger>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Select stage" /></SelectTrigger>
               <SelectContent>
-                {['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'].map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                {LEAD_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+
+    case 'ai_call':
+      return (
+        <div className="space-y-2 border-t pt-3">
+          <p className="text-[11px] text-muted-foreground">Uses the script from Settings › AI Calling. Leads without a phone number are skipped.</p>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input type="checkbox" className="h-3.5 w-3.5 rounded border-input" checked={!!step.actionConfig.ignoreCallingHours} onChange={(e) => update('ignoreCallingHours', e.target.checked)} />
+            Call even outside calling hours
+          </label>
+        </div>
+      );
+
+    case 'create_task':
+      return (
+        <div className="space-y-2 border-t pt-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Title</Label>
+            <Input className="h-9" value={step.actionConfig.title || ''} onChange={(e) => update('title', e.target.value)} placeholder="Call {{firstName}} about their enquiry" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Type</Label>
+              <Select value={step.actionConfig.type || 'call'} onValueChange={(v) => update('type', v)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(TASK_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Due in (hours)</Label>
+              <Input className="h-9" type="number" min={0.25} step={0.25} value={step.actionConfig.dueInHours ?? 24} onChange={(e) => update('dueInHours', Number(e.target.value))} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Priority</Label>
+              <Select value={step.actionConfig.priority || 'normal'} onValueChange={(v) => update('priority', v)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{['low', 'normal', 'high', 'urgent'].map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Assign to <span className="text-muted-foreground">(default: lead owner)</span></Label>
+            <Select value={step.actionConfig.assignTo || 'owner'} onValueChange={(v) => update('assignTo', v === 'owner' ? '' : v)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="owner">Lead owner</SelectItem>
+                {users.map((u: any) => <SelectItem key={u._id} value={u._id}>{u.firstName} {u.lastName}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

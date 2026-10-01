@@ -17,6 +17,8 @@ const ADMIN_ONLY: Role[] = ['ADMIN'];
 export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard': ALL,
   '/dashboard/leads': ALL,
+  '/dashboard/calls': TEAM,
+  '/dashboard/follow-up-tasks': TEAM,
   '/dashboard/conversations': TEAM,
   '/dashboard/handoffs': TEAM,
   '/dashboard/appointments': ALL,
@@ -24,6 +26,8 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard/knowledge-base': ADMIN_ONLY,
   '/dashboard/lead-scoring': ADMIN_ONLY,
   '/dashboard/follow-ups': ADMIN_ONLY,
+  '/dashboard/ai-automation': ADMIN_ONLY,
+  '/dashboard/leads-scrap-ai': ADMIN_ONLY,
   '/dashboard/integrations': ADMIN_ONLY,
   '/dashboard/webhooks': ADMIN_ONLY,
   '/dashboard/api-keys': ADMIN_ONLY,
@@ -34,6 +38,7 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard/support-tickets': TEAM,
   '/dashboard/billing': ADMIN_ONLY,
   '/dashboard/settings': ALL,
+  '/dashboard/settings/credentials': ADMIN_ONLY,
 };
 
 /** Where a role lands after login / when a page is off-limits. */
@@ -71,6 +76,11 @@ export const perms = {
   bulkAssignLeads: (role?: string | null) => is(role, ...MANAGERS),
   /** Reassigning a lead to someone else is a manager call; a salesperson keeps their own. */
   reassignLead: (role?: string | null) => is(role, ...MANAGERS),
+
+  // Calling & follow-ups
+  placeCall: (role?: string | null) => is(role, ...TEAM),
+  manageCallingSettings: (role?: string | null) => is(role, ...ADMIN_ONLY),
+  manageTasks: (role?: string | null) => is(role, ...TEAM),
 
   // Appointments
   createAppointment: (role?: string | null) => is(role, ...TEAM),

@@ -33,6 +33,8 @@ export interface TenantNotificationSettings {
   emailOnNewLead?: boolean;
   emailOnHotLead?: boolean;
   emailOnHandoff?: boolean;
+  emailOnCallSummary?: boolean;
+  emailOnOverdueFollowUp?: boolean;
   slackWebhookUrl?: string;
   teamsWebhookUrl?: string;
   notifyRoles?: string[];
@@ -89,9 +91,33 @@ export interface Lead {
   email?: string;
   phone?: string;
   company?: string;
-  status: 'new' | 'contacted' | 'qualified' | 'unqualified' | 'converted' | 'lost';
+  status: 'new' | 'contacted' | 'interested' | 'follow_up' | 'meeting' | 'won' | 'lost';
   temperature: 'hot' | 'warm' | 'cold';
   score: number;
+  // AI calling & follow-up
+  aiCallStatus?: 'none' | 'queued' | 'calling' | 'done' | 'failed' | 'skipped';
+  callAttempts?: number;
+  lastCallAt?: string;
+  lastCallOutcome?: string;
+  lastContactedAt?: string;
+  nextFollowUpAt?: string | null;
+  reengageAttempts?: number;
+  lastReengagedAt?: string;
+  lostReason?: string;
+  aiCallInsights?: {
+    interestLevel?: number;
+    outcome?: string;
+    summary?: string;
+    requirement?: string;
+    budget?: string;
+    timeline?: string;
+    objections?: string[];
+    nextAction?: string;
+    nextActionReason?: string;
+    callbackAt?: string;
+    callId?: string;
+    analysedAt?: string;
+  };
   source?: string;
   assignedTo?: string;
   customFields?: Record<string, any>;
@@ -251,6 +277,156 @@ export interface Appointment {
   meetingLink?: string;
   location?: string;
   createdAt: string;
+}
+
+export interface CallLog {
+  _id: string;
+  tenantId: string;
+  leadId: string;
+  type: 'ai_outbound' | 'ai_reengage' | 'human_outbound' | 'manual';
+  provider: 'vapi' | 'twilio' | 'manual';
+  status: string;
+  externalId?: string;
+  toNumber?: string;
+  fromNumber?: string;
+  userId?: string;
+  attempt: number;
+  reason?: string;
+  scheduledAt?: string;
+  startedAt?: string;
+  answeredAt?: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  endedReason?: string;
+  recordingUrl?: string;
+  transcript?: string;
+  transcriptSegments?: { role: string; text: string; at?: number }[];
+  summary?: string;
+  outcome?: string;
+  analysis?: {
+    interestLevel?: number;
+    sentiment?: string;
+    requirement?: string;
+    budget?: string;
+    timeline?: string;
+    objections?: string[];
+    keyPoints?: string[];
+    callbackAt?: string;
+    nextAction?: { type: string; title: string; dueInHours?: number; reason?: string };
+    suggestedStatus?: string;
+    temperature?: string;
+    meeting?: { at?: string };
+    language?: string;
+    source?: string;
+  };
+  notes?: string;
+  actions?: Record<string, any>;
+  costUsd?: number;
+  errorMessage?: string;
+  lead?: Partial<Lead> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FollowUpTask {
+  _id: string;
+  tenantId: string;
+  leadId: string;
+  assignedTo?: string;
+  title: string;
+  description?: string;
+  type: 'call' | 'whatsapp' | 'email' | 'meeting' | 'other';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'done' | 'skipped' | 'cancelled';
+  dueAt: string;
+  source?: string;
+  createdBy?: string;
+  callId?: string;
+  dueNotifiedAt?: string;
+  overdueAlertedAt?: string;
+  completedAt?: string;
+  completedBy?: string;
+  outcome?: string;
+  outcomeNote?: string;
+  lead?: Partial<Lead> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CallPlaybook {
+  name: string;
+  enabled: boolean;
+  match: { sources: string[]; tags: string[]; statuses: string[]; reasons: string[] };
+  agentName: string;
+  language: '' | 'en' | 'hi' | 'hi-en';
+  firstMessage: string;
+  instructions: string;
+}
+
+export interface CallingSettings {
+  enabled: boolean;
+  autoCallOnNewLead: boolean;
+  autoCallSources: string[];
+  firstCallDelaySeconds: number;
+  callingHours: { start: string; end: string; days: number[] };
+  maxAttempts: number;
+  retryDelayMinutes: number;
+  maxConcurrentCalls: number;
+  whatsappOnNoAnswer: boolean;
+  whatsappNoAnswerTemplate: string;
+  hotThreshold: number;
+  hotFollowUpHours: number;
+  overdueAlertHours: number;
+  coldAfterDays: number;
+  reengageEnabled: boolean;
+  reengageChannel: 'ai_call' | 'whatsapp' | 'both';
+  maxReengageAttempts: number;
+  reengageWhatsappTemplate: string;
+  recordHumanCalls: boolean;
+  transfer: {
+    enabled: boolean;
+    number: string;
+    destinations: { name: string; number: string; description: string }[];
+    preferAssignedSalesperson: boolean;
+    message: string;
+    instructions: string;
+  };
+  inCallBooking: {
+    enabled: boolean;
+    meetingDurationMinutes: number;
+    instructions: string;
+  };
+  playbooks: CallPlaybook[];
+  postCallWhatsapp: {
+    enabled: boolean;
+    thankYouTemplate: string;
+    appointmentTemplate: string;
+    callbackTemplate: string;
+  };
+  assistant: {
+    agentName: string;
+    companyName: string;
+    offerSummary: string;
+    extraInstructions: string;
+    firstMessage: string;
+    qualificationQuestions: string[];
+    language: 'en' | 'hi' | 'hi-en';
+    voiceProvider: string;
+    voiceId: string;
+    llmModel: string;
+    maxDurationSeconds: number;
+  };
+  timezone?: string;
+}
+
+export interface CallingReadiness {
+  aiCalling: { configured: boolean; enabled: boolean; usingSavedAssistant: boolean };
+  humanCalling: { configured: boolean };
+  whatsapp: { configured: boolean };
+  webhookUrl: string;
+  webhookReachable: boolean;
+  withinCallingHours: boolean;
+  timezone: string;
 }
 
 export interface FollowUpWorkflow {

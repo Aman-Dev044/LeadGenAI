@@ -22,10 +22,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { Logo, PoweredBy } from '@/components/brand/logo';
+import { BRAND, COMPANY } from '@/lib/brand';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | LeadAI',
-  description: 'Learn how LeadAI collects, protects, processes, and safeguards your customer leads, conversational data, and organizational privacy.',
+  title: `Privacy Policy | ${BRAND.name}`,
+  description: 'Learn how LeadBells collects, protects, processes, and safeguards your customer leads, conversational data, and organizational privacy.',
 };
 
 export default function PrivacyPolicyPage() {
@@ -81,11 +83,8 @@ export default function PrivacyPolicyPage() {
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5 font-bold text-lg tracking-tight">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-sm shadow-blue-500/25">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <span>LeadAI</span>
+            <Link href="/">
+              <Logo size="md" showTagline />
             </Link>
             <Badge variant="outline" className="hidden sm:inline-flex text-xs py-0.5 font-medium text-muted-foreground">
               Privacy & Legal
@@ -118,7 +117,7 @@ export default function PrivacyPolicyPage() {
                 Privacy Policy & Data Protection
               </h1>
               <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">
-                Your trust is our highest priority. This policy outlines how LeadAI safeguards your business information,
+                Your trust is our highest priority. This policy outlines how LeadBells safeguards your business information,
                 conversations, visitor interactions, and qualified leads.
               </p>
             </div>
@@ -193,10 +192,10 @@ export default function PrivacyPolicyPage() {
                 <Globe className="h-5 w-5 text-primary" /> 1. Introduction & Scope
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Welcome to <strong>LeadAI</strong> (&quot;Platform&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). LeadAI provides an enterprise-grade AI-powered lead generation, visitor qualification, customer engagement, and conversation automation service.
+                Welcome to <strong>LeadBells</strong> (&quot;Platform&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). LeadBells provides an enterprise-grade AI-powered lead generation, visitor qualification, customer engagement, and conversation automation service.
               </p>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This Privacy Policy applies to all services, software applications, chat widgets, administrative dashboards, and APIs offered by LeadAI. By accessing or using our platform, you acknowledge that you have read and agree to the practices described herein.
+                This Privacy Policy applies to all services, software applications, chat widgets, administrative dashboards, and APIs offered by LeadBells. By accessing or using our platform, you acknowledge that you have read and agree to the practices described herein.
               </p>
             </section>
 
@@ -277,7 +276,7 @@ export default function PrivacyPolicyPage() {
                 <Layers className="h-5 w-5 text-primary" /> 4. How We Use Your Data
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                LeadAI utilizes collected data solely for the following commercial purposes:
+                LeadBells utilizes collected data solely for the following commercial purposes:
               </p>
               <ul className="space-y-2 text-xs text-muted-foreground list-disc pl-5">
                 <li>Automating live responses to your prospective customers through tailored conversational agents.</li>
@@ -294,7 +293,7 @@ export default function PrivacyPolicyPage() {
                 <Lock className="h-5 w-5 text-primary" /> 5. Multi-Tenancy & Data Segregation
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                LeadAI is built upon a secure, multi-tenant architecture. Every tenant workspace operates in an isolated logical boundary:
+                LeadBells is built upon a secure, multi-tenant architecture. Every tenant workspace operates in an isolated logical boundary:
               </p>
               <div className="rounded-xl border bg-card p-4 space-y-2 text-xs text-muted-foreground">
                 <p><strong>Database Tenant Guards:</strong> Every database read, write, query, and aggregation automatically enforces a mandatory <code className="text-primary font-mono font-semibold">tenantId</code> scope. Cross-workspace data leakage is strictly prevented at the core driver layer.</p>
@@ -389,8 +388,10 @@ export default function PrivacyPolicyPage() {
                 </p>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6 text-sm">
                   <div>
-                    <p className="font-semibold text-foreground">LeadAI Legal & Compliance</p>
-                    <p className="text-xs text-muted-foreground">Data Protection Office</p>
+                    <p className="font-semibold text-foreground">{COMPANY.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {BRAND.name} Legal &amp; Compliance · Data Protection Office
+                    </p>
                   </div>
                   <div className="h-4 w-px bg-border hidden sm:block" />
                   <div>
@@ -408,7 +409,12 @@ export default function PrivacyPolicyPage() {
       {/* Footer */}
       <footer className="border-t bg-card/60 py-8 text-center text-xs text-muted-foreground">
         <div className="mx-auto max-w-6xl px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© {new Date().getFullYear()} LeadAI Inc. All rights reserved. Enterprise AI Lead Generation Platform.</p>
+          <div className="flex flex-col items-center gap-1 sm:items-start">
+            <p>
+              © {new Date().getFullYear()} {BRAND.name} · {BRAND.tagline}
+            </p>
+            <PoweredBy />
+          </div>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="font-semibold text-foreground hover:underline">Privacy Policy</Link>
             <span>·</span>

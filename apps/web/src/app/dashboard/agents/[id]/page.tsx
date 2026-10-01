@@ -651,7 +651,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                           </Badge>
                         </div>
                         <CardDescription>
-                          Connect visitors directly to your sales reps on WhatsApp while logging captured leads in LeadAI.
+                          Connect visitors directly to your sales reps on WhatsApp while logging captured leads in LeadBells.
                         </CardDescription>
                       </div>
                     </div>
@@ -664,7 +664,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                 {form.widgetConfig?.whatsappEnabled && (
                   <CardContent className="space-y-4 pt-0">
                     <div className="rounded-lg border border-emerald-500/20 bg-emerald-50/50 p-3 text-xs text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
-                      💡 Visitors see a direct WhatsApp button inside the widget header, in exit-intent prompts, and after helpful responses. When clicked, LeadAI captures their intent and opens WhatsApp directly.
+                      💡 Visitors see a direct WhatsApp button inside the widget header, in exit-intent prompts, and after helpful responses. When clicked, LeadBells captures their intent and opens WhatsApp directly.
                     </div>
                     <div className="space-y-2">
                       <Label>Sales Rep WhatsApp Number (with country code)</Label>

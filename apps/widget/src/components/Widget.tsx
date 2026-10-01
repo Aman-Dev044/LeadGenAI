@@ -691,7 +691,7 @@ export function Widget({ agentId, apiUrl, position }: WidgetProps) {
         if (!cancelled) setConfig(data.data || data);
       })
       .catch((err) => {
-        console.error('LeadAI Widget: Failed to load config', err);
+        console.error('LeadBells Widget: Failed to load config', err);
         if (!cancelled) setError('Failed to connect to chat service');
       });
     return () => {
@@ -784,7 +784,7 @@ export function Widget({ agentId, apiUrl, position }: WidgetProps) {
       setShowLeadForm(false);
       setMessages(mergeMessages([]));
     } catch (err: any) {
-      console.error('LeadAI Widget: Failed to start conversation', err);
+      console.error('LeadBells Widget: Failed to start conversation', err);
       setError(friendlyError(err?.status || 0, 'Could not start chat. Please try again.'));
     } finally {
       setStarting(false);
@@ -820,7 +820,7 @@ export function Widget({ agentId, apiUrl, position }: WidgetProps) {
           return;
         }
       } catch (err) {
-        console.warn('LeadAI Widget: could not resume conversation', err);
+        console.warn('LeadBells Widget: could not resume conversation', err);
       }
       writeStored(storageKey(agentId), null);
     }
@@ -1560,7 +1560,15 @@ export function Widget({ agentId, apiUrl, position }: WidgetProps) {
               </div>
 
               <div class="powered-by">
-                Powered by <a href="#" onClick={(e) => e.preventDefault()}>LeadAI</a>
+                Powered by{' '}
+                <a
+                  href="https://www.cyberbells.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="LeadBells - AI Leads Follow up, tracking & calling software"
+                >
+                  LeadBells
+                </a>
               </div>
             </>
           )}

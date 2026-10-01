@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   MinLength,
   validateSync,
@@ -48,6 +49,47 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   ANTHROPIC_API_KEY: string;
+
+  // Google Maps prospecting (AI Automation)
+  @IsString()
+  @IsOptional()
+  GOOGLE_PLACES_API_KEY: string;
+
+  // AI calling (Vapi) + public URL for provider webhooks
+  @IsString()
+  @IsOptional()
+  PUBLIC_API_URL: string;
+
+  @IsString()
+  @IsOptional()
+  VAPI_API_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  VAPI_PHONE_NUMBER_ID: string;
+
+  @IsString()
+  @IsOptional()
+  VAPI_ASSISTANT_ID: string;
+
+  @IsString()
+  @IsOptional()
+  VAPI_WEBHOOK_SECRET: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(5000)
+  CALLING_POLL_INTERVAL_MS: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(60000)
+  CALLING_REENGAGE_INTERVAL_MS: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(30000)
+  FOLLOW_UP_TASK_POLL_INTERVAL_MS: number;
 
   // Encryption
   @IsString()
@@ -129,6 +171,80 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   UPSTASH_REDIS_REST_TOKEN: string;
+
+  // Leads Scrap AI - every source is optional; a missing key just marks that
+  // source "not configured" in the UI instead of breaking boot.
+  @IsString()
+  @IsOptional()
+  REDDIT_CLIENT_ID: string;
+
+  @IsString()
+  @IsOptional()
+  REDDIT_CLIENT_SECRET: string;
+
+  @IsString()
+  @IsOptional()
+  REDDIT_USER_AGENT: string;
+
+  @IsString()
+  @IsOptional()
+  REDDIT_TOKEN_URL: string;
+
+  @IsString()
+  @IsOptional()
+  REDDIT_API_BASE_URL: string;
+
+  @IsString()
+  @IsOptional()
+  HN_API_BASE_URL: string;
+
+  @IsString()
+  @IsOptional()
+  SERPAPI_API_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  SERPAPI_BASE_URL: string;
+
+  @IsString()
+  @IsOptional()
+  SERP_ENGINE: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  SERP_MAX_SEARCHES_PER_RUN: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  SERP_RESULTS_PER_SEARCH: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  @Max(10)
+  SERP_KEYWORDS_PER_SEARCH: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  SOCIAL_PROSPECTING_MAX_RESULTS: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  SOCIAL_PROSPECTING_MAX_MESSAGES_PER_RUN: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(1000)
+  SOCIAL_PROSPECTING_HTTP_TIMEOUT_MS: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(10000)
+  SOCIAL_PROSPECTING_POLL_INTERVAL_MS: number;
 }
 
 export function validate(config: Record<string, unknown>) {

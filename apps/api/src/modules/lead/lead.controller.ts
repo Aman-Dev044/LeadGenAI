@@ -48,13 +48,22 @@ export class LeadController {
     @Query('assignedTo') assignedTo?: string,
     @Query('source') source?: string,
     @Query('tags') tags?: string,
+    @Query('aiCallStatus') aiCallStatus?: string,
+    @Query('followUp') followUp?: string,
   ) {
     return this.leadService.findAll(
       tenantId,
       paginationDto,
-      { status, temperature, assignedTo, source, tags },
+      { status, temperature, assignedTo, source, tags, aiCallStatus, followUp },
       ownerScope(user),
     );
+  }
+
+  /** Kanban: every pipeline stage with counts and its most recent leads. */
+  @Get('pipeline')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON', 'VIEWER')
+  async pipeline(@CurrentTenant() tenantId: string, @CurrentUser() user: Actor) {
+    return this.leadService.getPipeline(tenantId, ownerScope(user));
   }
 
   // Static routes MUST come before :id routes
@@ -73,27 +82,35 @@ export class LeadController {
     res.send(csv);
   }
 
+  /**
+   * Bulk import from CSV or Excel. `autoCall=true` makes the AI phone every
+   * imported lead (with the sheet's description as context), one by one.
+   */
   @Post('import/csv')
   @Roles('ADMIN', 'SALES_MANAGER')
   @UseInterceptors(FileInterceptor('file', {
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-      if (file.mimetype !== 'text/csv' && !file.originalname.endsWith('.csv')) {
-        return cb(new BadRequestException('Only CSV files are allowed'), false);
+      if (!/\.(csv|xlsx|xlsm|xls)$/i.test(file.originalname || '')) {
+        return cb(new BadRequestException('Only CSV or Excel (.xlsx) files are allowed'), false);
       }
       cb(null, true);
     },
   }))
-  async importCsv(
+  async importSheet(
     @CurrentTenant() tenantId: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser('userId') userId: string,
+    @Body('autoCall') autoCall?: string | boolean,
   ) {
     if (!file) {
-      throw new BadRequestException('CSV file is required');
+      throw new BadRequestException('A CSV or Excel file is required');
     }
-    const csvContent = file.buffer.toString('utf-8');
-    return this.leadService.importFromCsv(tenantId, csvContent, userId);
+    if (!tenantId || tenantId === 'all') {
+      throw new BadRequestException('Select a workspace first');
+    }
+    const wantsCalls = autoCall === true || autoCall === 'true' || autoCall === '1';
+    return this.leadService.importFromSheet(tenantId, file.buffer, file.originalname, userId, { autoCall: wantsCalls });
   }
 
   @Post('bulk/assign')

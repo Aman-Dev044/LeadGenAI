@@ -142,7 +142,7 @@ export default function ApiKeysPage() {
         <EmptyState
           icon={Key}
           title="No API keys yet"
-          description="Create a key to connect your CRM, Zapier or custom scripts to LeadAI."
+          description="Create a key to connect your CRM, Zapier or custom scripts to LeadBells."
           actionLabel="Create Key"
           onAction={() => setShowCreate(true)}
           secondary={<Button variant="outline" onClick={() => setShowGuide(true)}><Info className="h-4 w-4" /> Usage Guide</Button>}

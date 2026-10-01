@@ -38,6 +38,14 @@ export function useRealtimeNotifications() {
         queryClient.invalidateQueries({ queryKey: ['leads'] });
       } else if (notification.type === 'appointment') {
         queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      } else if (notification.type === 'call') {
+        ['calls', 'call-stats', 'lead', 'lead-calls', 'lead-tasks', 'lead-activities', 'leads', 'leads-pipeline', 'follow-up-tasks', 'follow-up-task-stats'].forEach((k) =>
+          queryClient.invalidateQueries({ queryKey: [k] }),
+        );
+      } else if (notification.type === 'follow_up_task' || notification.type === 'follow_up_overdue') {
+        ['follow-up-tasks', 'follow-up-task-stats', 'lead-tasks', 'lead', 'leads', 'leads-pipeline'].forEach((k) =>
+          queryClient.invalidateQueries({ queryKey: [k] }),
+        );
       } else if (notification.type === 'deletion_request') {
         queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests'] });
         queryClient.invalidateQueries({ queryKey: ['admin-deletion-requests-count'] });
@@ -76,6 +84,19 @@ export function useRealtimeNotifications() {
 
   useEffect(() => {
     if (!socket || !isConnected) return;
+
+    // AI calling + follow-up tasks: refresh every view that shows them the moment state changes
+    const CALL_KEYS = ['calls', 'call-stats', 'lead', 'lead-calls', 'lead-activities', 'leads', 'leads-pipeline', 'dashboard'];
+    const TASK_KEYS = ['follow-up-tasks', 'follow-up-task-stats', 'lead-tasks', 'lead', 'leads', 'leads-pipeline', 'dashboard'];
+    const refresh = (keys: string[]) => () => keys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+    const onCall = refresh(CALL_KEYS);
+    const onTask = refresh(TASK_KEYS);
+    socket.on('call:started', onCall);
+    socket.on('call:updated', onCall);
+    socket.on('call:ended', onCall);
+    socket.on('task:created', onTask);
+    socket.on('task:completed', onTask);
+    socket.on('task:overdue', onTask);
 
     socket.on('notification:new', handleNewNotification);
     socket.on('notification:unread-count', handleUnreadCount);
@@ -168,6 +189,12 @@ export function useRealtimeNotifications() {
     socket.on('deletion-request:rejected', handleDeletionRejected);
 
     return () => {
+      socket.off('call:started', onCall);
+      socket.off('call:updated', onCall);
+      socket.off('call:ended', onCall);
+      socket.off('task:created', onTask);
+      socket.off('task:completed', onTask);
+      socket.off('task:overdue', onTask);
       socket.off('notification:new', handleNewNotification);
       socket.off('notification:unread-count', handleUnreadCount);
       socket.off('user:account-deleted', handleAccountDeleted);

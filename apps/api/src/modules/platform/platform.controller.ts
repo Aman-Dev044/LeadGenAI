@@ -12,7 +12,7 @@ export class PlatformController {
   status() {
     const s = this.settings.get();
     return {
-      platformName: s.platformName || 'LeadAI',
+      platformName: s.platformName || 'LeadBells',
       supportEmail: s.supportEmail || '',
       maintenanceMode: !!s.maintenanceMode,
       maintenanceMessage: s.maintenanceMode ? this.settings.maintenanceMessage() : undefined,

@@ -7,6 +7,8 @@ import { FollowUpLogSchema } from '../../schemas/follow-up-log.schema';
 import { LeadSchema } from '../../schemas/lead.schema';
 import { LeadActivitySchema } from '../../schemas/lead-activity.schema';
 import { NotificationModule } from '../notification/notification.module';
+import { CallingModule } from '../calling/calling.module';
+import { FollowUpTaskModule } from '../follow-up-task/follow-up-task.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { NotificationModule } from '../notification/notification.module';
       { name: 'LeadActivity', schema: LeadActivitySchema },
     ]),
     NotificationModule,
+    CallingModule,
+    FollowUpTaskModule,
   ],
   controllers: [FollowUpController],
   providers: [FollowUpService],

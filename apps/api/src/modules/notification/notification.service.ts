@@ -11,7 +11,12 @@ import { TeamsChannel } from './channels/teams-channel';
 import { PushChannel } from './channels/push-channel';
 import { NotificationGateway } from '../../gateways/notification.gateway';
 
-type EmailFlag = 'emailOnNewLead' | 'emailOnHotLead' | 'emailOnHandoff';
+type EmailFlag =
+  | 'emailOnNewLead'
+  | 'emailOnHotLead'
+  | 'emailOnHandoff'
+  | 'emailOnCallSummary'
+  | 'emailOnOverdueFollowUp';
 
 export interface TenantNotificationInput {
   title: string;
@@ -138,6 +143,11 @@ export class NotificationService {
     });
   }
 
+  /** Approved WhatsApp template SIDs for a workspace - see WhatsAppChannel.templates. */
+  whatsappTemplates(tenantId: string) {
+    return this.whatsAppChannel.templates(tenantId);
+  }
+
   async findByUser(tenantId: string | undefined, userId: string, unreadOnly = false) {
     const query: any = { userId, channel: 'in_app' };
     if (tenantId && tenantId !== 'all') {
@@ -227,6 +237,8 @@ export class NotificationService {
       emailOnNewLead: s.emailOnNewLead !== false,
       emailOnHotLead: s.emailOnHotLead !== false,
       emailOnHandoff: s.emailOnHandoff !== false,
+      emailOnCallSummary: s.emailOnCallSummary !== false,
+      emailOnOverdueFollowUp: s.emailOnOverdueFollowUp !== false,
       slackWebhookUrl: (s.slackWebhookUrl || '').trim(),
       teamsWebhookUrl: (s.teamsWebhookUrl || '').trim(),
       notifyRoles: Array.isArray(s.notifyRoles) && s.notifyRoles.length ? s.notifyRoles : DEFAULT_NOTIFY_ROLES,

@@ -57,7 +57,7 @@ export class AnalyticsService {
       this.leadModel.countDocuments({
         ...tm,
         deletedAt: null,
-        status: 'qualified',
+        status: { $in: ['interested', 'follow_up', 'meeting', 'won'] },
         createdAt: { $gte: periodStart },
       }),
       this.leadModel.countDocuments({
@@ -283,7 +283,7 @@ export class AnalyticsService {
           totalLeads: { $sum: 1 },
           avgScore: { $avg: '$score' },
           convertedLeads: {
-            $sum: { $cond: [{ $eq: ['$status', 'converted'] }, 1, 0] },
+            $sum: { $cond: [{ $eq: ['$status', 'won'] }, 1, 0] },
           },
           hotLeads: {
             $sum: { $cond: [{ $eq: ['$temperature', 'hot'] }, 1, 0] },

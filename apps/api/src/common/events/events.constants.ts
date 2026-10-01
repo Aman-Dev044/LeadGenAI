@@ -20,6 +20,14 @@ export const PlatformEvents = {
 
   APPOINTMENT_CREATED: 'appointment.created',
   APPOINTMENT_UPDATED: 'appointment.updated',
+
+  CALL_STARTED: 'call.started',
+  CALL_UPDATED: 'call.updated',
+  CALL_ENDED: 'call.ended',
+
+  TASK_CREATED: 'task.created',
+  TASK_COMPLETED: 'task.completed',
+  TASK_OVERDUE: 'task.overdue',
 } as const;
 
 export type PlatformEvent = (typeof PlatformEvents)[keyof typeof PlatformEvents];
@@ -34,6 +42,8 @@ export interface LeadCreatedPayload {
   tenantId: string;
   lead: any;
   conversationId?: string;
+  /** Force an AI call for this lead even when auto-call is off (bulk sheet imports). */
+  autoCall?: boolean;
 }
 
 export interface LeadUpdatedPayload {
@@ -76,4 +86,16 @@ export interface HandoffPayload {
 export interface AppointmentPayload {
   tenantId: string;
   appointment: any;
+}
+
+export interface CallPayload {
+  tenantId: string;
+  call: any;
+  lead?: any;
+}
+
+export interface TaskPayload {
+  tenantId: string;
+  task: any;
+  lead?: any;
 }

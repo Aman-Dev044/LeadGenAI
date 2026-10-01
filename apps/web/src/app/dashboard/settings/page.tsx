@@ -20,6 +20,9 @@ import { Loading } from '@/components/shared/loading';
 import { formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 import { AccountDeletionCard } from '@/components/settings/account-deletion-card';
+import { CallingSettingsTab } from '@/components/settings/calling-settings';
+import { useSearchParams } from 'next/navigation';
+import { PhoneCall } from 'lucide-react';
 
 const AI_PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -473,6 +476,8 @@ function ChangeEmailCard({ userEmail }: { userEmail?: string }) {
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams?.get('tab') || '';
 
   // Organization form
   const [orgForm, setOrgForm] = useState({ name: '', domain: '', allowedOrigins: '', logo: '' });
@@ -488,6 +493,8 @@ export default function SettingsPage() {
     emailOnNewLead: true,
     emailOnHotLead: true,
     emailOnHandoff: true,
+    emailOnCallSummary: true,
+    emailOnOverdueFollowUp: true,
     slackWebhookUrl: '',
     teamsWebhookUrl: '',
     notifyRoles: ['ADMIN', 'SALESPERSON'] as string[],
@@ -532,6 +539,8 @@ export default function SettingsPage() {
         emailOnNewLead: ns.emailOnNewLead !== false,
         emailOnHotLead: ns.emailOnHotLead !== false,
         emailOnHandoff: ns.emailOnHandoff !== false,
+        emailOnCallSummary: ns.emailOnCallSummary !== false,
+        emailOnOverdueFollowUp: ns.emailOnOverdueFollowUp !== false,
         slackWebhookUrl: ns.slackWebhookUrl || '',
         teamsWebhookUrl: ns.teamsWebhookUrl || '',
         notifyRoles: Array.isArray(ns.notifyRoles) && ns.notifyRoles.length ? ns.notifyRoles : ['ADMIN', 'SALESPERSON'],
@@ -681,11 +690,12 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      <Tabs defaultValue={user?.role === 'ADMIN' ? 'organization' : 'security'}>
+      <Tabs defaultValue={requestedTab && user?.role === 'ADMIN' ? requestedTab : user?.role === 'ADMIN' ? 'organization' : 'security'}>
         <TabsList className="flex-wrap h-auto">
           {user?.role === 'ADMIN' && (
             <>
               <TabsTrigger value="organization"><Building2 className="h-3.5 w-3.5" /> Organization</TabsTrigger>
+              <TabsTrigger value="calling"><PhoneCall className="h-3.5 w-3.5" /> AI Calling</TabsTrigger>
               <TabsTrigger value="branding"><Palette className="h-3.5 w-3.5" /> Branding</TabsTrigger>
               <TabsTrigger value="ai"><Bot className="h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
               <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5" /> Notifications</TabsTrigger>
@@ -700,6 +710,13 @@ export default function SettingsPage() {
             <Trash2 className="h-3.5 w-3.5" /> Delete Account
           </TabsTrigger>
         </TabsList>
+
+        {/* AI Calling Tab */}
+        {user?.role === 'ADMIN' && (
+          <TabsContent value="calling">
+            <CallingSettingsTab />
+          </TabsContent>
+        )}
 
         {/* Organization Tab */}
         <TabsContent value="organization">
@@ -910,6 +927,8 @@ export default function SettingsPage() {
                     { key: 'emailOnNewLead', label: 'New lead captured', hint: 'Every time the widget or API creates a lead' },
                     { key: 'emailOnHotLead', label: 'Lead becomes hot', hint: 'When scoring moves a lead into the hot bucket' },
                     { key: 'emailOnHandoff', label: 'Human handoff requested', hint: 'A visitor asks for a person or the AI escalates' },
+                    { key: 'emailOnCallSummary', label: 'AI call summary', hint: 'The lead owner gets the transcript summary and next step after every AI call' },
+                    { key: 'emailOnOverdueFollowUp', label: 'Follow-up overdue', hint: 'Admins are emailed when a salesperson misses a follow-up' },
                   ].map((item) => (
                     <div key={item.key} className="flex items-center justify-between gap-4 px-4 py-3">
                       <div>

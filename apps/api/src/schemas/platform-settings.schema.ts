@@ -13,7 +13,7 @@ export class PlatformSettings {
   @Prop({ required: true, unique: true, default: 'global' })
   key: string;
 
-  @Prop({ default: 'LeadAI' })
+  @Prop({ default: 'LeadBells' })
   platformName: string;
 
   @Prop({ default: '' })
