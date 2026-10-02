@@ -1058,6 +1058,22 @@ export class CallingService implements OnModuleInit {
           const cb = await this.queueAiCall(tenantId, lead.toObject(), 'callback', { at: dueAt, ignoreCallingHours: true, settings });
           actions.callbackCallId = String(cb._id);
         }
+      } else if (
+        isAi &&
+        analysis.nextAction.type === 'whatsapp' &&
+        analysis.whatsappDetails &&
+        settings.postCallWhatsapp.enabled
+      ) {
+        // The AI promised details on WhatsApp and the post-call message carries
+        // them - nothing is left for a human to do, so no task
+        await this.activityModel.create({
+          tenantId,
+          leadId: String(lead._id),
+          type: 'ai_next_action',
+          description: `Details promised on the call sent on WhatsApp automatically: ${analysis.whatsappDetails.slice(0, 140)}`,
+          newValue: { callId: String(call._id) },
+        });
+        actions.whatsappDetailsSent = true;
       } else if (analysis.outcome === 'interested' || (analysis.nextAction.type !== 'none' && !['not_interested', 'lost'].includes(analysis.outcome))) {
         const task = await this.tasks.create(
           tenantId,
@@ -1779,7 +1795,7 @@ export class CallingService implements OnModuleInit {
     // What the agent promised on the call goes out verbatim - "I will send you
     // the details on WhatsApp" must actually deliver those details
     if (analysis.whatsappDetails) {
-      return `As discussed on the call:\n${analysis.whatsappDetails}`;
+      return `As discussed on the call: ${analysis.whatsappDetails}`;
     }
     const t = analysis.nextAction?.type;
     switch (t) {

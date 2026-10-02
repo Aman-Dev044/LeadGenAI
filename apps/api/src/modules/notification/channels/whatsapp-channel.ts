@@ -77,7 +77,12 @@ export class WhatsAppChannel {
       const tpl = notification?.data?.template;
       if (tpl?.sid) {
         body.set('ContentSid', tpl.sid);
-        body.set('ContentVariables', JSON.stringify(tpl.variables || {}));
+        // WhatsApp rejects variables containing newlines, tabs or 4+ spaces (Twilio 21656)
+        const clean: Record<string, string> = {};
+        for (const [k, v] of Object.entries(tpl.variables || {})) {
+          clean[k] = String(v ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 1000);
+        }
+        body.set('ContentVariables', JSON.stringify(clean));
       } else {
         // 'WhatsApp' is a placeholder title (the schema requires one) - never prefix it
         const title = notification.title && notification.title !== 'WhatsApp' ? notification.title : '';
