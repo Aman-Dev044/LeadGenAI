@@ -6,6 +6,8 @@ export interface CallAnalysis {
   outcome: string;
   interestLevel: number;
   summary: string;
+  /** What the agent promised to send on WhatsApp, written for the customer. */
+  whatsappDetails?: string;
   requirement?: string;
   budget?: string;
   timeline?: string;
@@ -134,6 +136,7 @@ export class CallAnalysisService {
 - timeline: string or empty
 - objections: array of strings
 - keyPoints: array of up to 5 strings
+- whatsappDetails: if the agent promised to send anything on WhatsApp (prices, options, package details, timings, address, next steps), the exact details discussed written as a short plain-text message to the customer (2-5 lines, no greeting); empty string otherwise
 - callbackAt: ISO 8601 datetime with timezone if they asked for a callback at a specific time, else null
 - meetingAt: ISO 8601 datetime if a meeting/demo/visit was agreed, else null
 - nextAction: { "type": call|whatsapp|email|meeting|none, "title": short imperative, "dueInHours": number, "reason": one sentence }
@@ -251,6 +254,7 @@ Output JSON only. No markdown.`,
       timeline: typeof raw.timeline === 'string' ? raw.timeline : undefined,
       objections: strArr(raw.objections),
       keyPoints: strArr(raw.keyPoints),
+      whatsappDetails: typeof raw.whatsappDetails === 'string' && raw.whatsappDetails.trim().length > 3 ? raw.whatsappDetails.trim().slice(0, 900) : undefined,
       callbackAt,
       meetingAt,
       nextAction: {

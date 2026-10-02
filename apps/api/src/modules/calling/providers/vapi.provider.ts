@@ -67,6 +67,11 @@ export const VAPI_STRUCTURED_DATA_SCHEMA = {
     timeline: { type: 'string', description: 'When they want to start, or empty.' },
     objections: { type: 'array', items: { type: 'string' }, description: 'Concerns they raised.' },
     keyPoints: { type: 'array', items: { type: 'string' }, description: 'Up to 5 facts worth remembering.' },
+    whatsappDetails: {
+      type: 'string',
+      description:
+        'If the agent promised to send anything on WhatsApp (prices, options, package details, address, timings, links, next steps), write the exact details that were discussed and should be sent, as a short message to the customer (2-5 lines, plain text, no greeting). Empty string if nothing was promised.',
+    },
     callbackAt: {
       type: 'string',
       description: 'ISO 8601 date-time if they asked to be called back at a specific time, else empty.',
@@ -436,7 +441,7 @@ export class VapiProvider implements IVoiceProvider {
       '- If they want a meeting or demo, propose a slot and confirm the exact date and time.',
       '- If they are not interested, thank them politely and end the call. Do not push.',
       '- Never invent prices, discounts or commitments. Say a specialist will confirm details.',
-      '- You cannot send documents, quotes, options or links yourself. Never say "I am sending it now". Say: "our team will share the details with you on WhatsApp shortly" - and note it as the next action.',
+      '- A WhatsApp message goes to the customer automatically right after this call with whatever you promise. So you MAY say "I will send you these details on WhatsApp right after this call" - but ONLY for things you actually said on the call (prices, options, timings, address, next steps). Never promise documents, PDFs, quotes or links you do not have.',
       '- If this is a wrong number, apologise and end the call.',
       '- Keep the call under 5 minutes. Close by summarising the next step.',
       `- Today is ${new Date().toLocaleString('en-IN', { timeZone: req.timezone, dateStyle: 'full', timeStyle: 'short' })} (${req.timezone}). Convert "kal", "tomorrow", "next Monday" into real dates before booking anything.`,

@@ -20,6 +20,7 @@ import { exitImpersonation } from '@/lib/impersonation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { allNavItems, type NavItem } from './sidebar';
+import { WorkspaceIdentity } from './workspace-identity';
 
 function useBreadcrumb(pathname: string, isOwner: boolean) {
   return useMemo(() => {
@@ -208,19 +209,25 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b glass px-4 md:px-6">
-      {/* Breadcrumb */}
+      {/* Workspace identity + breadcrumb */}
       <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm" aria-label="Breadcrumb">
+        <WorkspaceIdentity className="mr-1" />
         {crumbs.map((c, i) => (
           <span key={i} className="flex items-center gap-1 min-w-0">
-            {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />}
-            {c.href && i < crumbs.length - 1 ? (
-              <Link href={c.href} className="truncate text-muted-foreground transition-colors hover:text-foreground">
-                {c.label}
-              </Link>
-            ) : (
-              <span className={cn('truncate', i === crumbs.length - 1 ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
-                {c.label}
-              </span>
+            {/* The first crumb ("Workspace") is replaced by the identity above */}
+            {i === 0 ? null : (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                {c.href && i < crumbs.length - 1 ? (
+                  <Link href={c.href} className="truncate text-muted-foreground transition-colors hover:text-foreground">
+                    {c.label}
+                  </Link>
+                ) : (
+                  <span className={cn('truncate', i === crumbs.length - 1 ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+                    {c.label}
+                  </span>
+                )}
+              </>
             )}
           </span>
         ))}

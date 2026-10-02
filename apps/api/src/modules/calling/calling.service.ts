@@ -1776,6 +1776,11 @@ export class CallingService implements OnModuleInit {
    * customer - so translate the action type into a promise we will keep.
    */
   private leadFacingNextStep(analysis: CallAnalysis): string {
+    // What the agent promised on the call goes out verbatim - "I will send you
+    // the details on WhatsApp" must actually deliver those details
+    if (analysis.whatsappDetails) {
+      return `As discussed on the call:\n${analysis.whatsappDetails}`;
+    }
     const t = analysis.nextAction?.type;
     switch (t) {
       case 'whatsapp':
@@ -1892,6 +1897,7 @@ export class CallingService implements OnModuleInit {
       meeting: a.meetingAt ? { at: a.meetingAt } : undefined,
       language: a.language,
       source: a.source,
+      whatsappDetails: a.whatsappDetails,
     };
   }
 

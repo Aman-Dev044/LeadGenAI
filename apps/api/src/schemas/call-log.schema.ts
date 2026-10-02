@@ -137,6 +137,7 @@ export class CallLog {
     meeting?: { at?: Date; durationMinutes?: number; note?: string };
     language?: string;
     source?: 'provider' | 'llm' | 'manual';
+    whatsappDetails?: string;
   };
 
   /** Notes typed by the salesperson (manual calls, or after a bridged call). */
