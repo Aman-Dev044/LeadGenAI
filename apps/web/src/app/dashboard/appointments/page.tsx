@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock, CalendarCheck, CalendarDays, CheckCircle2, Video, User } from 'lucide-react';
+import { Plus, Calendar, Pencil, Trash2, XCircle, CalendarClock, CalendarCheck, CalendarDays, CheckCircle2, Video, User, UserX, Bot, BellRing, PhoneCall, AlertTriangle } from 'lucide-react';
+import { GoogleCalendarCard } from '@/components/appointments/google-calendar-card';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { useSocket } from '@/hooks/use-socket';
@@ -208,6 +209,26 @@ export default function AppointmentsPage() {
     });
   };
 
+  const completeMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/appointments/${id}/complete`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      toast.success('Marked as done');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const [noShowId, setNoShowId] = useState<string | null>(null);
+  const noShowMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/appointments/${id}/no-show`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      setNoShowId(null);
+      toast.success('Marked as no-show — the lead gets a WhatsApp and the AI will call to fix a new time');
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/appointments/${id}`),
     onSuccess: () => {
@@ -341,13 +362,36 @@ export default function AppointmentsPage() {
                   </a>
                 )}
                 {a.rescheduledCount > 0 && <span className="rounded-full bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">Rescheduled {a.rescheduledCount}x</span>}
+                {a.bookedBy === 'ai' && <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-1.5 text-[10px] font-medium text-violet-700 dark:text-violet-300" title="Booked by the AI on a call"><Bot className="h-3 w-3" /> AI booked</span>}
+                {a.calendarProvider === 'google' && a.externalCalendarId && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400" title="In the salesperson's Google Calendar"><CalendarCheck className="h-3 w-3" /> Google</span>}
+                {a.calendarSyncError && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400" title={a.calendarSyncError}><AlertTriangle className="h-3 w-3" /> Calendar sync failed</span>}
               </div>
             </div>
           </div>
         );
       },
     },
-    { key: 'status', label: 'Status', render: (a: Appointment) => <Badge variant={statusColors[a.status]} dot>{a.status.replace('_', ' ')}</Badge> },
+    {
+      key: 'status', label: 'Status', render: (a: Appointment) => {
+        const r = a.reminders || {};
+        const reminded = r.dayBeforeAt || r.hourBeforeAt;
+        return (
+          <div className="space-y-1">
+            <Badge variant={statusColors[a.status]} dot>{a.status.replace('_', ' ')}</Badge>
+            {(a.status === 'scheduled' || a.status === 'confirmed') && reminded && (
+              <div className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title={[r.dayBeforeAt && `Day-before reminder ${formatDate(r.dayBeforeAt)}`, r.hourBeforeAt && `Short reminder ${formatDate(r.hourBeforeAt)}`].filter(Boolean).join(' · ')}>
+                <BellRing className="h-3 w-3" /> Reminded{r.hourBeforeAt ? ' ×2' : ''}
+              </div>
+            )}
+            {a.status === 'no_show' && (a.rescue?.callQueuedAt || a.rescue?.whatsappAt) && (
+              <div className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" title={[a.rescue?.whatsappAt && 'Missed-meeting WhatsApp sent', a.rescue?.callQueuedAt && 'AI reschedule call queued'].filter(Boolean).join(' · ')}>
+                <PhoneCall className="h-3 w-3" /> AI rescue {a.rescue?.rescheduledAt ? '→ rebooked' : 'running'}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
     {
       key: 'attendee', label: 'Attendee', render: (a: any) => {
         const name = a.attendee?.name || a.attendee?.email;
@@ -374,6 +418,16 @@ export default function AppointmentsPage() {
     {
       key: 'actions', label: '', className: 'text-right', render: (a: any) => canEdit && (
         <div className="flex justify-end gap-1">
+          {(a.status === 'scheduled' || a.status === 'confirmed') && new Date(a.startTime) <= now && (
+            <>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-700" title="Meeting happened — mark done" onClick={(e) => { e.stopPropagation(); completeMutation.mutate(a._id); }} disabled={completeMutation.isPending}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-700" title="Lead did not turn up — no-show (WhatsApp + AI reschedule call)" onClick={(e) => { e.stopPropagation(); setNoShowId(a._id); }}>
+                <UserX className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(a); }}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -405,6 +459,12 @@ export default function AppointmentsPage() {
         icon={Calendar}
         actions={canCreate && <Button variant="gradient" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Appointment</Button>}
       />
+
+      {!isOwner && (
+        <Suspense fallback={null}>
+          <GoogleCalendarCard canManage={!isSalesperson} />
+        </Suspense>
+      )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Total" value={total} icon={CalendarDays} tone="primary" description="all appointments" />
@@ -626,6 +686,24 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={() => setRescheduleAppt(null)}>Cancel</Button>
             <Button onClick={handleReschedule} disabled={rescheduleMutation.isPending}>
               {rescheduleMutation.isPending ? 'Saving...' : 'Reschedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* No-show confirmation */}
+      <Dialog open={!!noShowId} onOpenChange={() => setNoShowId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark as no-show?</DialogTitle>
+            <DialogDescription>
+              The lead gets a &ldquo;we missed you&rdquo; WhatsApp right away and the AI agent calls them to agree a new time (as configured under Settings › AI Calling › Meeting reminders). The meeting is moved automatically once a new slot is agreed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNoShowId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => noShowId && noShowMutation.mutate(noShowId)} disabled={noShowMutation.isPending}>
+              {noShowMutation.isPending ? 'Saving...' : 'Yes, no-show'}
             </Button>
           </DialogFooter>
         </DialogContent>

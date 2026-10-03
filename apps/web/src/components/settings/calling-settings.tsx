@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Bot, PhoneCall, Clock, MessageCircle, Flame, AlertTriangle, Repeat, Mic, Save, CheckCircle2, XCircle, ExternalLink, Sparkles, Loader2, Info,
+  Bot, PhoneCall, Clock, MessageCircle, Flame, AlertTriangle, Repeat, Mic, Save, CheckCircle2, XCircle, ExternalLink, Sparkles, Loader2, Info, BellRing,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -372,6 +372,68 @@ export function CallingSettingsTab() {
             <Input value={form.inCallBooking.instructions} onChange={(e) => setForm((f) => (f ? { ...f, inCallBooking: { ...f.inCallBooking, instructions: e.target.value } } : f))} placeholder="Meetings Mon-Sat 11am-6pm only, at our Chandigarh office or on Google Meet" />
           </div>
         </div>
+      </Section>
+
+      {/* Meeting reminders + no-show rescue */}
+      <Section icon={BellRing} title="Meeting reminders & no-show rescue" description="Booked meetings are not forgotten: the lead is reminded on WhatsApp (and e-mail), the salesperson gets a nudge, and when the lead does not turn up the AI calls to fix a new time. Meetings land in each salesperson's Google Calendar once they connect it on the Appointments page." footer={<Button onClick={saveAll} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>}>
+        {(() => {
+          const r = form.appointmentReminders;
+          const setR = (patch: Partial<typeof r>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...f.appointmentReminders, ...patch } } : f));
+          const setNs = (patch: Partial<typeof r.noShowRescue>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...f.appointmentReminders, noShowRescue: { ...f.appointmentReminders.noShowRescue, ...patch } } } : f));
+          return (
+            <>
+              <Row label="Reminders on" hint={readiness && !readiness.whatsapp.configured ? 'Needs a Twilio WhatsApp sender under API Credentials.' : 'Sent only for meetings that are still scheduled.'}>
+                <Switch checked={r.enabled} onCheckedChange={(v) => setR({ enabled: v })} />
+              </Row>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Row label="Day before" hint="WhatsApp + e-mail with date, time, who they will meet.">
+                  <Switch checked={r.dayBefore} onCheckedChange={(v) => setR({ dayBefore: v })} />
+                </Row>
+                <Row label="Shortly before" hint="A short WhatsApp ping.">
+                  <Switch checked={r.hourBefore} onCheckedChange={(v) => setR({ hourBefore: v })} />
+                </Row>
+                <div className="space-y-1.5">
+                  <Label>Minutes before the meeting</Label>
+                  <Input type="number" min={10} max={720} value={r.minutesBefore} onChange={(e) => setR({ minutesBefore: num(e.target.value) })} />
+                </div>
+              </div>
+              <Row label="Nudge the salesperson too" hint="In-app + push shortly before, and “did the meeting happen?” afterwards.">
+                <Switch checked={r.remindSalesperson} onCheckedChange={(v) => setR({ remindSalesperson: v })} />
+              </Row>
+
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                <Row label="No-show rescue" hint="When the lead does not turn up: a “we missed you” WhatsApp and an AI call to agree a new time. The AI moves the meeting itself.">
+                  <Switch checked={r.noShowRescue.enabled} onCheckedChange={(v) => setNs({ enabled: v })} />
+                </Row>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label>Ask the salesperson after (minutes)</Label>
+                    <Input type="number" min={5} max={720} value={r.noShowRescue.askAfterMinutes} onChange={(e) => setNs({ askAfterMinutes: num(e.target.value) })} />
+                    <p className="text-xs text-muted-foreground">“Did the meeting with X happen? Mark done / no-show.”</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Auto no-show after (minutes)</Label>
+                    <Input type="number" min={0} max={1440} value={r.noShowRescue.autoMarkAfterMinutes} onChange={(e) => setNs({ autoMarkAfterMinutes: num(e.target.value) })} />
+                    <p className="text-xs text-muted-foreground">Still unmarked after this → treated as a no-show. 0 = only when marked by the team.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>AI calls after (minutes)</Label>
+                    <Input type="number" min={0} max={1440} value={r.noShowRescue.callDelayMinutes} onChange={(e) => setNs({ callDelayMinutes: num(e.target.value) })} />
+                    <p className="text-xs text-muted-foreground">Within calling hours; the WhatsApp goes out at once.</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Row label="WhatsApp “we missed you”" hint="Uses the missed-meeting template.">
+                    <Switch checked={r.noShowRescue.whatsapp} onCheckedChange={(v) => setNs({ whatsapp: v })} />
+                  </Row>
+                  <Row label="AI reschedule call" hint="Off = a high-priority task for the salesperson instead.">
+                    <Switch checked={r.noShowRescue.aiCall} onCheckedChange={(v) => setNs({ aiCall: v })} />
+                  </Row>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </Section>
 
       {/* Re-engagement */}

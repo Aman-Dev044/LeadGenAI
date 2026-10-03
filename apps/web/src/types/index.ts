@@ -267,15 +267,32 @@ export interface SupportTicket {
 
 export interface Appointment {
   _id: string;
+  tenantId?: string;
   leadId: string;
+  assignedTo?: string;
   title: string;
   description?: string;
   startTime: string;
   endTime: string;
+  timezone?: string;
   status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
   attendee?: { name: string; email: string; phone?: string };
   meetingLink?: string;
   location?: string;
+  /** ai (booked on a call), user, widget, api */
+  bookedBy?: string;
+  rescheduledCount?: number;
+  /** Google Calendar mirror */
+  calendarProvider?: 'internal' | 'google' | 'outlook' | 'calendly';
+  externalCalendarId?: string;
+  conferenceLink?: string;
+  calendarSyncError?: string;
+  calendarSyncedAt?: string;
+  reminders?: { dayBeforeAt?: string; hourBeforeAt?: string; salespersonAt?: string };
+  outcomeAskedAt?: string;
+  noShowAt?: string;
+  completedAt?: string;
+  rescue?: { whatsappAt?: string; callId?: string; callQueuedAt?: string; rescheduledAt?: string };
   createdAt: string;
 }
 
@@ -402,6 +419,21 @@ export interface CallingSettings {
     thankYouTemplate: string;
     appointmentTemplate: string;
     callbackTemplate: string;
+  };
+  appointmentReminders: {
+    enabled: boolean;
+    dayBefore: boolean;
+    hourBefore: boolean;
+    minutesBefore: number;
+    remindSalesperson: boolean;
+    noShowRescue: {
+      enabled: boolean;
+      askAfterMinutes: number;
+      autoMarkAfterMinutes: number;
+      whatsapp: boolean;
+      aiCall: boolean;
+      callDelayMinutes: number;
+    };
   };
   assistant: {
     agentName: string;

@@ -5,7 +5,7 @@ import { Model } from 'mongoose';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { IEmailProvider } from '../../common/interfaces';
 
-type AppointmentEmailKind = 'confirmation' | 'reschedule' | 'cancellation';
+type AppointmentEmailKind = 'confirmation' | 'reschedule' | 'cancellation' | 'reminder';
 
 interface EmailContext {
   tenantName: string;
@@ -115,6 +115,8 @@ export class AppointmentEmailService {
         return `Rescheduled: ${appt.title || 'Your appointment'} is now on ${when}`;
       case 'cancellation':
         return `Cancelled: ${appt.title || 'Your appointment'} on ${when}`;
+      case 'reminder':
+        return `Reminder: ${appt.title || 'Your appointment'} on ${when}`;
     }
   }
 
@@ -130,11 +132,14 @@ export class AppointmentEmailService {
     const headline =
       kind === 'confirmation' ? 'Your appointment is confirmed'
       : kind === 'reschedule' ? 'Your appointment has been rescheduled'
+      : kind === 'reminder' ? 'A reminder about your appointment'
       : 'Your appointment has been cancelled';
 
     const intro =
       kind === 'confirmation'
         ? `Thank you for scheduling time with ${this.escape(ctx.tenantName)}. Here are the details of your appointment.`
+        : kind === 'reminder'
+        ? `Just a friendly reminder of your upcoming appointment with ${this.escape(ctx.tenantName)}. Reply to this email if you need to reschedule.`
         : kind === 'reschedule'
           ? `Your appointment with ${this.escape(ctx.tenantName)} has been moved${extra.previousStart ? ` from ${this.escape(this.formatDate(extra.previousStart, ctx.timezone, true))}` : ''}. The updated details are below.`
           : `We are sorry to let you know that your appointment with ${this.escape(ctx.tenantName)} has been cancelled.${extra.reason ? ` Reason: ${this.escape(extra.reason)}.` : ''} Please reply to this email if you would like to book a new time.`;

@@ -16,7 +16,7 @@ import { AssignmentService } from '../lead/assignment.service';
 import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 import { AppointmentService } from '../appointment/appointment.service';
 import { AIProviderFactory } from '../../providers/ai/ai-provider.factory';
-import { EventBusService, PlatformEvents, LeadCreatedPayload, LeadUpdatedPayload, CallPayload } from '../../common/events';
+import { EventBusService, PlatformEvents, LeadCreatedPayload, LeadUpdatedPayload, CallPayload, AppointmentPayload } from '../../common/events';
 import { VapiProvider } from './providers/vapi.provider';
 import { TwilioVoiceProvider } from './providers/twilio-voice.provider';
 import { VoiceCallEvent, VoiceToolCall } from './providers/voice-provider.interface';
@@ -79,6 +79,7 @@ export class CallingService implements OnModuleInit {
   onModuleInit() {
     this.bus.on<LeadCreatedPayload>(PlatformEvents.LEAD_CREATED, (p) => this.onLeadCreated(p));
     this.bus.on<LeadUpdatedPayload>(PlatformEvents.LEAD_UPDATED, (p) => this.onLeadUpdated(p));
+    this.bus.on<AppointmentPayload>(PlatformEvents.APPOINTMENT_NO_SHOW, (p) => this.onAppointmentNoShow(p));
   }
 
   // ─── Settings ─────────────────────────────────────────────────────
@@ -588,6 +589,20 @@ export class CallingService implements OnModuleInit {
       .lean();
     for (const t of tasks) lines.push(`- Pending: ${t.title}${t.description ? ` (${t.description})` : ''}, due ${fmt(t.dueAt)}`);
 
+    // Meetings on the books - what to confirm, or what they missed
+    try {
+      const appts: any[] = await this.appointments.recentForLead(tenantId, String(lead._id), 3);
+      for (const a of appts) {
+        const when = fmt(a.startTime);
+        if (a.status === 'no_show') lines.push(`- MISSED MEETING: they did not turn up for the meeting on ${when}${a.rescheduledCount ? ` (already moved ${a.rescheduledCount} time(s))` : ''}. A new time must be agreed and booked with book_appointment.`);
+        else if (a.status === 'scheduled' || a.status === 'confirmed') lines.push(`- Meeting booked for ${when}${a.meetingLink || a.conferenceLink ? ' (video link already sent)' : ''}. Confirm they are coming; if they cannot make it, move it with book_appointment.`);
+        else if (a.status === 'completed') lines.push(`- Meeting held on ${when}.`);
+        else if (a.status === 'cancelled') lines.push(`- Meeting on ${when} was cancelled.`);
+      }
+    } catch {
+      /* context only */
+    }
+
     if (lead.aiCallInsights?.callbackAt) lines.push(`- They asked for a callback at ${fmt(lead.aiCallInsights.callbackAt)}`);
     if (lead.lostReason) lines.push(`- Previously marked lost: ${lead.lostReason}`);
     if (lead.reengageAttempts) lines.push(`- Re-engaged ${lead.reengageAttempts} time(s) before`);
@@ -682,19 +697,21 @@ export class CallingService implements OnModuleInit {
           } else {
             const duration = settings.inCallBooking.meetingDurationMinutes;
             let appointmentId: string | undefined;
+            let rescheduled = false;
             try {
-              const appt: any = await this.appointments.create(tenantId, {
-                title: `Meeting with ${this.leadName(lead)}`,
-                description: [tc.arguments?.notes, tc.arguments?.mode && `Mode: ${tc.arguments.mode}`].filter(Boolean).join(' · ') || 'Booked by the AI agent on a call',
-                assignedTo: lead.assignedTo || '',
-                startTime: at.toISOString(),
-                endTime: new Date(at.getTime() + duration * 60_000).toISOString(),
-                leadId: String(lead._id),
-                attendee: { name: this.leadName(lead), email: lead.email, phone: lead.phone },
-              } as any);
-              appointmentId = String(appt?._id || '');
+              const booked = await this.upsertAppointmentForLead(
+                tenantId,
+                lead,
+                at,
+                duration,
+                [tc.arguments?.notes, tc.arguments?.mode && `Mode: ${tc.arguments.mode}`].filter(Boolean).join(' · ') || undefined,
+              );
+              appointmentId = booked.id;
+              rescheduled = booked.rescheduled;
             } catch (err: any) {
-              if (/conflict/i.test(err?.message || '')) throw new Error('That slot is already taken. Please offer a different time.');
+              if (/conflict/i.test(err?.message || '')) {
+                throw new Error(`That slot is not free (${err.message}). Apologise and offer a different time.`);
+              }
               this.logger.warn(`In-call appointment not created: ${err?.message}`);
             }
             const task = await this.tasks.create(
@@ -716,11 +733,17 @@ export class CallingService implements OnModuleInit {
               await this.activityModel.create({ tenantId, leadId: String(lead._id), type: 'status_changed', description: `Status changed from ${lead.status} to meeting (booked on AI call)`, oldValue: lead.status, newValue: 'meeting' });
               await this.leadModel.updateOne({ _id: lead._id }, { $set: { status: 'meeting', lastActivityAt: new Date() } });
             }
+            // One meeting task per lead: a moved meeting replaces the old reminder task
+            await this.taskModel.updateMany(
+              { tenantId, leadId: String(lead._id), type: 'meeting', status: 'pending', _id: { $ne: task._id } },
+              { $set: { status: 'cancelled', completedAt: new Date() } },
+            );
             actions.appointmentId = appointmentId;
             actions.taskId = String(task._id);
             actions.bookedInCall = at;
-            await this.activityModel.create({ tenantId, leadId: String(lead._id), type: 'ai_next_action', description: `AI booked a meeting on the call for ${when}`, newValue: { appointmentId, taskId: String(task._id) } });
-            result = `Booked. The meeting is confirmed for ${dateToWords(at, settings.timezone)}. Tell the person it is confirmed (say the day and time in words) and that they will get the details on WhatsApp.`;
+            if (rescheduled) actions.rescheduledInCall = true;
+            await this.activityModel.create({ tenantId, leadId: String(lead._id), type: 'ai_next_action', description: `AI ${rescheduled ? 'rescheduled the meeting' : 'booked a meeting'} on the call for ${when}`, newValue: { appointmentId, taskId: String(task._id) } });
+            result = `${rescheduled ? 'Rescheduled' : 'Booked'}. The meeting is confirmed for ${dateToWords(at, settings.timezone)}. Tell the person it is confirmed (say the day and time in words) and that they will get the details on WhatsApp.`;
           }
         } else if (tc.name === 'schedule_callback') {
           const at = new Date(tc.arguments?.callbackAt);
@@ -1137,19 +1160,139 @@ export class CallingService implements OnModuleInit {
   private async bookAppointment(tenantId: string, lead: any, at: Date, analysis: CallAnalysis): Promise<string | undefined> {
     if (!lead.assignedTo) return undefined;
     try {
-      const appt = await this.appointments.create(tenantId, {
-        title: `Meeting with ${this.leadName(lead)}`,
-        description: analysis.summary,
-        assignedTo: lead.assignedTo,
-        startTime: at.toISOString(),
-        endTime: new Date(at.getTime() + 30 * 60_000).toISOString(),
-        leadId: String(lead._id),
-        attendee: { name: this.leadName(lead), email: lead.email, phone: lead.phone },
-      } as any);
-      return String((appt as any)?._id || '');
+      const { id } = await this.upsertAppointmentForLead(tenantId, lead, at, 30, analysis.summary);
+      return id;
     } catch (err: any) {
       this.logger.warn(`Appointment not created: ${err?.message}`);
       return undefined;
+    }
+  }
+
+  /**
+   * Book a meeting for a lead - or MOVE the one they already have (open or
+   * missed) rather than stacking a second one. Throws on a calendar clash so
+   * the agent can offer another slot. Google Calendar sync and the
+   * confirmation e-mail happen inside AppointmentService.
+   */
+  private async upsertAppointmentForLead(
+    tenantId: string,
+    lead: any,
+    at: Date,
+    durationMinutes: number,
+    description?: string,
+  ): Promise<{ id: string; rescheduled: boolean }> {
+    const end = new Date(at.getTime() + durationMinutes * 60_000);
+    const existing: any = await this.appointments.openForLead(tenantId, String(lead._id));
+    if (existing) {
+      const moved: any = await this.appointments.reschedule(tenantId, String(existing._id), {
+        startTime: at.toISOString(),
+        endTime: end.toISOString(),
+        reason: existing.status === 'no_show' ? 'New time agreed with the lead on an AI call after a missed meeting' : 'New time agreed with the lead on an AI call',
+      } as any);
+      return { id: String(moved._id), rescheduled: true };
+    }
+    const appt: any = await this.appointments.create(tenantId, {
+      title: `Meeting with ${this.leadName(lead)}`,
+      description: description || 'Booked by the AI agent on a call',
+      assignedTo: lead.assignedTo || '',
+      startTime: at.toISOString(),
+      endTime: end.toISOString(),
+      leadId: String(lead._id),
+      attendee: { name: this.leadName(lead), email: lead.email, phone: lead.phone },
+      bookedBy: 'ai',
+    } as any);
+    return { id: String(appt?._id || ''), rescheduled: false };
+  }
+
+  // ─── No-show rescue ───────────────────────────────────────────────
+
+  /**
+   * The lead missed a meeting. Send a "we missed you" WhatsApp straight away
+   * and put an AI call on the queue to fix a new time (the call uses
+   * book_appointment, which moves the missed appointment instead of creating
+   * another). Falls back to a task for the salesperson when the AI call is off.
+   */
+  private async onAppointmentNoShow({ tenantId, appointment, markedBy }: AppointmentPayload) {
+    try {
+      const appt = appointment?.toObject?.() ?? appointment;
+      if (!appt?.leadId || !/^[a-f\d]{24}$/i.test(String(appt.leadId))) return;
+      const settings = await this.getSettings(tenantId);
+      const rescue = settings.appointmentReminders.noShowRescue;
+      if (!settings.appointmentReminders.enabled || !rescue.enabled) return;
+      const lead: any = await this.leadModel.findOne({ _id: appt.leadId, tenantId, deletedAt: null });
+      if (!lead) return;
+      const apptId = String(appt._id);
+      const tz = settings.timezone;
+      const at = new Date(appt.startTime);
+      const dateOf = at.toLocaleDateString('en-IN', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const timeOf = at.toLocaleTimeString('en-IN', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+      const company = settings.assistant.companyName || 'our team';
+      let salesperson = settings.assistant.agentName;
+      if (appt.assignedTo && /^[a-f\d]{24}$/i.test(String(appt.assignedTo))) {
+        const u: any = await this.userModel.findById(appt.assignedTo).select('firstName lastName').lean();
+        if (u) salesperson = `${u.firstName || ''} ${u.lastName || ''}`.trim() || salesperson;
+      }
+
+      // 1. WhatsApp: we missed you
+      if (rescue.whatsapp && lead.phone) {
+        const leadFirst = lead.firstName || this.leadName(lead);
+        const body =
+          `Hi ${leadFirst}, we missed you at our meeting scheduled for ${dateOf} at ${timeOf}. ` +
+          `No problem at all - ${salesperson} from ${company} will call you shortly to fix a new time. You can also reply here with a time that suits you.`;
+        const tpls = await this.notifications.whatsappTemplates(tenantId);
+        const template = tpls.missed_meeting
+          ? { sid: tpls.missed_meeting, variables: { 1: leadFirst, 2: dateOf, 3: timeOf, 4: salesperson, 5: company } }
+          : undefined;
+        const sent = await this.notifications.sendToLead(tenantId, 'whatsapp', lead, {
+          title: 'WhatsApp',
+          body,
+          type: 'appointment',
+          data: { leadId: String(lead._id), appointmentId: apptId, missedMeeting: true, ...(template ? { template } : {}) },
+        });
+        if (sent) {
+          await this.appointments.recordRescue(apptId, { whatsappAt: new Date() });
+          await this.activityModel.create({
+            tenantId,
+            leadId: String(lead._id),
+            type: 'whatsapp_sent',
+            description: `Missed-meeting WhatsApp sent: ${body.slice(0, 140)}`,
+            newValue: { appointmentId: apptId },
+          });
+        }
+      }
+
+      // 2. AI call to fix a new time (or a task when the AI is not allowed to)
+      if (rescue.aiCall && settings.enabled && lead.phone && !['won', 'lost'].includes(lead.status)) {
+        const call: any = await this.queueAiCall(tenantId, lead, 'reschedule', {
+          delaySeconds: rescue.callDelayMinutes * 60,
+          settings,
+        });
+        await this.appointments.recordRescue(apptId, { callId: String(call._id), callQueuedAt: new Date() });
+        this.kickQueue();
+      } else {
+        await this.tasks
+          .create(
+            tenantId,
+            {
+              leadId: String(lead._id),
+              title: `Reschedule the missed meeting with ${this.leadName(lead)}`,
+              description: `No-show for ${dateOf} ${timeOf}${markedBy === 'auto' ? ' (nobody marked the meeting done)' : ''}. Call and agree a new time.`,
+              type: 'call',
+              priority: 'high',
+              dueAt: new Date(Date.now() + 30 * 60_000),
+              assignedTo: lead.assignedTo,
+              source: 'ai',
+            },
+            'ai',
+          )
+          .catch((err) => this.logger.warn(`No-show task not created: ${err?.message}`));
+      }
+
+      if (!['won', 'lost'].includes(lead.status)) {
+        await this.leadModel.updateOne({ _id: lead._id }, { $set: { nextFollowUpAt: new Date(Date.now() + rescue.callDelayMinutes * 60_000), lastActivityAt: new Date() } });
+      }
+    } catch (err: any) {
+      this.logger.warn(`No-show rescue failed for appointment ${appointment?._id}: ${err?.message}`);
     }
   }
 

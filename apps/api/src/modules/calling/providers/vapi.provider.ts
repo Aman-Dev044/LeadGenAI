@@ -376,6 +376,8 @@ export class VapiProvider implements IVoiceProvider {
         return 'CALLBACK: they asked to be called at this time. Open with "you asked me to call you back", pick up exactly where the last conversation ended.';
       case 'retry':
         return 'RETRY: earlier attempts went unanswered. Keep it short and friendly; if it is a bad time, fix a callback.';
+      case 'reschedule':
+        return 'RESCHEDULE CALL: they missed the meeting we had booked (see history). No blame - say you noticed the meeting did not happen, ask if everything is okay, then offer two or three new slots and BOOK the new time with book_appointment before ending. If they are no longer interested, find out why and note it.';
     }
     switch (stage) {
       case 'new':

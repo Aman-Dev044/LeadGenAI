@@ -20,6 +20,9 @@ export const PlatformEvents = {
 
   APPOINTMENT_CREATED: 'appointment.created',
   APPOINTMENT_UPDATED: 'appointment.updated',
+  /** The lead did not turn up - marked by the salesperson or detected automatically. */
+  APPOINTMENT_NO_SHOW: 'appointment.no_show',
+  APPOINTMENT_COMPLETED: 'appointment.completed',
 
   CALL_STARTED: 'call.started',
   CALL_UPDATED: 'call.updated',
@@ -86,6 +89,8 @@ export interface HandoffPayload {
 export interface AppointmentPayload {
   tenantId: string;
   appointment: any;
+  /** For no-show / completed: who marked it ('auto' for the scheduler). */
+  markedBy?: string;
 }
 
 export interface CallPayload {

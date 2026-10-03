@@ -84,7 +84,34 @@ export interface CallingSettings {
     /** Extra guidance, e.g. "Meetings only Mon-Fri 11am-6pm at our Chandigarh office". */
     instructions: string;
   };
+  /** Reminders before a meeting and what happens when the lead does not turn up. */
+  appointmentReminders: AppointmentReminderSettings;
   assistant: AssistantSettings;
+}
+
+export interface AppointmentReminderSettings {
+  enabled: boolean;
+  /** WhatsApp (and e-mail when known) to the lead ~24h before. */
+  dayBefore: boolean;
+  /** WhatsApp to the lead shortly before the meeting. */
+  hourBefore: boolean;
+  /** How many minutes before the meeting the short reminder goes out. */
+  minutesBefore: number;
+  /** In-app + push nudge to the salesperson shortly before. */
+  remindSalesperson: boolean;
+  noShowRescue: {
+    enabled: boolean;
+    /** Minutes after the start when nobody marked the meeting done: ask the salesperson what happened. */
+    askAfterMinutes: number;
+    /** Minutes after the start when still unmarked: treat as a no-show automatically (0 = never, manual only). */
+    autoMarkAfterMinutes: number;
+    /** WhatsApp the lead a "we missed you" message. */
+    whatsapp: boolean;
+    /** Have the AI call the lead to fix a new time. */
+    aiCall: boolean;
+    /** Minutes after the no-show before the AI calls. */
+    callDelayMinutes: number;
+  };
 }
 
 /**
@@ -188,6 +215,21 @@ export const DEFAULT_CALLING_SETTINGS: CallingSettings = {
     meetingDurationMinutes: 30,
     instructions: '',
   },
+  appointmentReminders: {
+    enabled: true,
+    dayBefore: true,
+    hourBefore: true,
+    minutesBefore: 60,
+    remindSalesperson: true,
+    noShowRescue: {
+      enabled: true,
+      askAfterMinutes: 20,
+      autoMarkAfterMinutes: 90,
+      whatsapp: true,
+      aiCall: true,
+      callDelayMinutes: 30,
+    },
+  },
   assistant: {
     agentName: 'Priya',
     companyName: '',
@@ -230,6 +272,9 @@ export function resolveCallingSettings(stored: any): CallingSettings {
   const t = isObj(s.transfer) ? s.transfer : {};
   const b = isObj(s.inCallBooking) ? s.inCallBooking : {};
   const w = isObj(s.postCallWhatsapp) ? s.postCallWhatsapp : {};
+  const r = isObj(s.appointmentReminders) ? s.appointmentReminders : {};
+  const ns = isObj(r.noShowRescue) ? r.noShowRescue : {};
+  const dr = d.appointmentReminders;
 
   return {
     enabled: bool(s.enabled, d.enabled),
@@ -302,6 +347,21 @@ export function resolveCallingSettings(stored: any): CallingSettings {
       enabled: bool(b.enabled, d.inCallBooking.enabled),
       meetingDurationMinutes: num(b.meetingDurationMinutes, d.inCallBooking.meetingDurationMinutes, 10, 240),
       instructions: str(b.instructions, d.inCallBooking.instructions),
+    },
+    appointmentReminders: {
+      enabled: bool(r.enabled, dr.enabled),
+      dayBefore: bool(r.dayBefore, dr.dayBefore),
+      hourBefore: bool(r.hourBefore, dr.hourBefore),
+      minutesBefore: num(r.minutesBefore, dr.minutesBefore, 10, 720),
+      remindSalesperson: bool(r.remindSalesperson, dr.remindSalesperson),
+      noShowRescue: {
+        enabled: bool(ns.enabled, dr.noShowRescue.enabled),
+        askAfterMinutes: num(ns.askAfterMinutes, dr.noShowRescue.askAfterMinutes, 5, 720),
+        autoMarkAfterMinutes: num(ns.autoMarkAfterMinutes, dr.noShowRescue.autoMarkAfterMinutes, 0, 1440),
+        whatsapp: bool(ns.whatsapp, dr.noShowRescue.whatsapp),
+        aiCall: bool(ns.aiCall, dr.noShowRescue.aiCall),
+        callDelayMinutes: num(ns.callDelayMinutes, dr.noShowRescue.callDelayMinutes, 0, 1440),
+      },
     },
     assistant: {
       agentName: str(a.agentName, d.assistant.agentName),

@@ -44,6 +44,12 @@ export default () => ({
     restUrl: process.env.UPSTASH_REDIS_REST_URL || '',
     restToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
   },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    // Defaults to <PUBLIC_API_URL>/api/v1/calendar/google/callback
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+  },
   jwt: {
     accessSecret: requireInProd(process.env.JWT_ACCESS_SECRET, 'JWT_ACCESS_SECRET', 'dev-access-secret'),
     refreshSecret: requireInProd(process.env.JWT_REFRESH_SECRET, 'JWT_REFRESH_SECRET', 'dev-refresh-secret'),

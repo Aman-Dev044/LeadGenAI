@@ -76,6 +76,24 @@ class EnvironmentVariables {
   @IsOptional()
   VAPI_WEBHOOK_SECRET: string;
 
+  // Google Calendar OAuth (meetings booked by the AI land in the salesperson's calendar)
+  @IsString()
+  @IsOptional()
+  GOOGLE_CLIENT_ID: string;
+
+  @IsString()
+  @IsOptional()
+  GOOGLE_CLIENT_SECRET: string;
+
+  @IsString()
+  @IsOptional()
+  GOOGLE_REDIRECT_URI: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(30000)
+  APPOINTMENT_REMINDER_POLL_INTERVAL_MS: number;
+
   @IsNumber()
   @IsOptional()
   @Min(5000)

@@ -68,6 +68,10 @@ export class Appointment {
   @Prop({ type: String })
   externalCalendarId: string;
 
+  /** Whose calendar holds the mirrored event (the assignee at sync time). */
+  @Prop({ type: String })
+  calendarOwnerUserId: string;
+
   @Prop({ type: String })
   cancellationReason: string;
 
@@ -99,6 +103,43 @@ export class Appointment {
 
   @Prop()
   reminderSentAt: Date;
+
+  /** Who created it: ai (on a call), user (dashboard), widget (visitor self-booking). */
+  @Prop({ type: String, enum: ['ai', 'user', 'widget', 'api'], default: 'user' })
+  bookedBy: string;
+
+  /** When each reminder went out - the sweep never sends one twice. */
+  @Prop({
+    type: { dayBeforeAt: Date, hourBeforeAt: Date, salespersonAt: Date },
+    _id: false,
+    default: {},
+  })
+  reminders: { dayBeforeAt?: Date; hourBeforeAt?: Date; salespersonAt?: Date };
+
+  /** Meeting time passed with nobody marking it done: the salesperson was asked. */
+  @Prop()
+  outcomeAskedAt: Date;
+
+  @Prop()
+  noShowAt: Date;
+
+  @Prop()
+  completedAt: Date;
+
+  /** What the no-show rescue did (missed-meeting WhatsApp, AI reschedule call). */
+  @Prop({ type: Object })
+  rescue: { whatsappAt?: Date; callId?: string; callQueuedAt?: Date; rescheduledAt?: Date };
+
+  /** Google Meet / conference link created with the calendar event. */
+  @Prop({ type: String })
+  conferenceLink: string;
+
+  /** Last calendar sync problem; cleared when a sync succeeds. */
+  @Prop({ type: String })
+  calendarSyncError: string;
+
+  @Prop()
+  calendarSyncedAt: Date;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
@@ -106,3 +147,4 @@ export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
 AppointmentSchema.index({ tenantId: 1, assignedTo: 1, startTime: 1 });
 AppointmentSchema.index({ tenantId: 1, status: 1 });
 AppointmentSchema.index({ tenantId: 1, leadId: 1 });
+AppointmentSchema.index({ status: 1, startTime: 1 });

@@ -513,6 +513,37 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderSpec[] = [
         envKey: 'WHATSAPP_TPL_REENGAGE',
         help: '{{1}} lead, {{2}} agent, {{3}} company, {{4}} what they wanted.',
       },
+      {
+        key: 'tplReminder',
+        label: 'Template: meeting reminder',
+        type: 'text',
+        placeholder: 'HX…',
+        envKey: 'WHATSAPP_TPL_REMINDER',
+        help: '{{1}} lead, {{2}} when (tomorrow / in 1 hour), {{3}} date, {{4}} time, {{5}} salesperson, {{6}} contact, {{7}} company.',
+      },
+      {
+        key: 'tplMissedMeeting',
+        label: 'Template: missed meeting',
+        type: 'text',
+        placeholder: 'HX…',
+        envKey: 'WHATSAPP_TPL_MISSED_MEETING',
+        help: '{{1}} lead, {{2}} date, {{3}} time, {{4}} salesperson, {{5}} company.',
+      },
+    ],
+  },
+
+  // ── Calendar ──────────────────────────────────────────────────────────
+  {
+    id: 'google',
+    label: 'Google Calendar',
+    category: 'calling',
+    description:
+      'Meetings the AI books land in each salesperson\'s Google Calendar with a Google Meet link, and the AI only offers slots that are free there. Each person connects their own calendar from the Appointments page.',
+    docsUrl: 'https://console.cloud.google.com/apis/credentials',
+    note: 'Create an OAuth client (Web application) with the redirect URI shown under Appointments > Google Calendar. Leave empty to use the platform\'s client.',
+    fields: [
+      { key: 'clientId', label: 'OAuth client ID', type: 'text', envKey: 'GOOGLE_CLIENT_ID', placeholder: '…apps.googleusercontent.com' },
+      { key: 'clientSecret', label: 'OAuth client secret', type: 'password', secret: true, envKey: 'GOOGLE_CLIENT_SECRET' },
     ],
   },
 

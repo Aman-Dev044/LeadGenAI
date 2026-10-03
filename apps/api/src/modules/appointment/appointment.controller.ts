@@ -107,10 +107,34 @@ export class AppointmentController {
   @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
   async update(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string },
     @Param('id') id: string,
     @Body() dto: UpdateAppointmentDto,
   ) {
-    return this.appointmentService.update(tenantId, id, dto);
+    return this.appointmentService.update(tenantId, id, dto, user?.userId);
+  }
+
+  /** The meeting happened. */
+  @Post(':id/complete')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  async complete(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+  ) {
+    return this.appointmentService.complete(tenantId, id, user?.userId || 'user', notes);
+  }
+
+  /** The lead did not turn up: triggers the missed-meeting WhatsApp + AI reschedule call. */
+  @Post(':id/no-show')
+  @Roles('ADMIN', 'SALES_MANAGER', 'SALESPERSON')
+  async noShow(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.appointmentService.markNoShow(tenantId, id, user?.userId || 'user');
   }
 
   @Post(':id/cancel')

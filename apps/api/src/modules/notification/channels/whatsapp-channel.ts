@@ -2,7 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CredentialsService } from '../../credentials/credentials.service';
 
-export type WhatsAppTemplateKey = 'thank_you' | 'appointment' | 'callback' | 'missed_call' | 'reengage';
+export type WhatsAppTemplateKey =
+  | 'thank_you'
+  | 'appointment'
+  | 'callback'
+  | 'missed_call'
+  | 'reengage'
+  | 'reminder'
+  | 'missed_meeting';
 
 @Injectable()
 export class WhatsAppChannel {
@@ -38,6 +45,8 @@ export class WhatsAppChannel {
       callback: own.tplCallback || env('WHATSAPP_TPL_CALLBACK'),
       missed_call: own.tplMissedCall || env('WHATSAPP_TPL_MISSED_CALL'),
       reengage: own.tplReengage || env('WHATSAPP_TPL_REENGAGE'),
+      reminder: own.tplReminder || env('WHATSAPP_TPL_REMINDER'),
+      missed_meeting: own.tplMissedMeeting || env('WHATSAPP_TPL_MISSED_MEETING'),
     };
   }
 

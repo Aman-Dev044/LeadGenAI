@@ -20,6 +20,7 @@ export * from './consent-log.schema';
 export * from './page-view.schema';
 export * from './support-ticket.schema';
 export * from './appointment.schema';
+export * from './calendar-connection.schema';
 export * from './follow-up-workflow.schema';
 export * from './follow-up-log.schema';
 export * from './subscription.schema';
