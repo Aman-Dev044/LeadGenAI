@@ -41,7 +41,14 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
 import { formatDate, getInitials, cn } from '@/lib/utils';
 
-const ROLES = ['ADMIN', 'SALESPERSON'];
+const ROLES = ['ADMIN', 'SALESPERSON', 'VIEWER'];
+
+/** What each role means, shown under the picker when inviting someone. */
+const ROLE_HELP: Record<string, string> = {
+  ADMIN: 'Full access: leads, team, settings, billing.',
+  SALESPERSON: 'Works their own leads, calls, chats and appointments.',
+  VIEWER: 'View only: sees leads, pipeline and appointments, but never a lead’s e-mail or phone number, and cannot add, edit or delete anything.',
+};
 
 const roleColors: Record<string, 'violet' | 'info' | 'secondary' | 'outline'> = {
   ADMIN: 'violet', SALESPERSON: 'secondary', SALES_MANAGER: 'info', VIEWER: 'outline',
@@ -589,6 +596,7 @@ export default function UsersPage() {
                     {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {ROLE_HELP[form.role] && <p className="text-xs text-muted-foreground">{ROLE_HELP[form.role]}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
@@ -642,6 +650,7 @@ export default function UsersPage() {
                       {ROLES.map((r) => <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {ROLE_HELP[editForm.role] && <p className="text-xs text-muted-foreground">{ROLE_HELP[editForm.role]}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Phone</Label>

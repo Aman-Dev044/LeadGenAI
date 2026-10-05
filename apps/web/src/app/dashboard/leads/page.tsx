@@ -74,6 +74,7 @@ export default function LeadsPage() {
   const canBulkAssign = perms.bulkAssignLeads(role);
   const canImportExport = perms.importExportLeads(role);
   const isSalesperson = perms.isSalesperson(role);
+  const canSeeContact = perms.seeContactDetails(role);
   const canSelect = canBulkAssign || canCreate;
   const tableCols = 8 + (canSelect ? 1 : 0) + (canDelete ? 1 : 0);
   const [page, setPage] = useState(1);
@@ -479,7 +480,7 @@ export default function LeadsPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || '—'}</div>
+                            <div className="text-xs text-muted-foreground truncate">{(canSeeContact ? lead.email || lead.phone : lead.company) || '—'}</div>
                           </div>
                         </div>
                       </TableCell>

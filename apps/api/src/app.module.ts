@@ -17,6 +17,7 @@ import { TenantGuard } from './common/guards/tenant.guard';
 // Filters & Interceptors
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import { MaskContactInterceptor } from './common/interceptors/mask-contact.interceptor';
 
 // Providers
 import { AIModule } from './providers/ai/ai.module';
@@ -186,6 +187,9 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
 
     // Global Interceptor
+    // Registered first so it runs LAST on the response: the finished payload,
+    // whatever endpoint produced it, leaves without contact details for VIEWER
+    { provide: APP_INTERCEPTOR, useClass: MaskContactInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
   ],
 })

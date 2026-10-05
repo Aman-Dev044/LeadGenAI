@@ -88,6 +88,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const queryClient = useQueryClient();
   const role = useAuthStore((s) => s.user?.role);
   const canEdit = perms.editLead(role);
+  // A view-only member never sees how to reach the lead (the API masks it too)
+  const canSeeContact = perms.seeContactDetails(role);
   const canDelete = perms.deleteLead(role);
   const canReassign = perms.reassignLead(role);
   const [note, setNote] = useState('');
@@ -270,8 +272,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const contactItems = [
-    lead.email && { icon: Mail, label: 'Email', value: lead.email, href: `mailto:${lead.email}` },
-    lead.phone && { icon: Phone, label: 'Phone', value: lead.phone, href: `tel:${lead.phone}` },
+    canSeeContact && lead.email && { icon: Mail, label: 'Email', value: lead.email, href: `mailto:${lead.email}` },
+    canSeeContact && lead.phone && { icon: Phone, label: 'Phone', value: lead.phone, href: `tel:${lead.phone}` },
     lead.company && { icon: Building2, label: 'Company', value: lead.company },
     lead.source && { icon: Globe, label: 'Source', value: lead.source },
   ].filter(Boolean) as { icon: any; label: string; value: string; href?: string }[];
@@ -344,12 +346,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex items-center gap-4">
               <ScoreRing score={lead.score} />
               <div className="hidden sm:flex flex-col gap-2">
-                {lead.email && (
+                {canSeeContact && lead.email && (
                   <Button variant="soft" size="sm" asChild>
                     <a href={`mailto:${lead.email}`}><Mail className="h-4 w-4" /> Email</a>
                   </Button>
                 )}
-                {lead.phone && (
+                {canSeeContact && lead.phone && (
                   <Button variant="outline" size="sm" asChild>
                     <a href={`https://wa.me/${lead.phone.replace(/[^\d]/g, '')}`} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /> WhatsApp</a>
                   </Button>
@@ -575,7 +577,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                {lead.phone && (
+                {canSeeContact && lead.phone && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -664,7 +666,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <div className="text-muted-foreground">
                       💡 <strong>Pro Tip:</strong> WhatsApp voice notes have a <strong>4.2x higher response rate</strong> than text cold messages!
                     </div>
-                    {lead.phone ? (
+                    {canSeeContact && lead.phone ? (
                       <Button
                         size="sm"
                         className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 shadow-sm gap-1.5"

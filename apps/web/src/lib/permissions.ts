@@ -4,24 +4,29 @@
  *
  *  ADMIN          full workspace access (all leads, team members, bots, settings, billing)
  *  SALESPERSON    works their own leads, chats, handoffs, appointments and personal dashboard
+ *  VIEWER         view only: sees leads, pipeline and appointments but never a lead's
+ *                 e-mail or phone number, and cannot add, edit or delete anything
+ *                 (the API masks contact details and refuses every non-GET request)
  *  SUPER_ADMIN    platform owner, bypasses everything
  */
-export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON' | 'VIEWER';
 
 const ALL: Role[] = ['ADMIN', 'SALESPERSON'];
 const MANAGERS: Role[] = ['ADMIN'];
 const TEAM: Role[] = ['ADMIN', 'SALESPERSON'];
 const ADMIN_ONLY: Role[] = ['ADMIN'];
+/** Pages a view-only member may open. */
+const WITH_VIEWER: Role[] = ['ADMIN', 'SALESPERSON', 'VIEWER'];
 
 /** Which roles may open each dashboard route (prefix match, longest wins). */
 export const PAGE_ACCESS: Record<string, Role[]> = {
-  '/dashboard': ALL,
-  '/dashboard/leads': ALL,
+  '/dashboard': WITH_VIEWER,
+  '/dashboard/leads': WITH_VIEWER,
   '/dashboard/calls': TEAM,
   '/dashboard/follow-up-tasks': TEAM,
   '/dashboard/conversations': TEAM,
   '/dashboard/handoffs': TEAM,
-  '/dashboard/appointments': ALL,
+  '/dashboard/appointments': WITH_VIEWER,
   '/dashboard/bookings': TEAM,
   '/dashboard/agents': ADMIN_ONLY,
   '/dashboard/knowledge-base': ADMIN_ONLY,
@@ -34,11 +39,11 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard/api-keys': ADMIN_ONLY,
   '/dashboard/analytics': ADMIN_ONLY,
   '/dashboard/visitor-tracking': ADMIN_ONLY,
-  '/dashboard/notifications': ALL,
+  '/dashboard/notifications': WITH_VIEWER,
   '/dashboard/users': ADMIN_ONLY,
   '/dashboard/support-tickets': TEAM,
   '/dashboard/billing': ADMIN_ONLY,
-  '/dashboard/settings': ALL,
+  '/dashboard/settings': WITH_VIEWER,
   '/dashboard/settings/credentials': ADMIN_ONLY,
 };
 
@@ -65,6 +70,11 @@ const is = (role: string | null | undefined, ...roles: Role[]) =>
 /** Fine-grained UI capabilities, mirrored from the API's @Roles decorators. */
 export const perms = {
   isViewer: (role?: string | null) => role === 'VIEWER',
+  /**
+   * May this role see a lead's e-mail / phone? The API masks them for VIEWER,
+   * so the UI hides the fields and the call / WhatsApp / mail shortcuts too.
+   */
+  seeContactDetails: (role?: string | null) => role !== 'VIEWER',
   isSalesperson: (role?: string | null) => role === 'SALESPERSON',
   /** ADMIN / SALES_MANAGER (or owner) */
   isManager: (role?: string | null) => is(role, ...MANAGERS),
