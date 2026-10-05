@@ -3,7 +3,7 @@ import { use, useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Send, Bot, User, ArrowLeftRight, WifiOff, FileText, Loader2, Sparkles, XCircle, MapPin, ArrowRight, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Send, Bot, User, ArrowLeftRight, WifiOff, FileText, Loader2, Sparkles, XCircle, MapPin, ArrowRight, MessageSquare, MessageCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import { perms } from '@/lib/permissions';
@@ -105,6 +105,15 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
       setLocalMessages((prev) => prev.filter((m) => !m._optimistic));
       toast.error(err.message || 'Failed to send message');
     },
+  });
+
+  const waModeMutation = useMutation({
+    mutationFn: (mode: 'bot' | 'human') => api.post(`/whatsapp/conversations/${id}/mode`, { mode }),
+    onSuccess: (_r, mode) => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', id] });
+      toast.success(mode === 'human' ? 'You have taken over - the AI is paused on this chat' : 'Handed back to the AI');
+    },
+    onError: (err: any) => toast.error(err.message),
   });
 
   const handoffMutation = useMutation({
@@ -295,6 +304,7 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold truncate">{visitorLabel}</p>
+                    {conversation.channel === 'whatsapp' && <Badge variant="success"><MessageCircle className="h-3 w-3" /> WhatsApp</Badge>}
                     <Badge variant={statusVariant[conversation.status] || 'secondary'} dot>{conversation.status.replace('_', ' ')}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
@@ -303,7 +313,17 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {canTakeOver && conversation.status === 'active' && conversation.mode === 'bot' && (
+                {conversation.channel === 'whatsapp' ? (
+                  conversation.mode === 'human' ? (
+                    <Button variant="gradient" size="sm" onClick={() => waModeMutation.mutate('bot')} disabled={waModeMutation.isPending}>
+                      <Bot className="h-3.5 w-3.5" /> Hand back to AI
+                    </Button>
+                  ) : (
+                    <Button variant="gradient" size="sm" onClick={() => waModeMutation.mutate('human')} disabled={waModeMutation.isPending}>
+                      <ArrowLeftRight className="h-3.5 w-3.5" /> Take Over
+                    </Button>
+                  )
+                ) : canTakeOver && conversation.status === 'active' && conversation.mode === 'bot' && (
                   <Button variant="gradient" size="sm" onClick={() => handoffMutation.mutate()}>
                     <ArrowLeftRight className="h-3.5 w-3.5" /> Take Over
                   </Button>
@@ -344,7 +364,17 @@ export default function ConversationDetailPage({ params }: { params: Promise<{ i
                                   : 'rounded-2xl rounded-br-md bg-primary text-primary-foreground',
                           )}
                         >
-                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          {msg.attachment?.fileUrl && msg.attachment?.mimeType?.startsWith('image/') && (
+                            <a href={msg.attachment.fileUrl} target="_blank" rel="noreferrer" className="mb-1.5 block">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={msg.attachment.fileUrl} alt={msg.attachment.fileName || 'image'} className="max-h-64 max-w-full rounded-lg object-contain" />
+                            </a>
+                          )}
+                          {msg.attachment?.fileUrl && !msg.attachment?.mimeType?.startsWith('image/') && (
+                            <a href={msg.attachment.fileUrl} target="_blank" rel="noreferrer" className="mb-1 inline-flex items-center gap-1 text-xs underline"><FileText className="h-3 w-3" /> {msg.attachment.fileName || 'Attachment'}</a>
+                          )}
+                          {!(msg.attachment?.fileUrl && (msg.content === '[photo]' || !msg.content)) && <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>}
+                          {msg.deliveryError && <p className="mt-1 text-[10px] text-red-200">Not delivered: {msg.deliveryError}</p>}
                         </div>
                         <div className="flex items-center gap-1.5 px-1 text-[10.5px] text-muted-foreground">
                           {msg.sender === 'agent' && <span className="font-semibold text-emerald-600 dark:text-emerald-400">Agent</span>}

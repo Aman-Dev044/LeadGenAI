@@ -8,7 +8,7 @@ import {
   Workflow, Globe, Key, Webhook, Target, UserCog, ChevronLeft,
   ChevronRight, Crown, Building2, Gauge, ScrollText,
   Megaphone, SlidersHorizontal, Activity, ShieldCheck, Plug, UserX, Radar, Radio, KeyRound,
-  PhoneCall, ListChecks, type LucideIcon,
+  PhoneCall, ListChecks, ClipboardList, type LucideIcon,
 } from 'lucide-react';
 import { cn, getInitials } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -54,6 +54,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Conversations', href: '/dashboard/conversations', icon: MessageSquare, roles: PAGE_ACCESS['/dashboard/conversations'] },
       { label: 'Handoffs', href: '/dashboard/handoffs', icon: ArrowLeftRight, badgeKey: 'handoffs', roles: PAGE_ACCESS['/dashboard/handoffs'] },
       { label: 'Appointments', href: '/dashboard/appointments', icon: Calendar, roles: PAGE_ACCESS['/dashboard/appointments'] },
+      { label: 'Bookings', href: '/dashboard/bookings', icon: ClipboardList, roles: PAGE_ACCESS['/dashboard/bookings'] },
     ],
   },
   {

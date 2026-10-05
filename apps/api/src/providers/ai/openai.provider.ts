@@ -92,7 +92,17 @@ export class OpenAIProvider implements IAIProvider {
 
     const response = await this.client.chat.completions.create({
       model: options?.model || this.defaultModel,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map((m) =>
+        m.images?.length && m.role === 'user'
+          ? {
+              role: 'user' as const,
+              content: [
+                { type: 'text' as const, text: m.content || 'Look at the attached picture.' },
+                ...m.images.map((url) => ({ type: 'image_url' as const, image_url: { url, detail: 'low' as const } })),
+              ],
+            }
+          : { role: m.role, content: m.content },
+      ) as any,
       temperature: options?.temperature ?? 0.7,
       max_tokens: options?.maxTokens ?? 1024,
       ...(tools?.length ? { tools } : {}),

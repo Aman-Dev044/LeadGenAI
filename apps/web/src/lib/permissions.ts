@@ -22,6 +22,7 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard/conversations': TEAM,
   '/dashboard/handoffs': TEAM,
   '/dashboard/appointments': ALL,
+  '/dashboard/bookings': TEAM,
   '/dashboard/agents': ADMIN_ONLY,
   '/dashboard/knowledge-base': ADMIN_ONLY,
   '/dashboard/lead-scoring': ADMIN_ONLY,

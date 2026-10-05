@@ -140,7 +140,10 @@ export default function ConversationsPage() {
             <div className="min-w-0">
               <div className="font-semibold truncate flex items-center gap-1.5">
                 <span>{displayName}</span>
-                {hasName && (
+                {c.channel === 'whatsapp' && (
+                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">WhatsApp</span>
+                )}
+                {hasName && c.channel !== 'whatsapp' && (
                   <span className="font-mono text-[10px] font-normal text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded border border-border/40">
                     {vid.slice(0, 8)}
                   </span>

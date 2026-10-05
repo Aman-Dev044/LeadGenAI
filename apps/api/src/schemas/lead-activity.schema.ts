@@ -33,6 +33,7 @@ export class LeadActivity {
       'task_created',
       'task_completed',
       'ai_next_action',
+      'whatsapp_received',
       'reengaged',
       'manager_alerted',
     ],

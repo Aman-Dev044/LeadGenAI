@@ -149,10 +149,93 @@ export interface Lead {
   updatedAt: string;
 }
 
+export interface BookingField {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options: string[];
+  hint: string;
+}
+
+export interface BookingForm {
+  key: string;
+  name: string;
+  description: string;
+  fields: BookingField[];
+  paymentLink: string;
+  paymentNote: string;
+  notifyUserId: string;
+}
+
+export interface WhatsAppAiSettings {
+  enabled: boolean;
+  agentName: string;
+  language: string;
+  instructions: string;
+  useKnowledgeBase: boolean;
+  sendMedia: boolean;
+  maxMediaPerReply: number;
+  allowBooking: boolean;
+  handoffKeywords: string[];
+  replyDelaySeconds: number;
+  pauseWhenHuman: boolean;
+  bookings: { enabled: boolean; forms: BookingForm[] };
+  companyName?: string;
+  timezone?: string;
+  callingAgentName?: string;
+}
+
+export interface WhatsAppMedia {
+  _id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  mimeType: string;
+  size: number;
+  sentCount: number;
+  url: string;
+  createdAt: string;
+}
+
+export interface WhatsAppStatus {
+  enabled: boolean;
+  sender: { configured: boolean; number: string; online?: boolean; webhookUrl?: string; webhookMatches?: boolean };
+  inboundUrl: string;
+  statusUrl: string;
+  mediaCount: number;
+  openBookings: number;
+  signatureCheck: boolean;
+}
+
+export interface BookingRequest {
+  _id: string;
+  tenantId: string;
+  leadId: string;
+  conversationId?: string;
+  formKey: string;
+  formName?: string;
+  fields: Record<string, any>;
+  status: 'collecting' | 'submitted' | 'payment_sent' | 'paid' | 'confirmed' | 'cancelled';
+  paymentLink?: string;
+  paymentLinkSentAt?: string;
+  amount?: number;
+  assignedTo?: string;
+  taskId?: string;
+  notes?: string;
+  submittedAt?: string;
+  paidAt?: string;
+  confirmedAt?: string;
+  createdAt: string;
+  lead?: { _id: string; firstName?: string; lastName?: string; phone?: string; email?: string } | null;
+}
+
 export interface Conversation {
   _id: string;
   tenantId: string;
   agentId: string;
+  /** widget (website chat) or whatsapp */
+  channel?: 'widget' | 'whatsapp';
   leadId?: string | { _id?: string; firstName?: string; lastName?: string; email?: string; phone?: string; company?: string; city?: string; country?: string };
   visitorId: string;
   status: 'active' | 'ended' | 'handed_off' | 'archived';

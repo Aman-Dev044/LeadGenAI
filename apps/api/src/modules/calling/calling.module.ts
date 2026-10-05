@@ -13,6 +13,8 @@ import { LeadActivitySchema } from '../../schemas/lead-activity.schema';
 import { TenantSchema } from '../../schemas/tenant.schema';
 import { UserSchema } from '../../schemas/user.schema';
 import { FollowUpTaskSchema } from '../../schemas/follow-up-task.schema';
+import { ConversationSchema } from '../../schemas/conversation.schema';
+import { MessageSchema } from '../../schemas/message.schema';
 import { LeadModule } from '../lead/lead.module';
 import { NotificationModule } from '../notification/notification.module';
 import { FollowUpTaskModule } from '../follow-up-task/follow-up-task.module';
@@ -27,6 +29,8 @@ import { AppointmentModule } from '../appointment/appointment.module';
       { name: 'Tenant', schema: TenantSchema },
       { name: 'User', schema: UserSchema },
       { name: 'FollowUpTask', schema: FollowUpTaskSchema },
+      { name: 'Conversation', schema: ConversationSchema },
+      { name: 'Message', schema: MessageSchema },
     ]),
     LeadModule,
     NotificationModule,

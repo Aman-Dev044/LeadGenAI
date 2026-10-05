@@ -21,8 +21,9 @@ import { formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 import { AccountDeletionCard } from '@/components/settings/account-deletion-card';
 import { CallingSettingsTab } from '@/components/settings/calling-settings';
+import { WhatsAppSettingsTab } from '@/components/settings/whatsapp-settings';
 import { useSearchParams } from 'next/navigation';
-import { PhoneCall } from 'lucide-react';
+import { PhoneCall, MessageCircle } from 'lucide-react';
 
 const AI_PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -696,6 +697,7 @@ export default function SettingsPage() {
             <>
               <TabsTrigger value="organization"><Building2 className="h-3.5 w-3.5" /> Organization</TabsTrigger>
               <TabsTrigger value="calling"><PhoneCall className="h-3.5 w-3.5" /> AI Calling</TabsTrigger>
+              <TabsTrigger value="whatsapp"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp AI</TabsTrigger>
               <TabsTrigger value="branding"><Palette className="h-3.5 w-3.5" /> Branding</TabsTrigger>
               <TabsTrigger value="ai"><Bot className="h-3.5 w-3.5" /> AI & Preferences</TabsTrigger>
               <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5" /> Notifications</TabsTrigger>
@@ -715,6 +717,11 @@ export default function SettingsPage() {
         {user?.role === 'ADMIN' && (
           <TabsContent value="calling">
             <CallingSettingsTab />
+          </TabsContent>
+        )}
+        {user?.role === 'ADMIN' && (
+          <TabsContent value="whatsapp">
+            <WhatsAppSettingsTab />
           </TabsContent>
         )}
 

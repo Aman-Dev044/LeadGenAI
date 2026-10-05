@@ -114,6 +114,10 @@ export class Tenant {
   @Prop({ type: Object, default: {} })
   callingSettings: Record<string, any>;
 
+  /** Two-way WhatsApp AI: persona, booking forms, media rules. See WhatsAppAiSettings. */
+  @Prop({ type: Object, default: {} })
+  whatsappSettings: Record<string, any>;
+
   @Prop({
     type: {
       enabled: { type: Boolean, default: false },

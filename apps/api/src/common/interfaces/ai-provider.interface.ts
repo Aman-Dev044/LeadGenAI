@@ -1,6 +1,8 @@
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  /** Pictures attached to a user turn (data: URLs or https URLs) for vision models. */
+  images?: string[];
 }
 
 export interface ChatCompletionOptions {

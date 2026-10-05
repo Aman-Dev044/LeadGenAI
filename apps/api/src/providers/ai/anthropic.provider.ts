@@ -76,7 +76,19 @@ export class AnthropicProvider implements IAIProvider {
     const systemMessage = messages.find((m) => m.role === 'system');
     const nonSystemMessages = messages
       .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .map((m) => {
+        if (m.images?.length && m.role === 'user') {
+          const blocks: any[] = [];
+          for (const img of m.images) {
+            const match = /^data:([^;]+);base64,(.+)$/.exec(img);
+            if (match) blocks.push({ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } });
+            else blocks.push({ type: 'image', source: { type: 'url', url: img } });
+          }
+          blocks.push({ type: 'text', text: m.content || 'Look at the attached picture.' });
+          return { role: 'user' as const, content: blocks };
+        }
+        return { role: m.role as 'user' | 'assistant', content: m.content };
+      });
     return { systemMessage, nonSystemMessages };
   }
 

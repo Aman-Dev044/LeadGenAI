@@ -50,6 +50,7 @@ export class Message {
       fileUrl: String,
       fileSize: Number,
       mimeType: String,
+      storageKey: String,
     },
   })
   attachment: {
@@ -57,7 +58,20 @@ export class Message {
     fileUrl?: string;
     fileSize?: number;
     mimeType?: string;
+    /** Object key in our storage bucket (WhatsApp pictures are copied there). */
+    storageKey?: string;
   };
+
+  /** Provider message id (Twilio MessageSid for WhatsApp) - dedupes retried webhooks. */
+  @Prop({ type: String, index: true, sparse: true })
+  externalId: string;
+
+  /** queued / sent / delivered / read / failed (WhatsApp status callback). */
+  @Prop({ type: String })
+  deliveryStatus: string;
+
+  @Prop({ type: String })
+  deliveryError: string;
 
   @Prop({
     type: {

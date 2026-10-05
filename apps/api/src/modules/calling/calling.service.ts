@@ -63,6 +63,8 @@ export class CallingService implements OnModuleInit {
     @InjectModel('Tenant') private readonly tenantModel: Model<any>,
     @InjectModel('User') private readonly userModel: Model<any>,
     @InjectModel('FollowUpTask') private readonly taskModel: Model<any>,
+    @InjectModel('Conversation') private readonly conversationModel: Model<any>,
+    @InjectModel('Message') private readonly messageModel: Model<any>,
     private readonly configService: ConfigService,
     private readonly credentials: CredentialsService,
     private readonly notifications: NotificationService,
@@ -131,10 +133,10 @@ export class CallingService implements OnModuleInit {
 
   // ─── Event hooks ──────────────────────────────────────────────────
 
-  private async onLeadCreated({ tenantId, lead, autoCall }: LeadCreatedPayload) {
+  private async onLeadCreated({ tenantId, lead, autoCall, skipAutoCall }: LeadCreatedPayload) {
     try {
       const plain = this.plain(lead);
-      if (!plain?.phone) return;
+      if (!plain?.phone || skipAutoCall) return;
       const settings = await this.getSettings(tenantId);
       // A sheet import with "call everyone" ticked overrides the workspace default
       if (!autoCall) {
@@ -598,6 +600,32 @@ export class CallingService implements OnModuleInit {
         else if (a.status === 'scheduled' || a.status === 'confirmed') lines.push(`- Meeting booked for ${when}${a.meetingLink || a.conferenceLink ? ' (video link already sent)' : ''}. Confirm they are coming; if they cannot make it, move it with book_appointment.`);
         else if (a.status === 'completed') lines.push(`- Meeting held on ${when}.`);
         else if (a.status === 'cancelled') lines.push(`- Meeting on ${when} was cancelled.`);
+      }
+    } catch {
+      /* context only */
+    }
+
+    // What they said on WhatsApp (the AI chat) - so the call does not start from zero
+    try {
+      const conv: any = await this.conversationModel
+        .findOne({ tenantId, channel: 'whatsapp', leadId: String(lead._id), deletedAt: null })
+        .sort({ updatedAt: -1 })
+        .select('_id summary mode')
+        .lean();
+      if (conv) {
+        const msgs: any[] = await this.messageModel
+          .find({ conversationId: String(conv._id), type: { $in: ['text', 'image'] } })
+          .sort({ createdAt: -1 })
+          .limit(8)
+          .select('sender content createdAt')
+          .lean();
+        if (msgs.length) {
+          const chat = msgs
+            .reverse()
+            .map((m) => `${m.sender === 'visitor' ? 'Lead' : m.sender === 'agent' ? 'Our team' : 'Our WhatsApp AI'}: ${String(m.content || '').replace(/\s+/g, ' ').slice(0, 160)}`)
+            .join(' | ');
+          lines.push(`- Recent WhatsApp chat (${fmt(msgs[msgs.length - 1].createdAt)}): ${chat}`);
+        }
       }
     } catch {
       /* context only */
@@ -1123,6 +1151,17 @@ export class CallingService implements OnModuleInit {
       // The lead gets a WhatsApp: thank you, plus the meeting / callback details
       if (isAi && settings.postCallWhatsapp.enabled && analysis.outcome !== 'wrong_number') {
         actions.postCallWhatsapp = await this.sendPostCallWhatsApp(tenantId, lead, call, analysis, settings, actions);
+      }
+
+      // ...and the same by e-mail when we have an address: whatever was promised
+      // on the call, the meeting details, the callback time
+      if (
+        isAi &&
+        lead.email &&
+        analysis.outcome !== 'wrong_number' &&
+        (analysis.whatsappDetails || actions.appointmentId || actions.bookedInCall || actions.callbackInCall || ['meeting_booked', 'callback', 'interested'].includes(analysis.outcome))
+      ) {
+        actions.postCallEmail = await this.sendPostCallEmail(tenantId, lead, call, analysis, settings, actions);
       }
 
       // The owner hears what the AI learned, with the recording a click away
@@ -1828,6 +1867,97 @@ export class CallingService implements OnModuleInit {
     });
     await this.leadModel.updateOne({ _id: lead._id }, { $set: { lastContactedAt: new Date(), lastActivityAt: new Date() } });
     return true;
+  }
+
+  /**
+   * E-mail twin of the post-call WhatsApp: the details the agent promised on
+   * the call, the meeting (date, time, who, link) or the callback time, so the
+   * customer has it in their inbox as well. The calendar invite itself is sent
+   * separately by AppointmentService when the meeting is created.
+   */
+  private async sendPostCallEmail(
+    tenantId: string,
+    lead: any,
+    call: any,
+    analysis: CallAnalysis,
+    settings: CallingSettings & { timezone: string },
+    actions: Record<string, any>,
+  ): Promise<{ sent: boolean; kind: string } | undefined> {
+    try {
+      const tz = settings.timezone;
+      const dateOf = (d: Date) => d.toLocaleDateString('en-IN', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const timeOf = (d: Date) => d.toLocaleTimeString('en-IN', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+      const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const company = settings.assistant.companyName || 'our team';
+      const agent = settings.assistant.agentName;
+      const leadFirst = lead.firstName || this.leadName(lead);
+
+      let salespersonName = company;
+      let salespersonPhone = '';
+      let salespersonEmail = '';
+      if (lead.assignedTo) {
+        const owner: any = await this.userModel.findById(lead.assignedTo).select('firstName lastName phone email').lean();
+        if (owner) {
+          salespersonName = `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || salespersonName;
+          salespersonPhone = owner.phone || '';
+          salespersonEmail = owner.email || '';
+        }
+      }
+      if (!salespersonPhone) salespersonPhone = settings.transfer.destinations[0]?.number || settings.transfer.number || '';
+
+      const meetingAt: Date | undefined = actions.bookedInCall ? new Date(actions.bookedInCall) : analysis.meetingAt;
+      const callbackAt: Date | undefined = actions.callbackInCall ? new Date(actions.callbackInCall) : analysis.outcome === 'callback' ? analysis.callbackAt : undefined;
+      let meetingLink = '';
+      if (actions.appointmentId && /^[a-f\d]{24}$/i.test(String(actions.appointmentId))) {
+        const appt: any = await this.appointments.findById(tenantId, String(actions.appointmentId)).catch(() => null);
+        meetingLink = appt?.meetingLink || appt?.conferenceLink || '';
+      }
+
+      const kind = meetingAt && (actions.appointmentId || actions.bookedInCall || analysis.outcome === 'meeting_booked') ? 'appointment' : callbackAt ? 'callback' : 'details';
+      const title =
+        kind === 'appointment'
+          ? `Your meeting with ${company} is confirmed - ${dateOf(meetingAt!)}`
+          : kind === 'callback'
+            ? `We will call you back on ${dateOf(callbackAt!)} at ${timeOf(callbackAt!)}`
+            : `Details from your call with ${company}`;
+
+      const sections: string[] = [`Hi ${esc(leadFirst)},`, `Thank you for your time on the call today. This is ${esc(agent)} from ${esc(company)}.`];
+      if (analysis.whatsappDetails) {
+        sections.push(`<strong>As discussed on the call:</strong><br/>${esc(analysis.whatsappDetails).replace(/\n/g, '<br/>')}`);
+      }
+      if (kind === 'appointment' && meetingAt) {
+        sections.push(
+          `<strong>Your appointment</strong><br/>Date: ${esc(dateOf(meetingAt))}<br/>Time: ${esc(timeOf(meetingAt))}<br/>With: ${esc(salespersonName)}${salespersonPhone ? `<br/>Contact: ${esc(salespersonPhone)}` : ''}${salespersonEmail ? `<br/>E-mail: ${esc(salespersonEmail)}` : ''}${meetingLink ? `<br/>Join: <a href="${esc(meetingLink)}">${esc(meetingLink)}</a>` : ''}`,
+        );
+      } else if (kind === 'callback' && callbackAt) {
+        sections.push(`<strong>Callback</strong><br/>We will call you on ${esc(dateOf(callbackAt))} at ${esc(timeOf(callbackAt))}.`);
+      }
+      if (!analysis.whatsappDetails && kind === 'details') {
+        const next = this.leadFacingNextStep(analysis);
+        if (next) sections.push(esc(next));
+      }
+      if (analysis.requirement && kind !== 'details') sections.push(`<em>What we noted:</em> ${esc(analysis.requirement)}`);
+      sections.push(`Reply to this e-mail or message us on WhatsApp if anything comes up.<br/>- ${esc(agent)}, ${esc(company)}`);
+
+      const sent = await this.notifications.sendToLead(tenantId, 'email', lead, {
+        title,
+        body: sections.join('<br/><br/>'),
+        type: 'follow_up',
+        data: { leadId: String(lead._id), callId: String(call._id), postCall: kind },
+      });
+      if (!sent) return { sent: false, kind };
+      await this.activityModel.create({
+        tenantId,
+        leadId: String(lead._id),
+        type: 'email_sent',
+        description: `E-mail after call (${kind}): ${title}`,
+        newValue: { callId: String(call._id), kind },
+      });
+      return { sent: true, kind };
+    } catch (err: any) {
+      this.logger.warn(`Post-call e-mail failed for lead ${lead._id}: ${err?.message}`);
+      return { sent: false, kind: 'error' };
+    }
   }
 
   /**

@@ -47,6 +47,8 @@ export interface LeadCreatedPayload {
   conversationId?: string;
   /** Force an AI call for this lead even when auto-call is off (bulk sheet imports). */
   autoCall?: boolean;
+  /** Never auto-dial this lead (they are chatting with us on WhatsApp right now). */
+  skipAutoCall?: boolean;
 }
 
 export interface LeadUpdatedPayload {

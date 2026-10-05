@@ -34,6 +34,22 @@ export class Conversation {
   @Prop({ type: String })
   assignedUserId: string;
 
+  /** widget (website chat) or whatsapp (two-way WhatsApp with a lead). */
+  @Prop({ type: String, enum: ['widget', 'whatsapp'], default: 'widget', index: true })
+  channel: string;
+
+  @Prop()
+  lastInboundAt: Date;
+
+  @Prop()
+  lastBotReplyAt: Date;
+
+  @Prop({ type: String })
+  handoffReason: string;
+
+  @Prop()
+  handedOffAt: Date;
+
   @Prop({
     type: {
       url: String,
@@ -111,4 +127,5 @@ export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.index({ tenantId: 1, status: 1 });
 ConversationSchema.index({ tenantId: 1, agentId: 1 });
 ConversationSchema.index({ tenantId: 1, leadId: 1 });
+ConversationSchema.index({ tenantId: 1, channel: 1, leadId: 1, status: 1 });
 ConversationSchema.index({ tenantId: 1, createdAt: -1 });

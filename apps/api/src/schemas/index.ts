@@ -21,6 +21,8 @@ export * from './page-view.schema';
 export * from './support-ticket.schema';
 export * from './appointment.schema';
 export * from './calendar-connection.schema';
+export * from './whatsapp-media.schema';
+export * from './booking-request.schema';
 export * from './follow-up-workflow.schema';
 export * from './follow-up-log.schema';
 export * from './subscription.schema';
