@@ -21,6 +21,10 @@ import type { CallingReadiness, CallingSettings } from '@/types';
 import { CallPlaybooksEditor } from '@/components/settings/call-playbooks';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DEFAULT_REMINDERS: CallingSettings['appointmentReminders'] = {
+  enabled: true, dayBefore: true, hourBefore: true, minutesBefore: 60, remindSalesperson: true,
+  noShowRescue: { enabled: true, askAfterMinutes: 20, autoMarkAfterMinutes: 90, whatsapp: true, aiCall: true, callDelayMinutes: 30 },
+};
 const VOICES = [
   { value: 'Neha', label: 'Neha — Indian English / Hinglish (female) ★ recommended' },
   { value: 'Naina', label: 'Naina — Indian English / Hinglish (female)' },
@@ -377,9 +381,14 @@ export function CallingSettingsTab() {
       {/* Meeting reminders + no-show rescue */}
       <Section icon={BellRing} title="Meeting reminders & no-show rescue" description="Booked meetings are not forgotten: the lead is reminded on WhatsApp (and e-mail), the salesperson gets a nudge, and when the lead does not turn up the AI calls to fix a new time. Meetings land in each salesperson's Google Calendar once they connect it on the Appointments page." footer={<Button onClick={saveAll} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>}>
         {(() => {
-          const r = form.appointmentReminders;
-          const setR = (patch: Partial<typeof r>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...f.appointmentReminders, ...patch } } : f));
-          const setNs = (patch: Partial<typeof r.noShowRescue>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...f.appointmentReminders, noShowRescue: { ...f.appointmentReminders.noShowRescue, ...patch } } } : f));
+          // Older API builds answer without this block - fall back to the defaults so the page never crashes
+          const r: CallingSettings['appointmentReminders'] = {
+            ...DEFAULT_REMINDERS,
+            ...(form.appointmentReminders || {}),
+            noShowRescue: { ...DEFAULT_REMINDERS.noShowRescue, ...(form.appointmentReminders?.noShowRescue || {}) },
+          };
+          const setR = (patch: Partial<typeof r>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...r, ...patch } } : f));
+          const setNs = (patch: Partial<typeof r.noShowRescue>) => setForm((f) => (f ? { ...f, appointmentReminders: { ...r, noShowRescue: { ...r.noShowRescue, ...patch } } } : f));
           return (
             <>
               <Row label="Reminders on" hint={readiness && !readiness.whatsapp.configured ? 'Needs a Twilio WhatsApp sender under API Credentials.' : 'Sent only for meetings that are still scheduled.'}>
