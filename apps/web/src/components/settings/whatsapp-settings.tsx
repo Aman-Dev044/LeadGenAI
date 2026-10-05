@@ -165,10 +165,22 @@ export function WhatsAppSettingsTab() {
         <Row label="AI replies on WhatsApp" hint="Off = messages are only logged and your team is notified.">
           <Switch checked={form.enabled} onCheckedChange={(v) => set('enabled', v)} />
         </Row>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label>Agent name <span className="text-xs text-muted-foreground">(empty = calling agent)</span></Label>
             <Input value={form.agentName} onChange={(e) => set('agentName', e.target.value)} placeholder="Priya" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Agent is a</Label>
+            <Select value={form.agentGender || 'auto'} onValueChange={(v) => set('agentGender', v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Same as the calling agent</SelectItem>
+                <SelectItem value="female">Woman</SelectItem>
+                <SelectItem value="male">Man</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Keeps Hindi grammar right (&ldquo;karti hoon&rdquo; vs &ldquo;karta hoon&rdquo;).</p>
           </div>
           <div className="space-y-1.5">
             <Label>Language</Label>

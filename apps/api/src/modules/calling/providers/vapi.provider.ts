@@ -5,7 +5,7 @@ import {
   OutboundCallResult,
   VoiceCallEvent,
 } from './voice-provider.interface';
-import { renderTemplate } from '../calling-settings';
+import { genderPromptRule, renderTemplate, resolveAgentGender } from '../calling-settings';
 import { speakable } from '../speech-text';
 
 /**
@@ -399,6 +399,7 @@ export class VapiProvider implements IVoiceProvider {
 
   private systemPrompt(req: OutboundCallRequest): string {
     const a = req.assistant;
+    const gender = resolveAgentGender(a);
     const language =
       a.language === 'hi'
         ? 'Speak in natural Hindi.'
@@ -410,7 +411,8 @@ export class VapiProvider implements IVoiceProvider {
       : '1. What are they looking for?\n2. When do they want to start?';
 
     return [
-      `You are ${a.agentName}, a warm and professional sales representative at ${a.companyName || 'our company'}.`,
+      `You are ${a.agentName}, a warm and professional ${gender === 'female' ? 'female' : 'male'} sales representative at ${a.companyName || 'our company'}.`,
+      genderPromptRule(gender, a.language),
       'You are on an outbound phone call with a lead. Sound like a real person who remembers them, not a script.',
       '',
       `THIS CALL'S GOAL: ${this.callGoal(req)}`,
@@ -425,6 +427,7 @@ export class VapiProvider implements IVoiceProvider {
       '',
       'HOW TO SOUND LIKE A PERSON (this matters more than anything else):',
       `- ${language}`,
+      `- ${genderPromptRule(gender, a.language)}`,
       '- Talk the way a friendly, experienced salesperson talks on the phone - relaxed, warm, a little informal. Never like a recorded menu or a form being filled.',
       '- Short sentences. One question at a time. Then STOP and listen. Silence is fine.',
       '- The OPENING is slow and clear: say your name, pause, the company, pause, then one short question - and wait. After the greeting, talk at a normal, natural Indian conversational pace (the way people talk in an Indian office) - not slow, not rushed.',

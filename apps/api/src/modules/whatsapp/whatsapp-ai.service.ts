@@ -13,7 +13,7 @@ import { AppointmentService } from '../appointment/appointment.service';
 import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 import { NotificationService } from '../notification/notification.service';
 import { CallingService } from '../calling/calling.service';
-import { resolveCallingSettings } from '../calling/calling-settings';
+import { genderPromptRule, resolveAgentGender, resolveCallingSettings } from '../calling/calling-settings';
 import { dateToWords } from '../calling/speech-text';
 import { TwilioWhatsAppSender } from './twilio-whatsapp.sender';
 import { BookingForm, WhatsAppAiSettings, fillTemplate, resolveWhatsAppSettings } from './whatsapp-settings';
@@ -111,7 +111,9 @@ export class WhatsAppAiService implements OnModuleInit {
 
   // ─── Settings ─────────────────────────────────────────────────────
 
-  async getSettings(tenantId: string): Promise<WhatsAppAiSettings & { companyName: string; timezone: string; callingAgentName: string }> {
+  async getSettings(
+    tenantId: string,
+  ): Promise<WhatsAppAiSettings & { companyName: string; timezone: string; callingAgentName: string; gender: 'female' | 'male' }> {
     const tenant: any = await this.tenantModel.findById(tenantId).select('whatsappSettings callingSettings settings name').lean();
     const s = resolveWhatsAppSettings(tenant?.whatsappSettings);
     const calling = resolveCallingSettings(tenant?.callingSettings);
@@ -120,6 +122,8 @@ export class WhatsAppAiService implements OnModuleInit {
       companyName: calling.assistant.companyName || tenant?.name || 'our team',
       timezone: tenant?.settings?.timezone || 'Asia/Kolkata',
       callingAgentName: calling.assistant.agentName,
+      // 'auto' follows the calling agent, which in turn follows its voice
+      gender: s.agentGender === 'female' || s.agentGender === 'male' ? s.agentGender : resolveAgentGender(calling.assistant),
     };
   }
 
@@ -691,7 +695,7 @@ export class WhatsAppAiService implements OnModuleInit {
   }
 
   private systemPrompt(
-    s: WhatsAppAiSettings & { companyName: string; timezone: string; callingAgentName: string },
+    s: WhatsAppAiSettings & { companyName: string; timezone: string; callingAgentName: string; gender: 'female' | 'male' },
     lead: any,
     context: string,
     knowledge: string,
@@ -710,7 +714,8 @@ export class WhatsAppAiService implements OnModuleInit {
             ? 'Reply in natural Hinglish (Hindi written in Latin letters mixed with English).'
             : 'Reply in the language the customer writes in (English, Hindi or Hinglish) - mirror them.';
     const parts: string[] = [
-      `You are ${agent}, the WhatsApp assistant of ${s.companyName}. You are chatting with a customer (lead) on WhatsApp. Be warm, concise and human - short messages (1-4 lines), no corporate jargon, at most one question per message, emojis sparingly. ${language}`,
+      `You are ${agent}, the ${s.gender === 'female' ? 'female' : 'male'} WhatsApp assistant of ${s.companyName}. You are chatting with a customer (lead) on WhatsApp. Be warm, concise and human - short messages (1-4 lines), no corporate jargon, at most one question per message, emojis sparingly. ${language}`,
+      genderPromptRule(s.gender, s.language),
       `Current date/time: ${now} (${s.timezone}, year ${new Date().getFullYear()}). Resolve "tomorrow", "kal", "next Monday" against this.`,
       `What we offer: ${s.instructions || 'See the knowledge base and context below.'}`,
       `CUSTOMER CONTEXT (from calls, meetings and our CRM - use it, do not ask again for what you already know):\n${context}`,

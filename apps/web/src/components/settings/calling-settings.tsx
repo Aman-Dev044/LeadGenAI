@@ -145,6 +145,18 @@ export function CallingSettingsTab() {
             <Input value={form.assistant.companyName} onChange={(e) => setA('companyName', e.target.value)} placeholder="Cyberbells" />
           </div>
           <div className="space-y-1.5">
+            <Label>Agent is a</Label>
+            <Select value={form.assistant.agentGender || 'auto'} onValueChange={(v) => setA('agentGender' as any, v as any)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Match the voice (recommended)</SelectItem>
+                <SelectItem value="female">Woman</SelectItem>
+                <SelectItem value="male">Man</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Hindi changes the verb with the speaker&apos;s gender: a female voice must say &ldquo;main karti hoon&rdquo;, not &ldquo;karta hoon&rdquo;.</p>
+          </div>
+          <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={form.assistant.language} onValueChange={(v) => setA('language', v as any)}>
               <SelectTrigger><SelectValue /></SelectTrigger>

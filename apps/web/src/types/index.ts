@@ -171,6 +171,8 @@ export interface BookingForm {
 export interface WhatsAppAiSettings {
   enabled: boolean;
   agentName: string;
+  /** auto (follow the calling voice) | female | male. */
+  agentGender: string;
   language: string;
   instructions: string;
   useKnowledgeBase: boolean;
@@ -520,6 +522,8 @@ export interface CallingSettings {
   };
   assistant: {
     agentName: string;
+    /** auto | female | male - Hindi verb gender ("karti hoon" vs "karta hoon"). */
+    agentGender: string;
     companyName: string;
     offerSummary: string;
     extraInstructions: string;

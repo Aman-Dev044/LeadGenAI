@@ -41,6 +41,8 @@ export interface OutboundCallRequest {
   /** What the agent should sound like and ask. */
   assistant: {
     agentName: string;
+    /** auto | female | male - drives Hindi verb gender in the prompt. */
+    agentGender?: string;
     companyName: string;
     offerSummary: string;
     extraInstructions: string;

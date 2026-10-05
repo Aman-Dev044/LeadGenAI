@@ -37,6 +37,8 @@ export interface WhatsAppAiSettings {
   enabled: boolean;
   /** Empty = the calling agent's name. */
   agentName: string;
+  /** auto (follow the calling agent / voice) | female | male - drives Hindi verb gender. */
+  agentGender: string;
   /** auto | en | hi | hi-en */
   language: string;
   /** Tone, do's and don'ts, what to push for. */
@@ -63,6 +65,7 @@ export interface WhatsAppAiSettings {
 export const DEFAULT_WHATSAPP_SETTINGS: WhatsAppAiSettings = {
   enabled: true,
   agentName: '',
+  agentGender: 'auto',
   language: 'auto',
   instructions: '',
   useKnowledgeBase: true,
@@ -133,6 +136,7 @@ export function resolveWhatsAppSettings(stored: any): WhatsAppAiSettings {
   return {
     enabled: bool(s.enabled, d.enabled),
     agentName: str(s.agentName, d.agentName),
+    agentGender: ['auto', 'female', 'male'].includes(s.agentGender) ? s.agentGender : d.agentGender,
     language: ['auto', 'en', 'hi', 'hi-en'].includes(s.language) ? s.language : d.language,
     instructions: str(s.instructions, d.instructions),
     useKnowledgeBase: bool(s.useKnowledgeBase, d.useKnowledgeBase),

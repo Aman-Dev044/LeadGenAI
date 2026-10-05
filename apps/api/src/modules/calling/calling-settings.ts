@@ -14,6 +14,12 @@ export interface CallingHours {
 export interface AssistantSettings {
   /** How the agent introduces itself. */
   agentName: string;
+  /**
+   * auto | female | male. Hindi conjugates verbs by the speaker's gender, so a
+   * female voice must say "main karti hoon", not "main karta hoon". `auto`
+   * takes it from the chosen voice.
+   */
+  agentGender: string;
   companyName: string;
   /** One paragraph: what you sell and to whom. Goes into the system prompt. */
   offerSummary: string;
@@ -232,6 +238,7 @@ export const DEFAULT_CALLING_SETTINGS: CallingSettings = {
   },
   assistant: {
     agentName: 'Priya',
+    agentGender: 'auto',
     companyName: '',
     offerSummary: '',
     extraInstructions: '',
@@ -365,6 +372,7 @@ export function resolveCallingSettings(stored: any): CallingSettings {
     },
     assistant: {
       agentName: str(a.agentName, d.assistant.agentName),
+      agentGender: ['auto', 'female', 'male'].includes(a.agentGender) ? a.agentGender : d.assistant.agentGender,
       companyName: str(a.companyName, d.assistant.companyName),
       offerSummary: str(a.offerSummary, d.assistant.offerSummary),
       extraInstructions: str(a.extraInstructions, d.assistant.extraInstructions),
@@ -479,4 +487,39 @@ export function nextCallingSlot(now: Date, hours: CallingHours, timeZone: string
     if (start.getTime() > now.getTime()) return start;
   }
   return now;
+}
+
+/**
+ * Which of the built-in voices is a woman's. Used when `agentGender` is `auto`,
+ * so the agent's Hindi grammar matches the voice the customer hears.
+ */
+export const VOICE_GENDERS: Record<string, 'female' | 'male'> = {
+  Neha: 'female',
+  Naina: 'female',
+  Paige: 'female',
+  Lily: 'female',
+  Sagar: 'male',
+  Rohan: 'male',
+  Elliot: 'male',
+  Harry: 'male',
+};
+
+/** The agent's gender for grammar: the explicit setting, else the voice, else female. */
+export function resolveAgentGender(assistant: { agentGender?: string; voiceId?: string }): 'female' | 'male' {
+  if (assistant?.agentGender === 'female' || assistant?.agentGender === 'male') return assistant.agentGender;
+  return VOICE_GENDERS[assistant?.voiceId || ''] || 'female';
+}
+
+/**
+ * The grammar rule for the system prompt. Hindi and Hinglish conjugate verbs
+ * and adjectives by the speaker's gender; English does not, but naming it still
+ * keeps self-references consistent.
+ */
+export function genderPromptRule(gender: 'female' | 'male', language: string): string {
+  if (language === 'hi' || language === 'hi-en' || language === 'auto') {
+    return gender === 'female'
+      ? 'YOU ARE A WOMAN. In Hindi/Hinglish every verb and adjective about yourself must be FEMININE: "main karti hoon", "main bol rahi hoon", "main bhej deti hoon", "main bhej dungi", "maine socha tha", "main samajh rahi hoon", "main aapki madad kar sakti hoon". NEVER masculine forms (karta hoon, kar raha hoon, karunga, sakta hoon) - this is the most common mistake, check every sentence before you speak.'
+      : 'YOU ARE A MAN. In Hindi/Hinglish every verb and adjective about yourself must be MASCULINE: "main karta hoon", "main bol raha hoon", "main bhej dunga", "main aapki madad kar sakta hoon". Never feminine forms (karti hoon, kar rahi hoon, karungi).';
+  }
+  return gender === 'female' ? 'You are a woman; refer to yourself accordingly.' : 'You are a man; refer to yourself accordingly.';
 }
