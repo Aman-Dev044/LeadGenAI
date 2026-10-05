@@ -892,7 +892,13 @@ export class WhatsAppAiService implements OnModuleInit {
           let appt: any;
           let rescheduled = false;
           if (existing) {
-            appt = await this.appointments.reschedule(tenantId, String(existing._id), { startTime: at.toISOString(), endTime: new Date(at.getTime() + duration * 60_000).toISOString(), reason: 'New time agreed on WhatsApp' } as any);
+            appt = await this.appointments.reschedule(tenantId, String(existing._id), {
+              startTime: at.toISOString(),
+              endTime: new Date(at.getTime() + duration * 60_000).toISOString(),
+              reason: 'New time agreed on WhatsApp',
+              title: `Meeting with ${this.leadName(lead)}`,
+              ...(args.notes ? { description: String(args.notes).slice(0, 1000) } : {}),
+            } as any);
             rescheduled = true;
           } else {
             appt = await this.appointments.create(tenantId, {

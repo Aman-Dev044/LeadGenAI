@@ -119,11 +119,25 @@ export class AppointmentReminderService implements OnModuleInit, OnModuleDestroy
     };
   }
 
+  /**
+   * When this slot was agreed - the original booking, or the last time it was
+   * moved. A meeting booked (or rescheduled) minutes ago must not get a
+   * "reminder about your meeting tomorrow" straight after the confirmation.
+   */
+  private bookedAt(appt: any): number {
+    const times = [new Date(appt.createdAt || 0).getTime()];
+    for (const h of appt.rescheduleHistory || []) {
+      const t = new Date(h?.at || 0).getTime();
+      if (Number.isFinite(t)) times.push(t);
+    }
+    return Math.max(...times.filter(Number.isFinite), 0);
+  }
+
   private async processOne(appt: any, ctx: TenantCtx, now: number): Promise<number> {
     const s = ctx.settings;
     const start = new Date(appt.startTime).getTime();
     const until = start - now;
-    const age = now - new Date(appt.createdAt || now).getTime();
+    const age = now - this.bookedAt(appt);
     const r = appt.reminders || {};
     let n = 0;
 

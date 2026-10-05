@@ -1227,6 +1227,8 @@ export class CallingService implements OnModuleInit {
         startTime: at.toISOString(),
         endTime: end.toISOString(),
         reason: existing.status === 'no_show' ? 'New time agreed with the lead on an AI call after a missed meeting' : 'New time agreed with the lead on an AI call',
+        title: `Meeting with ${this.leadName(lead)}`,
+        ...(description ? { description } : {}),
       } as any);
       return { id: String(moved._id), rescheduled: true };
     }

@@ -299,6 +299,10 @@ export class AppointmentService {
       throw new BadRequestException('A completed appointment cannot be rescheduled');
     }
 
+    // A meeting moved to a new topic keeps one row: refresh what it is about
+    if (dto.title && dto.title.trim()) appointment.title = dto.title.trim().slice(0, 200);
+    if (dto.description && dto.description.trim()) appointment.description = dto.description.trim().slice(0, 1000);
+
     const start = new Date(dto.startTime);
     const end = new Date(dto.endTime);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) throw new BadRequestException('Invalid date/time');
