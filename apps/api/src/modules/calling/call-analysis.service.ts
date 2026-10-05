@@ -59,6 +59,24 @@ const parseDate = (v: any): Date | undefined => {
   return Number.isNaN(d.getTime()) ? undefined : d;
 };
 
+/**
+ * A meeting or callback agreed on a call is always in the future. Language
+ * models without a calendar like to put "tomorrow 6 PM" in a past year
+ * (2024-10-27 for a call on 2026-10-05): move such dates forward to the first
+ * year in which they are still ahead of us, keeping month/day/time.
+ */
+const futureDate = (d: Date | undefined): Date | undefined => {
+  if (!d) return d;
+  const now = Date.now();
+  const grace = 6 * 3_600_000; // a slot that just passed is still "today"
+  if (d.getTime() >= now - grace) return d;
+  const fixed = new Date(d.getTime());
+  const thisYear = new Date().getFullYear();
+  fixed.setFullYear(thisYear);
+  if (fixed.getTime() < now - grace) fixed.setFullYear(thisYear + 1);
+  return fixed;
+};
+
 const strArr = (v: any) =>
   Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).slice(0, 8) : [];
 
@@ -144,7 +162,7 @@ export class CallAnalysisService {
 - sentiment: positive | neutral | negative
 - language: language the lead spoke (en, hi, hinglish, ...)
 
-Current time is ${now}. Relative times ("kal", "tomorrow 11 baje", "next week") must be converted to absolute ISO datetimes in Asia/Kolkata unless another zone is obvious.
+Current time is ${now} (${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full', timeStyle: 'short' })} IST, year ${new Date().getFullYear()}). Relative times ("kal", "tomorrow 11 baje", "next week") must be converted to absolute ISO datetimes in Asia/Kolkata unless another zone is obvious - always in the future relative to the current time, never a past year.
 ${
   input.outcomeHint
     ? `The salesperson marked the outcome as "${input.outcomeHint}" - trust that unless the notes clearly contradict it.`
@@ -199,8 +217,8 @@ Output JSON only. No markdown.`,
       ? 0
       : Math.round(clamp(raw.interestLevel, 0, 100, outcome === 'interested' ? 60 : 20));
 
-    const callbackAt = parseDate(raw.callbackAt);
-    const meetingAt = parseDate(raw.meetingAt);
+    const callbackAt = futureDate(parseDate(raw.callbackAt));
+    const meetingAt = futureDate(parseDate(raw.meetingAt));
 
     const na = raw.nextAction && typeof raw.nextAction === 'object' ? raw.nextAction : {};
     let actionType: string | undefined = ACTIONS.has(na.type)

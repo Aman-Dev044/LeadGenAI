@@ -341,7 +341,9 @@ export class VapiProvider implements IVoiceProvider {
               role: 'system',
               content:
                 'You will be given a sales call transcript. Extract the fields exactly as described. ' +
-                'Dates must be ISO 8601 with timezone. If the person never spoke, outcome is no_answer. ' +
+                `The call took place on ${new Date().toLocaleString('en-IN', { timeZone: req.timezone, dateStyle: 'full', timeStyle: 'short' })} (${req.timezone}, current year ${new Date().getFullYear()}). ` +
+                'Resolve every relative date ("tomorrow", "kal", "next Monday", "6 PM") against THAT date - the result must be in the future, never a past year. ' +
+                'Dates must be ISO 8601 with timezone offset. If the person never spoke, outcome is no_answer. ' +
                 'Only output JSON.\n\nJSON Schema:\n{{schema}}',
             },
             { role: 'user', content: 'Transcript:\n\n{{transcript}}' },
