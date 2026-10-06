@@ -22,6 +22,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { AccountDeletionCard } from '@/components/settings/account-deletion-card';
 import { CallingSettingsTab } from '@/components/settings/calling-settings';
 import { WhatsAppSettingsTab } from '@/components/settings/whatsapp-settings';
+import { OrgEmailSettings } from '@/components/settings/org-email-settings';
 import { useSearchParams } from 'next/navigation';
 import { PhoneCall, MessageCircle } from 'lucide-react';
 
@@ -759,6 +760,13 @@ export default function SettingsPage() {
             </CardContent>
             <SaveFooter onClick={handleSaveOrg} pending={pending} label="Save Organization" />
           </Card>
+
+          {/* The workspace sends its mail from its own address */}
+          {user?.role === 'ADMIN' && (
+            <div className="mt-6">
+              <OrgEmailSettings />
+            </div>
+          )}
         </TabsContent>
 
         {/* Branding Tab */}

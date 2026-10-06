@@ -106,6 +106,18 @@ export class CredentialsService {
    * back only as a mask (`••••••••3f21`); their plaintext never leaves the
    * server, so it cannot be read from the network tab or the page source.
    */
+  /**
+   * Whether this workspace saved its OWN value for a field (as opposed to
+   * falling back to the platform's environment variable). Lets callers tell a
+   * tenant-configured integration from the shared default.
+   */
+  async hasOwnValue(tenantId: string, providerId: string, fieldKey: string): Promise<boolean> {
+    if (!tenantId || tenantId === 'all') return false;
+    const doc: any = await this.model.findOne({ tenantId, provider: providerId }).select('values').lean();
+    const raw = doc?.values?.[fieldKey];
+    return raw !== undefined && raw !== null && raw !== '';
+  }
+
   async describeAll(tenantId: string) {
     const docs =
       tenantId && tenantId !== 'all'

@@ -187,6 +187,7 @@ export class PlanExpiryReminderService implements OnModuleInit, OnModuleDestroy 
       if (!admin.email) continue;
       try {
         await this.emailProvider.sendEmail({
+          tenantId: String(c.tenant._id),
           to: admin.email,
           subject: `${title} - action needed for ${c.tenant.name}`,
           text: `Hi ${admin.firstName || ''},\n\n${body}\n\nRenew here: ${billingUrl}\n\n${EMAIL_FOOTER_TEXT}`,

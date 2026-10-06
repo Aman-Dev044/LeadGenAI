@@ -6,6 +6,12 @@ export interface EmailOptions {
   from?: string;
   replyTo?: string;
   attachments?: EmailAttachment[];
+  /**
+   * Which workspace this e-mail belongs to. When that workspace saved its own
+   * SMTP server, the message is sent from their address instead of the
+   * platform's - so always pass it for anything a customer receives.
+   */
+  tenantId?: string;
 }
 
 export interface EmailAttachment {

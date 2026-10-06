@@ -13,6 +13,8 @@ export class EmailChannel {
       to: recipientEmail,
       subject: notification.title,
       html: this.buildHtml(notification),
+      // Sent from the workspace's own address when they configured SMTP
+      tenantId: notification?.tenantId,
     });
     return result.success;
   }

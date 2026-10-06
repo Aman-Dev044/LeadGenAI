@@ -59,6 +59,7 @@ export class AppointmentEmailService {
       to,
       subject,
       html,
+      tenantId,
       replyTo: ctx.organizerEmail || ctx.contactEmail,
       attachments: [
         {
@@ -76,6 +77,7 @@ export class AppointmentEmailService {
           to: ctx.organizerEmail!,
           subject: `[Copy] ${subject}`,
           html,
+          tenantId,
           attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; charset=utf-8' }],
         })
         .catch(() => undefined);

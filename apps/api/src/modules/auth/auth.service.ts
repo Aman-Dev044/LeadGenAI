@@ -146,6 +146,7 @@ export class AuthService {
     let delivered = false;
     try {
       const result = await this.emailProvider.sendEmail({
+        tenantId: String(tenant._id),
         to: user.email,
         subject: `${code} is your verification code`,
         text: `Hi ${user.firstName || ''},\n\nYour verification code for ${tenant.name} is: ${code}\n\nIt expires in 5 minutes. If you didn't sign up, ignore this email.`,
@@ -276,6 +277,7 @@ export class AuthService {
       ? `<p>Your free trial is active for the next <strong>${trialDays} days</strong>. We'll remind you before it ends.</p>`
       : '';
     await this.emailProvider.sendEmail({
+      tenantId: String(tenant._id),
       to: user.email,
       subject: `Welcome to LeadBells, ${user.firstName || 'there'}!`,
       text: `Hi ${user.firstName || ''},
@@ -626,6 +628,7 @@ ${EMAIL_FOOTER_TEXT}`,
 
     try {
       await this.emailProvider.sendEmail({
+        tenantId: String(tenant._id),
         to: user.email,
         subject: 'Password Reset Request',
         html: `

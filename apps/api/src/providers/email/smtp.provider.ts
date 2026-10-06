@@ -75,6 +75,12 @@ export class SmtpProvider implements IEmailProvider {
       return { transporter: this.transporter, defaultFrom: this.defaultFrom };
     }
 
+    // Only a server the workspace itself saved counts. `resolve` also returns the
+    // platform's env fallbacks, and building a transport out of those would drop
+    // the platform credentials (different env names) and send unauthenticated.
+    const ownHost = await this.credentials.hasOwnValue(tenantId, 'smtp', 'host');
+    if (!ownHost) return { transporter: this.transporter, defaultFrom: this.defaultFrom };
+
     const creds = await this.credentials.resolve(tenantId, 'smtp');
     if (!creds.host) return { transporter: this.transporter, defaultFrom: this.defaultFrom };
 
@@ -112,14 +118,16 @@ export class SmtpProvider implements IEmailProvider {
   }
 
   async sendEmail(options: EmailOptions): Promise<EmailResult> {
-    if (!this.transporter) {
+    // The workspace's own SMTP server when it saved one, the platform's otherwise
+    const { transporter, defaultFrom } = await this.transportFor(options.tenantId);
+    if (!transporter) {
       this.logger.warn(`Email to ${options.to} skipped - SMTP not configured`);
       return { messageId: '', success: false };
     }
 
     try {
-      const info = await this.transporter.sendMail({
-        from: options.from || this.defaultFrom,
+      const info = await transporter.sendMail({
+        from: options.from || defaultFrom,
         to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
         subject: options.subject,
         html: options.html,
