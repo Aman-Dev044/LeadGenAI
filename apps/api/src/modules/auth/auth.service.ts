@@ -725,6 +725,7 @@ ${EMAIL_FOOTER_TEXT}`,
     let delivered = false;
     try {
       const result = await this.emailProvider.sendEmail({
+        tenantId: String(user.tenantId),
         to: user.email,
         subject: `${code} is your email change verification code`,
         text: `Hi ${user.firstName || ''},\n\nYour 6-character verification code to change your email is: ${code}\n\nThis code is valid for 2 minutes only. If you did not request this, please secure your account immediately.`,
@@ -820,6 +821,7 @@ ${EMAIL_FOOTER_TEXT}`,
     let delivered = false;
     try {
       const result = await this.emailProvider.sendEmail({
+        tenantId: String(user.tenantId),
         to: targetEmail,
         subject: `${code} is your new email verification code`,
         text: `Hi ${user.firstName || ''},\n\nYour 6-character verification code for your new email (${targetEmail}) is: ${code}\n\nThis code is valid for 2 minutes only.`,

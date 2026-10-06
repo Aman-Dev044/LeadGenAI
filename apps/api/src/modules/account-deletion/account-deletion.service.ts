@@ -303,6 +303,7 @@ export class AccountDeletionService {
     `;
 
     await this.emailProvider.sendEmail({
+      tenantId: String(currentAdmin.tenantId),
       to: currentAdmin.email,
       subject,
       html,
@@ -422,6 +423,7 @@ export class AccountDeletionService {
     // 1. Email to former admin
     try {
       await this.emailProvider.sendEmail({
+        tenantId: String(tenant._id),
         to: currentAdmin.email,
         subject: `Ownership of ${orgName} Successfully Transferred`,
         html: `
@@ -446,6 +448,7 @@ export class AccountDeletionService {
     // 2. Email to new owner
     try {
       await this.emailProvider.sendEmail({
+        tenantId: String(tenant._id),
         to: targetEmail,
         subject: `Welcome to ${orgName} - You are now Organization Owner`,
         html: `
@@ -673,6 +676,7 @@ export class AccountDeletionService {
       `;
 
       await this.emailProvider.sendEmail({
+        tenantId: String(request.tenantId),
         to: request.userEmail,
         subject,
         html,
@@ -724,6 +728,7 @@ export class AccountDeletionService {
     // Send notification email to requester explaining why request was rejected
     try {
       await this.emailProvider.sendEmail({
+        tenantId: String(request.tenantId),
         to: request.userEmail,
         subject: `Update on your Account Deletion Request - LeadGen AI`,
         html: `
@@ -884,6 +889,7 @@ export class AccountDeletionService {
       `;
 
       await this.emailProvider.sendEmail({
+        tenantId: String(request.tenantId),
         to: request.userEmail,
         subject: `Account Deletion Approved - ${request.tenantName}`,
         html,
@@ -937,6 +943,7 @@ export class AccountDeletionService {
     // Send email to staff member
     try {
       await this.emailProvider.sendEmail({
+        tenantId: String(request.tenantId),
         to: request.userEmail,
         subject: `Update on your Account Deletion Request - ${request.tenantName}`,
         html: `
