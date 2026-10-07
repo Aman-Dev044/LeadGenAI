@@ -324,62 +324,105 @@ export type Plan = {
   tagline: string;
   monthly: number;
   yearly: number;
+  /** The headline number on every card. */
+  aiCalls: number;
   features: string[];
   cta: string;
   variant: 'outline' | 'gradient';
   popular: boolean;
 };
 
+/** Mirrors the catalogue the API serves, so the price a visitor sees is the price they pay. */
 export const PLANS: Plan[] = [
   {
     name: 'Basic',
-    tagline: 'The AI makes the first call',
+    tagline: 'For a solo owner who wants the AI to make the first call.',
     monthly: 444,
     yearly: 4440,
-    features: ['5 AI calls a month', 'Recording, transcript and AI summary', 'Personalised WhatsApp after every call', '500 leads · 2 users', 'Pipeline, tasks and meeting reminders'],
-    cta: 'Start 14-day free trial',
+    aiCalls: 5,
+    features: [
+      '5 AI calls a month',
+      'Every call recorded, transcribed and summarised',
+      'Personalised WhatsApp after each call',
+      '500 leads · 2 team members',
+      'Pipeline, follow-up tasks and appointment reminders',
+      'Excel / CSV import and the website chat widget',
+    ],
+    cta: 'Choose Basic',
     variant: 'outline',
     popular: false,
   },
   {
     name: 'Standard',
-    tagline: 'For a team that lives on WhatsApp',
+    tagline: 'For a small sales team that lives on WhatsApp.',
     monthly: 700,
     yearly: 7000,
-    features: ['15 AI calls a month', 'Two-way WhatsApp AI that replies for you', 'Google Calendar sync and no-show rescue', '2,000 leads · 5 users · 1,000 WhatsApp messages', 'Call playbooks per lead type'],
-    cta: 'Start 14-day free trial',
+    aiCalls: 15,
+    features: [
+      '15 AI calls a month',
+      'Two-way WhatsApp AI - it answers your customers, not just messages them',
+      'Google Calendar sync and no-show rescue',
+      '2,000 leads · 5 team members · 1,000 WhatsApp messages',
+      'Call playbooks for different kinds of leads',
+    ],
+    cta: 'Choose Standard',
     variant: 'gradient',
     popular: true,
   },
   {
     name: 'Premium',
-    tagline: 'Never miss an enquiry',
+    tagline: 'For a team that must not miss a single enquiry.',
     monthly: 1500,
     yearly: 15000,
-    features: ['40 AI calls a month', 'Inbound AI receptionist, 24x7', 'Live transfer to a salesperson', 'Bookings and payment links on WhatsApp', '10,000 leads · 15 users · lead scoring and analytics'],
-    cta: 'Start 14-day free trial',
+    aiCalls: 40,
+    features: [
+      '40 AI calls a month',
+      'Inbound AI receptionist - the AI answers your number 24x7',
+      'Live transfer to a salesperson while the caller is on the line',
+      'Bookings and payment links on WhatsApp',
+      '10,000 leads · 15 team members · 5,000 WhatsApp messages',
+      'Lead scoring, analytics, API and webhooks',
+    ],
+    cta: 'Choose Premium',
     variant: 'outline',
     popular: false,
   },
   {
     name: 'Pro',
-    tagline: 'For agencies and multi-branch teams',
+    tagline: 'For an agency or a multi-branch business.',
     monthly: 2400,
     yearly: 24000,
-    features: ['75 AI calls a month', 'Unlimited leads and chat agents', 'Leads Scrap AI finds new prospects', 'Send e-mail from your own address', 'Your logo and name everywhere · priority support'],
-    cta: 'Start 14-day free trial',
+    aiCalls: 75,
+    features: [
+      '75 AI calls a month',
+      'Unlimited leads and unlimited chat agents',
+      'Leads Scrap AI - find prospects, not just answer them',
+      'Send every e-mail from your own address (your SMTP)',
+      'Your logo and name across the dashboard',
+      '50 team members · 20,000 WhatsApp messages · priority support',
+    ],
+    cta: 'Choose Pro',
     variant: 'outline',
     popular: false,
   },
 ];
+
+/** GST is added at checkout; the cards show it so nobody is surprised. */
+export const GST_RATE = 0.18;
 
 /** Pick your own numbers - priced line by line in the dashboard. */
 export const CUSTOM_PLAN = {
   name: 'Build your own',
   tagline: 'Pay for exactly what you use',
   startsAt: 444,
-  features: ['Choose AI calls, leads, users and WhatsApp volume', 'Add the inbound receptionist or prospecting only if you want them', 'Priced line by line, GST shown before you pay', 'Switch the numbers any month'],
+  features: [
+    'Choose AI calls, leads, users and WhatsApp volume',
+    'Add the inbound receptionist or prospecting only if you want them',
+    'Priced line by line, GST shown before you pay',
+    'Switch the numbers any month',
+  ],
 };
+
 export const PLAN_EXTRAS: { icon: LucideIcon; label: string }[] = [
   { icon: ShieldCheck, label: 'No setup fee, ever' },
   { icon: Zap, label: 'Every feature on every plan' },

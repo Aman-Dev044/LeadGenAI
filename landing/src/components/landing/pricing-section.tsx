@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart3, Check, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, Check, SlidersHorizontal, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Eyebrow } from '@/components/landing/eyebrow';
 import { Reveal } from '@/components/landing/primitives';
-import { CUSTOM_PLAN, PLANS, PLAN_EXTRAS } from '@/lib/landing-data';
+import { CUSTOM_PLAN, GST_RATE, PLANS, PLAN_EXTRAS } from '@/lib/landing-data';
 import { BRAND } from '@/lib/brand';
 import { ROUTES } from '@/lib/site';
 
@@ -80,24 +80,38 @@ export function PricingSection() {
                   </span>
                 )}
 
-                <h3 className="text-[14.5px] font-bold">{plan.name}</h3>
-                <p className="text-[11.5px] text-muted-foreground">{plan.tagline}</p>
+                <h3 className="text-[17px] font-bold">{plan.name}</h3>
+                <p className="mt-0.5 min-h-[32px] text-[11.5px] text-muted-foreground">{plan.tagline}</p>
 
                 <p className="mt-4 flex items-baseline gap-1">
                   <span className="tabular text-4xl font-black tracking-tight">₹{perMonth.toLocaleString('en-IN')}</span>
-                  <span className="text-[12.5px] font-semibold text-muted-foreground">/mo</span>
+                  <span className="text-[12.5px] font-semibold text-muted-foreground">
+                    /{cycle === 'annual' ? 'month' : 'month'}
+                  </span>
+                </p>
+                {/* GST is charged on top, so the card says so rather than surprising anyone at checkout */}
+                <p className="mt-1 text-[10.5px] text-muted-foreground">
+                  + 18% GST = ₹{Math.round(perMonth * (1 + GST_RATE)).toLocaleString('en-IN')}
                 </p>
                 {/* Reserved line keeps every card the same height on both cycles */}
-                <p className="mt-1 h-4 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <p className="mt-0.5 h-4 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
                   {cycle === 'annual' && plan.yearly > 0
                     ? `₹${plan.yearly.toLocaleString('en-IN')} billed yearly · save ₹${(plan.monthly * 12 - plan.yearly).toLocaleString('en-IN')}`
                     : ' '}
                 </p>
 
-                <ul className="mt-5 flex-1 space-y-2">
+                {/* The number that decides the plan */}
+                <div className="mt-4 rounded-xl bg-muted/60 py-3 text-center">
+                  <p className="tabular text-2xl font-black text-primary">{plan.aiCalls}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    AI calls a month
+                  </p>
+                </div>
+
+                <ul className="mt-4 flex-1 space-y-2">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2 text-[12px]">
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                       <span className="text-muted-foreground">{feature}</span>
                     </li>
                   ))}
@@ -105,6 +119,7 @@ export function PricingSection() {
 
                 <a href={ROUTES.register} className="mt-5 block">
                   <Button variant={plan.variant} className="w-full font-bold">
+                    <Zap className="h-4 w-4" aria-hidden="true" />
                     {plan.cta}
                     <span className="sr-only"> — {plan.name} plan</span>
                   </Button>
