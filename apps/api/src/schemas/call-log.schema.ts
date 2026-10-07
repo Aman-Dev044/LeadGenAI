@@ -4,7 +4,7 @@ import { HydratedDocument } from 'mongoose';
 export type CallLogDocument = HydratedDocument<CallLog>;
 
 /** Who placed the call and how. */
-export const CALL_TYPES = ['ai_outbound', 'ai_reengage', 'human_outbound', 'manual'] as const;
+export const CALL_TYPES = ['ai_outbound', 'ai_inbound', 'ai_reengage', 'human_outbound', 'manual'] as const;
 
 /** Lifecycle. `queued` and `scheduled` are before dialing; the rest come from the provider. */
 export const CALL_STATUSES = [
@@ -52,6 +52,10 @@ export class CallLog {
 
   @Prop({ type: String, enum: CALL_TYPES, required: true })
   type: string;
+
+  /** Who dialled: we called them, or they called us. */
+  @Prop({ type: String, enum: ['outbound', 'inbound'], default: 'outbound', index: true })
+  direction: string;
 
   @Prop({ type: String, enum: ['vapi', 'twilio', 'manual'], required: true })
   provider: string;

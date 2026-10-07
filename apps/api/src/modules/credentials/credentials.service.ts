@@ -118,6 +118,13 @@ export class CredentialsService {
     return raw !== undefined && raw !== null && raw !== '';
   }
 
+  /** Which workspace saved this exact value for an integration field (inbound call routing). */
+  async findTenantByValue(providerId: string, fieldKey: string, value: string): Promise<string | null> {
+    if (!value) return null;
+    const doc: any = await this.model.findOne({ provider: providerId, [`values.${fieldKey}`]: value }).select('tenantId').lean();
+    return doc?.tenantId ? String(doc.tenantId) : null;
+  }
+
   async describeAll(tenantId: string) {
     const docs =
       tenantId && tenantId !== 'all'

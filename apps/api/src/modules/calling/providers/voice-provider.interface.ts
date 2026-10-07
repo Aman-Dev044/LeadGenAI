@@ -54,8 +54,10 @@ export interface OutboundCallRequest {
     llmModel: string;
     maxDurationSeconds: number;
   };
-  /** 'new_lead' | 'retry' | 'callback' | 'reengage' | 'manual' | 'workflow' | 'test' */
+  /** 'new_lead' | 'retry' | 'callback' | 'reengage' | 'manual' | 'workflow' | 'test' | 'inbound' */
   reason: string;
+  /** An inbound call is answered, not placed: no voicemail detection, different goal. */
+  direction?: 'outbound' | 'inbound';
   /** Tenant timezone, so "tomorrow 11am" resolves correctly. */
   timezone: string;
   /** Live transfer destinations, in order of preference. Empty = no transfer tool. */
@@ -88,7 +90,7 @@ export interface VoiceToolCall {
 
 /** Normalised webhook event, whatever the vendor's payload looks like. */
 export interface VoiceCallEvent {
-  kind: 'status' | 'ended' | 'tool-calls' | 'ignored';
+  kind: 'status' | 'ended' | 'tool-calls' | 'assistant-request' | 'ignored';
   externalId?: string;
   toolCalls?: VoiceToolCall[];
   status?: string;

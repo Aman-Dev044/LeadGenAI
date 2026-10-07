@@ -19,7 +19,7 @@ import {
 import type { CallLog } from '@/types';
 
 export function CallTypeIcon({ type, className }: { type: string; className?: string }) {
-  const Icon = type === 'ai_outbound' || type === 'ai_reengage' ? Bot : type === 'manual' ? StickyNote : PhoneCall;
+  const Icon = type === 'ai_outbound' || type === 'ai_reengage' || type === 'ai_inbound' ? Bot : type === 'manual' ? StickyNote : PhoneCall;
   return <Icon className={className || 'h-4 w-4'} />;
 }
 

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Bot, PhoneCall, Clock, MessageCircle, Flame, AlertTriangle, Repeat, Mic, Save, CheckCircle2, XCircle, ExternalLink, Sparkles, Loader2, Info, BellRing,
+  Bot, PhoneCall, Clock, MessageCircle, Flame, AlertTriangle, Repeat, Mic, Save, CheckCircle2, XCircle, ExternalLink, Sparkles, Loader2, Info, BellRing, PhoneIncoming,
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -388,6 +388,53 @@ export function CallingSettingsTab() {
             <Input value={form.inCallBooking.instructions} onChange={(e) => setForm((f) => (f ? { ...f, inCallBooking: { ...f.inCallBooking, instructions: e.target.value } } : f))} placeholder="Meetings Mon-Sat 11am-6pm only, at our Chandigarh office or on Google Meet" />
           </div>
         </div>
+      </Section>
+
+      {/* Inbound receptionist */}
+      <Section icon={PhoneIncoming} title="When someone calls you" description="The AI answers your number, finds out what the caller needs, creates the lead and either puts them through to a person or books them in - at 2am just as well as at 2pm." footer={<Button onClick={saveAll} disabled={save.isPending}><Save className="h-4 w-4" /> Save</Button>}>
+        {(() => {
+          const DEFAULT_INBOUND = { enabled: false, greeting: 'Thanks for calling {{companyName}}! This is {{agentName}}. How can I help you today?', instructions: '', createLead: true, transferDuringHours: true, afterHours: 'book', notifyTeam: true, notifyUserId: '' };
+          const i = { ...DEFAULT_INBOUND, ...(form.inbound || {}) };
+          const setI = (patch: Partial<typeof i>) => setForm((f) => (f ? { ...f, inbound: { ...i, ...patch } } : f));
+          return (
+            <>
+              <Row label="Answer incoming calls with the AI" hint="Your Vapi number must point its webhook at this workspace - the same URL shown under the readiness check above.">
+                <Switch checked={i.enabled} onCheckedChange={(v) => setI({ enabled: v })} />
+              </Row>
+              <div className="space-y-1.5">
+                <Label>Greeting <span className="text-xs text-muted-foreground">{'{{companyName}} {{agentName}} {{leadName}}'}</span></Label>
+                <Textarea rows={2} value={i.greeting} onChange={(e) => setI({ greeting: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>What the agent should know about incoming callers <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                <Textarea rows={3} value={i.instructions} onChange={(e) => setI({ instructions: e.target.value })} placeholder="Most callers ask about prices or delivery time. Opening hours are 10am to 7pm. Never quote a discount - a specialist confirms the final price." />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Row label="Save unknown callers as leads" hint="Their number becomes a lead, so nothing is lost.">
+                  <Switch checked={i.createLead} onCheckedChange={(v) => setI({ createLead: v })} />
+                </Row>
+                <Row label="Offer to put them through" hint="Only during your calling hours, to the people under Transfer below.">
+                  <Switch checked={i.transferDuringHours} onCheckedChange={(v) => setI({ transferDuringHours: v })} />
+                </Row>
+                <div className="space-y-1.5">
+                  <Label>Outside calling hours</Label>
+                  <Select value={i.afterHours} onValueChange={(v) => setI({ afterHours: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="book">Book a meeting there and then</SelectItem>
+                      <SelectItem value="callback">Fix a time for us to call back</SelectItem>
+                      <SelectItem value="message">Just take the message</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Row label="Tell the team after every incoming call" hint="In-app alert with the summary and the recording.">
+                  <Switch checked={i.notifyTeam} onCheckedChange={(v) => setI({ notifyTeam: v })} />
+                </Row>
+              </div>
+              <p className="text-xs text-muted-foreground flex items-start gap-1"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> If a caller hangs up before the AI can help, we ring them back within two minutes - a missed call stops being a lost customer.</p>
+            </>
+          );
+        })()}
       </Section>
 
       {/* Meeting reminders + no-show rescue */}

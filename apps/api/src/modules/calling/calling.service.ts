@@ -655,6 +655,12 @@ export class CallingService implements OnModuleInit {
 
   async handleVapiWebhook(body: any, secretHeader?: string) {
     const event = this.vapi.parseWebhook(body);
+
+    // Somebody dialled our number - answer with the receptionist assistant
+    if (event.kind === 'assistant-request') {
+      return this.handleInboundAssistantRequest(body?.message || body, secretHeader);
+    }
+
     if (!event.externalId) return { ok: true, ignored: 'no call id' };
 
     const call = await this.callModel.findOne({ externalId: event.externalId, provider: 'vapi' });
@@ -697,6 +703,178 @@ export class CallingService implements OnModuleInit {
       return { ok: true };
     }
     return { ok: true, ignored: event.kind };
+  }
+
+  // ─── Inbound: the AI answers calls that come IN ───────────────────
+
+  /**
+   * Which workspace owns the number that was just dialled:
+   *  1. the workspace that saved this exact Vapi number under its own credentials
+   *  2. INBOUND_TENANT_ID, for a single-workspace install on the platform number
+   *  3. the only workspace that has the receptionist switched on
+   */
+  private async resolveInboundTenant(phoneNumberId?: string, calledNumber?: string): Promise<string | null> {
+    if (phoneNumberId) {
+      const own = await this.credentials.findTenantByValue('vapi', 'phoneNumberId', phoneNumberId);
+      if (own) return own;
+    }
+    const pinned = this.configService.get<string>('INBOUND_TENANT_ID') || process.env.INBOUND_TENANT_ID;
+    if (pinned) return pinned;
+
+    const enabled: any[] = await this.tenantModel
+      .find({ deletedAt: null, status: { $in: ['active', 'trial'] }, 'callingSettings.inbound.enabled': true })
+      .select('_id')
+      .limit(2)
+      .lean();
+    if (enabled.length === 1) return String(enabled[0]._id);
+    if (enabled.length > 1) {
+      this.logger.warn(
+        `Inbound call to ${calledNumber || phoneNumberId}: several workspaces have the receptionist on. Each must save its own Vapi phone number id under API Credentials.`,
+      );
+    }
+    return null;
+  }
+
+  /** The lead this caller already is, or a new one created from their number. */
+  private async leadForCaller(tenantId: string, phone: string, settings: CallingSettings & { timezone: string }) {
+    if (phone) {
+      const tail = phone.replace(/\D/g, '').slice(-10);
+      const existing = await this.leadModel
+        .findOne({ tenantId, deletedAt: null, $or: [{ phone }, ...(tail ? [{ phone: new RegExp(`${tail}$`) }] : [])] })
+        .sort({ updatedAt: -1 });
+      if (existing) return { lead: existing, isNew: false };
+    }
+    if (!settings.inbound.createLead) return { lead: null, isNew: false };
+
+    const lead = await this.leadModel.create({
+      tenantId,
+      firstName: 'Caller',
+      lastName: phone ? phone.slice(-4) : '',
+      phone: phone || undefined,
+      source: 'inbound_call',
+      status: 'contacted',
+      lastActivityAt: new Date(),
+      lastContactedAt: new Date(),
+    });
+    await this.activityModel.create({
+      tenantId,
+      leadId: String(lead._id),
+      type: 'created',
+      description: 'Lead created from an incoming call',
+    });
+    // They are on the phone with us right now - never dial them on top of that
+    this.bus.emit<LeadCreatedPayload>(PlatformEvents.LEAD_CREATED, { tenantId, lead, skipAutoCall: true } as any);
+    return { lead, isNew: true };
+  }
+
+  /**
+   * Vapi asks this the moment our number rings. We answer with a ready-made
+   * assistant, so the caller hears a person-like greeting within a second -
+   * and by then the lead and the call record already exist.
+   */
+  async handleInboundAssistantRequest(message: any, secretHeader?: string) {
+    const call = message?.call || {};
+    const externalId: string = call.id || message?.callId || '';
+    const phoneNumberId: string = call.phoneNumberId || message?.phoneNumber?.id || '';
+    const calledNumber: string = call.phoneNumber?.number || message?.phoneNumber?.number || '';
+    const callerNumber = this.normalisePhone(call.customer?.number || message?.customer?.number || '') || '';
+
+    const tenantId = await this.resolveInboundTenant(phoneNumberId, calledNumber);
+    if (!tenantId) {
+      return { error: 'This number is not set up to take calls right now. Please try again later.' };
+    }
+
+    const settings = await this.getSettings(tenantId);
+    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    if (creds.webhookSecret && (!secretHeader || !this.safeEqual(secretHeader, creds.webhookSecret))) {
+      this.logger.warn('Inbound assistant request rejected: bad webhook secret');
+      throw new ForbiddenException('Invalid webhook secret');
+    }
+    if (!settings.enabled || !settings.inbound.enabled) {
+      return { error: 'Thanks for calling. Nobody is available on this line right now - please try again later.' };
+    }
+
+    const { lead } = await this.leadForCaller(tenantId, callerNumber, settings);
+    const leadId = lead ? String(lead._id) : 'unknown';
+
+    const existing = externalId ? await this.callModel.findOne({ externalId, provider: 'vapi' }) : null;
+    const callLog =
+      existing ||
+      (await this.callModel.create({
+        tenantId,
+        leadId,
+        type: 'ai_inbound',
+        direction: 'inbound',
+        provider: 'vapi',
+        status: 'in_progress',
+        externalId: externalId || undefined,
+        toNumber: calledNumber || undefined,
+        fromNumber: callerNumber || undefined,
+        attempt: 1,
+        reason: 'inbound',
+        startedAt: new Date(),
+        answeredAt: new Date(),
+      }));
+
+    if (lead) {
+      await this.leadModel.updateOne({ _id: lead._id }, { $set: { aiCallStatus: 'calling', lastActivityAt: new Date() } });
+      await this.activityModel.create({
+        tenantId,
+        leadId,
+        type: 'call_placed',
+        description: `Incoming call answered by the AI${callerNumber ? ` from ${callerNumber}` : ''}`,
+        newValue: { callId: String(callLog._id) },
+      });
+    }
+    this.bus.emit<CallPayload>(PlatformEvents.CALL_STARTED, { tenantId, call: callLog.toObject?.() ?? callLog, lead });
+
+    const openNow = isWithinCallingHours(new Date(), settings.callingHours, settings.timezone);
+    const extras = await this.callExtras(tenantId, settings, lead);
+    const afterHoursRule = openNow
+      ? ''
+      : settings.inbound.afterHours === 'callback'
+        ? 'The team is off the floor right now (outside office hours). Do not offer to put them through. Agree an exact time for us to call them back and lock it in with schedule_callback.'
+        : settings.inbound.afterHours === 'message'
+          ? 'The team is off the floor right now (outside office hours). Do not offer to put them through or to book anything - take down what they need and tell them the team will get back during office hours.'
+          : 'The team is off the floor right now (outside office hours). Do not offer to put them through. Offer a meeting at a time that suits them and confirm it with book_appointment.';
+
+    const assistant = this.vapi.buildInboundAssistant(
+      {
+        tenantId,
+        callId: String(callLog._id),
+        toNumber: callerNumber,
+        lead: {
+          id: leadId,
+          name: lead ? this.leadName(lead) : 'the caller',
+          firstName: lead?.firstName,
+          company: lead?.company,
+          email: lead?.email,
+          source: lead?.source,
+          requirement: lead?.customFields?.requirement || lead?.aiCallInsights?.requirement,
+          stage: lead?.status,
+          temperature: lead?.temperature,
+          history: lead ? await this.leadHistory(tenantId, lead, String(callLog._id)) : undefined,
+        },
+        credentials: creds,
+        webhookUrl: this.vapiWebhookUrl(),
+        assistant: {
+          ...settings.assistant,
+          firstMessage: settings.inbound.greeting || settings.assistant.firstMessage,
+          extraInstructions: [settings.assistant.extraInstructions, settings.inbound.instructions, afterHoursRule]
+            .filter(Boolean)
+            .join('\n'),
+        },
+        reason: 'inbound',
+        direction: 'inbound',
+        ...extras,
+        // Only put callers through while somebody is actually there to pick up
+        transfer: openNow && settings.inbound.transferDuringHours ? extras.transfer : undefined,
+      },
+      creds.webhookSecret,
+    );
+
+    this.logger.log(`Inbound call ${externalId} from ${callerNumber || 'unknown'} answered for tenant ${tenantId}`);
+    return { assistant };
   }
 
   // ─── Mid-call tools (answered synchronously to the voice provider) ─
@@ -922,6 +1100,19 @@ export class CallingService implements OnModuleInit {
     const isAi = !opts.byHuman;
     const before = { status: lead.status, temperature: lead.temperature, assignedTo: lead.assignedTo };
 
+    // 0. An unknown caller told us their name on the call - stop calling them "Caller 1234"
+    if (analysis.callerName && this.isPlaceholderName(lead)) {
+      const parts = analysis.callerName.replace(/\s+/g, ' ').trim().split(' ');
+      lead.firstName = parts[0];
+      lead.lastName = parts.slice(1).join(' ');
+      await this.activityModel.create({
+        tenantId,
+        leadId: String(lead._id),
+        type: 'field_updated',
+        description: `Caller gave their name on the call: ${analysis.callerName}`,
+      });
+    }
+
     // 1. Record the call on the lead
     lead.lastCallAt = new Date();
     lead.lastCallOutcome = analysis.outcome;
@@ -1033,7 +1224,8 @@ export class CallingService implements OnModuleInit {
       }
       if (analysis.outcome !== 'wrong_number' && call.attempt < settings.maxAttempts && call.reason !== 'test') {
         const retry = await this.queueAiCall(tenantId, lead.toObject(), 'retry', {
-          delaySeconds: settings.retryDelayMinutes * 60,
+          // They rang US and hung up before we could help - call straight back
+          delaySeconds: call.direction === 'inbound' ? 120 : settings.retryDelayMinutes * 60,
           settings,
         });
         actions.retryCallId = String(retry._id);
@@ -1164,8 +1356,25 @@ export class CallingService implements OnModuleInit {
         actions.postCallEmail = await this.sendPostCallEmail(tenantId, lead, call, analysis, settings, actions);
       }
 
+      // An incoming call always reaches the team - this is business walking in
+      if (call.direction === 'inbound' && settings.inbound.notifyTeam) {
+        const who = settings.inbound.notifyUserId || lead.assignedTo || undefined;
+        await this.notifications
+          .notifyTenant(
+            tenantId,
+            {
+              title: `Incoming call: ${name}`,
+              body: `${call.fromNumber || 'Unknown number'} · ${analysis.outcome.replace(/_/g, ' ')} · interest ${analysis.interestLevel}/100. ${analysis.summary || ''}`,
+              type: 'call',
+              data: { leadId: String(lead._id), callId: String(call._id), inbound: true },
+            },
+            { assignedTo: who, emailFlag: 'emailOnCallSummary' },
+          )
+          .catch(() => undefined);
+      }
+
       // The owner hears what the AI learned, with the recording a click away
-      if (isAi && lead.assignedTo) {
+      if (isAi && lead.assignedTo && call.direction !== 'inbound') {
         await this.notifications.notifyTenant(
           tenantId,
           {
@@ -2162,6 +2371,12 @@ export class CallingService implements OnModuleInit {
     const digits = s.slice(1);
     if (digits.length < 8 || digits.length > 15) return null;
     return `+${digits}`;
+  }
+
+  /** A lead we only know by their number - created by an incoming call or a WhatsApp message. */
+  private isPlaceholderName(lead: any): boolean {
+    const first = String(lead?.firstName || '').trim().toLowerCase();
+    return ['caller', 'whatsapp', 'lead', 'new lead', 'unknown', 'visitor', ''].includes(first);
   }
 
   private leadName(lead: any): string {

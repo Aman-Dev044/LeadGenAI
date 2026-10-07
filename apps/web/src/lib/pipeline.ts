@@ -109,6 +109,7 @@ export const CALL_STATUS_TONES: Record<string, BadgeTone> = {
 
 export const CALL_TYPE_LABELS: Record<string, string> = {
   ai_outbound: 'AI call',
+  ai_inbound: 'Incoming call',
   ai_reengage: 'AI re-engage',
   human_outbound: 'Salesperson call',
   manual: 'Logged call',

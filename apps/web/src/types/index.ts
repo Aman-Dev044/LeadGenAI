@@ -385,7 +385,9 @@ export interface CallLog {
   _id: string;
   tenantId: string;
   leadId: string;
-  type: 'ai_outbound' | 'ai_reengage' | 'human_outbound' | 'manual';
+  type: 'ai_outbound' | 'ai_inbound' | 'ai_reengage' | 'human_outbound' | 'manual';
+  /** Who dialled: we called them, or they called us. */
+  direction?: 'outbound' | 'inbound';
   provider: 'vapi' | 'twilio' | 'manual';
   status: string;
   externalId?: string;
@@ -504,6 +506,16 @@ export interface CallingSettings {
     thankYouTemplate: string;
     appointmentTemplate: string;
     callbackTemplate: string;
+  };
+  inbound: {
+    enabled: boolean;
+    greeting: string;
+    instructions: string;
+    createLead: boolean;
+    transferDuringHours: boolean;
+    afterHours: string;
+    notifyTeam: boolean;
+    notifyUserId: string;
   };
   appointmentReminders: {
     enabled: boolean;

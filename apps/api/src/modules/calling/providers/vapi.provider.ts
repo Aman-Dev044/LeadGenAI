@@ -62,6 +62,11 @@ export const VAPI_STRUCTURED_DATA_SCHEMA = {
       description: 'Overall result of the conversation.',
     },
     interestLevel: { type: 'number', description: 'How likely the person is to buy, 0 to 100.' },
+    callerName: {
+      type: 'string',
+      description:
+        'The person\'s own name exactly as they said it on the call ("my name is Rohit Mehta" -> "Rohit Mehta"). Empty if they never gave it. Never guess from the number.',
+    },
     requirement: { type: 'string', description: 'What they need, in one or two sentences.' },
     budget: { type: 'string', description: 'Budget mentioned, or empty.' },
     timeline: { type: 'string', description: 'When they want to start, or empty.' },
@@ -288,10 +293,29 @@ export class VapiProvider implements IVoiceProvider {
     return tools;
   }
 
+  /**
+   * The assistant for a call that came IN to our number. Vapi asks for it the
+   * moment the phone rings (`assistant-request`), so it must be ready to
+   * answer in one round trip.
+   */
+  buildInboundAssistant(req: OutboundCallRequest, webhookSecret?: string): any {
+    const vars = {
+      leadName: req.lead.firstName || req.lead.name || 'there',
+      leadFullName: req.lead.name,
+      company: req.lead.company || '',
+      agentName: req.assistant.agentName,
+      companyName: req.assistant.companyName || 'our team',
+    };
+    const server = { url: req.webhookUrl, ...(webhookSecret ? { secret: webhookSecret } : {}) };
+    const metadata = { tenantId: req.tenantId, callId: req.callId, leadId: req.lead.id, reason: 'inbound' };
+    return this.buildAssistant({ ...req, direction: 'inbound' }, vars, server, metadata);
+  }
+
   private buildAssistant(req: OutboundCallRequest, vars: Record<string, string>, server: any, metadata: any) {
     const a = req.assistant;
     const tools = this.buildTools(req);
     const voice = VOICE_PRESETS[a.voiceId] || { provider: a.voiceProvider || 'vapi', voiceId: a.voiceId || 'Neha' };
+    const inbound = req.direction === 'inbound';
     return {
       name: `${a.agentName} (${a.companyName || 'LeadBells'})`.slice(0, 40),
       // Only the greeting is slowed - natural pauses after the name and the company
@@ -317,15 +341,21 @@ export class VapiProvider implements IVoiceProvider {
       // Fill the think-time with a word instead of dead air
       responseDelaySeconds: 0.3,
       endCallFunctionEnabled: true,
-      endCallMessage: 'Thank you so much for your time. Have a great day!',
+      endCallMessage: inbound ? 'Thank you for calling. Have a great day!' : 'Thank you so much for your time. Have a great day!',
       // Faint office ambience makes the line feel like a desk, not a server
       backgroundSound: 'off',
       backgroundDenoisingEnabled: true,
-      voicemailDetection: {
-        provider: 'twilio',
-        enabled: true,
-        voicemailDetectionTypes: ['machine_end_beep', 'machine_end_silence'],
-      },
+      // A caller is a person by definition - answering-machine detection only
+      // belongs on calls we place
+      ...(inbound
+        ? {}
+        : {
+            voicemailDetection: {
+              provider: 'twilio',
+              enabled: true,
+              voicemailDetectionTypes: ['machine_end_beep', 'machine_end_silence'],
+            },
+          }),
       voicemailMessage: renderTemplate(
         'Hi {{leadName}}, this is {{agentName}} from {{companyName}} about your recent enquiry. I will message you on WhatsApp - talk soon.',
         vars,
@@ -378,6 +408,13 @@ export class VapiProvider implements IVoiceProvider {
         return 'CALLBACK: they asked to be called at this time. Open with "you asked me to call you back", pick up exactly where the last conversation ended.';
       case 'retry':
         return 'RETRY: earlier attempts went unanswered. Keep it short and friendly; if it is a bad time, fix a callback.';
+      case 'inbound':
+        return (
+          'INCOMING CALL: this person dialled US, so they already want something - never pitch cold. ' +
+          'Greet them, find out what they need, and help. Get their name early and use it. ' +
+          'If they want a person, transfer. If nobody is available, book a meeting or fix a callback time before they hang up. ' +
+          'Capture what they asked about so the team can follow up.'
+        );
       case 'reschedule':
         return 'RESCHEDULE CALL: they missed the meeting we had booked (see history). No blame - say you noticed the meeting did not happen, ask if everything is okay, then offer two or three new slots and BOOK the new time with book_appointment before ending. If they are no longer interested, find out why and note it.';
     }
@@ -489,6 +526,11 @@ export class VapiProvider implements IVoiceProvider {
         return { id: String(t.id || ''), name: String(t.name || t.function?.name || ''), arguments: args };
       });
       return { kind: 'tool-calls', externalId, toolCalls, raw: message };
+    }
+
+    // Somebody dialled our number: Vapi asks us what the assistant should be
+    if (type === 'assistant-request') {
+      return { kind: 'assistant-request', externalId, raw: message };
     }
 
     if (type === 'status-update') {

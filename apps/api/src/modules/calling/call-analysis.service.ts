@@ -8,6 +8,8 @@ export interface CallAnalysis {
   summary: string;
   /** What the agent promised to send on WhatsApp, written for the customer. */
   whatsappDetails?: string;
+  /** The person's own name when they said it on the call - names an unknown caller. */
+  callerName?: string;
   requirement?: string;
   budget?: string;
   timeline?: string;
@@ -149,6 +151,7 @@ export class CallAnalysisService {
 - outcome: one of interested | not_interested | callback | meeting_booked | no_answer | voicemail | wrong_number | won | lost | unknown
 - interestLevel: 0-100 (how likely they are to buy)
 - summary: 2-3 sentences, plain language, for a busy manager
+- callerName: the person's own name exactly as they said it on the call, else empty (never guess)
 - requirement: what they need (string, may be empty)
 - budget: string or empty
 - timeline: string or empty
@@ -267,6 +270,8 @@ Output JSON only. No markdown.`,
       outcome,
       interestLevel,
       summary: typeof raw.summary === 'string' ? raw.summary.trim() : '',
+      callerName:
+        typeof raw.callerName === 'string' && raw.callerName.trim().length > 1 ? raw.callerName.trim().slice(0, 80) : undefined,
       requirement: typeof raw.requirement === 'string' ? raw.requirement : undefined,
       budget: typeof raw.budget === 'string' ? raw.budget : undefined,
       timeline: typeof raw.timeline === 'string' ? raw.timeline : undefined,

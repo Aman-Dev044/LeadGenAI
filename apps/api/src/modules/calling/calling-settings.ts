@@ -92,7 +92,32 @@ export interface CallingSettings {
   };
   /** Reminders before a meeting and what happens when the lead does not turn up. */
   appointmentReminders: AppointmentReminderSettings;
+  /** The AI answering calls that come IN to your number. */
+  inbound: InboundSettings;
   assistant: AssistantSettings;
+}
+
+/**
+ * The receptionist side: somebody dials your number and the AI picks up,
+ * finds out what they want, creates the lead and either puts them through to a
+ * person or books them in - at 2am just as well as at 2pm.
+ */
+export interface InboundSettings {
+  enabled: boolean;
+  /** Spoken the moment the AI answers. {{companyName}} {{agentName}} {{leadName}} */
+  greeting: string;
+  /** What the agent should know and ask on an incoming call. */
+  instructions: string;
+  /** An unknown caller becomes a lead (with their number). */
+  createLead: boolean;
+  /** Inside calling hours, offer to put them through to a person. */
+  transferDuringHours: boolean;
+  /** Outside calling hours: book a meeting, fix a callback, or just take the message. */
+  afterHours: string;
+  /** Tell the team (in-app + push) as soon as an incoming call ends. */
+  notifyTeam: boolean;
+  /** Who gets that alert; empty = the lead's owner, else the admins. */
+  notifyUserId: string;
 }
 
 export interface AppointmentReminderSettings {
@@ -221,6 +246,17 @@ export const DEFAULT_CALLING_SETTINGS: CallingSettings = {
     meetingDurationMinutes: 30,
     instructions: '',
   },
+  inbound: {
+    // Off until the workspace points its number at us - see Settings > AI Calling
+    enabled: false,
+    greeting: 'Thanks for calling {{companyName}}! This is {{agentName}}. How can I help you today?',
+    instructions: '',
+    createLead: true,
+    transferDuringHours: true,
+    afterHours: 'book',
+    notifyTeam: true,
+    notifyUserId: '',
+  },
   appointmentReminders: {
     enabled: true,
     dayBefore: true,
@@ -279,6 +315,7 @@ export function resolveCallingSettings(stored: any): CallingSettings {
   const t = isObj(s.transfer) ? s.transfer : {};
   const b = isObj(s.inCallBooking) ? s.inCallBooking : {};
   const w = isObj(s.postCallWhatsapp) ? s.postCallWhatsapp : {};
+  const inb = isObj(s.inbound) ? s.inbound : {};
   const r = isObj(s.appointmentReminders) ? s.appointmentReminders : {};
   const ns = isObj(r.noShowRescue) ? r.noShowRescue : {};
   const dr = d.appointmentReminders;
@@ -354,6 +391,16 @@ export function resolveCallingSettings(stored: any): CallingSettings {
       enabled: bool(b.enabled, d.inCallBooking.enabled),
       meetingDurationMinutes: num(b.meetingDurationMinutes, d.inCallBooking.meetingDurationMinutes, 10, 240),
       instructions: str(b.instructions, d.inCallBooking.instructions),
+    },
+    inbound: {
+      enabled: bool(inb.enabled, d.inbound.enabled),
+      greeting: str(inb.greeting, d.inbound.greeting),
+      instructions: str(inb.instructions, d.inbound.instructions),
+      createLead: bool(inb.createLead, d.inbound.createLead),
+      transferDuringHours: bool(inb.transferDuringHours, d.inbound.transferDuringHours),
+      afterHours: ['book', 'callback', 'message'].includes(inb.afterHours) ? inb.afterHours : d.inbound.afterHours,
+      notifyTeam: bool(inb.notifyTeam, d.inbound.notifyTeam),
+      notifyUserId: str(inb.notifyUserId, d.inbound.notifyUserId),
     },
     appointmentReminders: {
       enabled: bool(r.enabled, dr.enabled),
