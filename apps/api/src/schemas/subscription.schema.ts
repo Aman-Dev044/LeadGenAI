@@ -10,7 +10,7 @@ export class Subscription {
 
   @Prop({
     type: String,
-    enum: ['free', 'starter', 'professional', 'enterprise'],
+    enum: ['free', 'starter', 'professional', 'enterprise', 'trial', 'basic', 'standard', 'premium', 'pro', 'custom'],
     required: true,
   })
   plan: string;
@@ -32,8 +32,19 @@ export class Subscription {
   })
   billingInterval: string;
 
-  @Prop({ type: String, default: 'USD' })
+  @Prop({ type: String, default: 'INR' })
   currency: string;
+
+  /** What was actually charged, GST included. */
+  @Prop({ type: Number, default: 0 })
+  amountPaid: number;
+
+  @Prop({ type: Number, default: 0 })
+  gstAmount: number;
+
+  /** For a plan the customer built themselves. */
+  @Prop({ type: Object, default: undefined })
+  customPlan: { quota?: Record<string, number>; features?: Record<string, boolean>; priceMonthly?: number };
 
   @Prop({
     type: String,

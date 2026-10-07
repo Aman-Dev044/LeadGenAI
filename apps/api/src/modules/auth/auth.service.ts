@@ -79,7 +79,8 @@ export class AuthService {
       name: dto.tenantName,
       slug,
       status: 'trial',
-      plan,
+      // Everybody starts on the trial plan with the whole product unlocked
+      plan: 'trial',
       limits: this.platformSettings.limitsForPlan(plan),
       trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000),
     });
@@ -493,6 +494,10 @@ ${EMAIL_FOOTER_TEXT}`,
   }
 
   private publicTenant(tenant: any) {
+    const now = Date.now();
+    const onTrial = tenant.status === 'trial';
+    const expiresAt = onTrial ? tenant.trialEndsAt : tenant.planExpiresAt;
+    const lapsed = !!expiresAt && new Date(expiresAt).getTime() < now;
     return {
       id: tenant._id,
       _id: tenant._id,
@@ -501,6 +506,14 @@ ${EMAIL_FOOTER_TEXT}`,
       plan: tenant.plan,
       status: tenant.status,
       isPlatformOwner: !!tenant.isPlatformOwner,
+      // The dashboard sends people straight to billing when this is true
+      subscription: {
+        plan: tenant.plan,
+        trial: onTrial,
+        expiresAt: expiresAt || null,
+        daysLeft: expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 86_400_000)) : 0,
+        requiresPayment: tenant.status === 'expired' || lapsed,
+      },
     };
   }
 

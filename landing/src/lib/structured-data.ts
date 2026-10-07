@@ -83,7 +83,7 @@ export const productSchema = {
   ],
   offers: {
     '@type': 'AggregateOffer',
-    priceCurrency: 'USD',
+    priceCurrency: 'INR',
     lowPrice: Math.min(...PLANS.map((plan) => plan.monthly)),
     highPrice: Math.max(...PLANS.map((plan) => plan.monthly)),
     offerCount: PLANS.length,
@@ -92,7 +92,7 @@ export const productSchema = {
         '@type': 'Offer' as const,
         name: `${BRAND.name} ${plan.name}`,
         description: plan.features.join(', '),
-        priceCurrency: 'USD',
+        priceCurrency: 'INR',
         availability: 'https://schema.org/InStock',
         url: siteUrl('/#pricing'),
       };
@@ -104,7 +104,7 @@ export const productSchema = {
         priceSpecification: {
           '@type': 'UnitPriceSpecification',
           price: plan.monthly,
-          priceCurrency: 'USD',
+          priceCurrency: 'INR',
           billingDuration: 1,
           billingIncrement: 1,
           unitCode: 'MON',
@@ -123,7 +123,7 @@ export const productSchema = {
           priceSpecification: {
             '@type': 'UnitPriceSpecification',
             price: plan.yearly,
-            priceCurrency: 'USD',
+            priceCurrency: 'INR',
             billingDuration: 12,
             billingIncrement: 1,
             unitCode: 'MON',

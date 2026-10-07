@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart3, Check } from 'lucide-react';
+import { BarChart3, Check, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Eyebrow } from '@/components/landing/eyebrow';
 import { Reveal } from '@/components/landing/primitives';
-import { PLANS, PLAN_EXTRAS } from '@/lib/landing-data';
+import { CUSTOM_PLAN, PLANS, PLAN_EXTRAS } from '@/lib/landing-data';
 import { BRAND } from '@/lib/brand';
 import { ROUTES } from '@/lib/site';
 
@@ -32,7 +32,7 @@ export function PricingSection() {
             Priced per plan. Not per missed lead.
           </h2>
           <p className="mt-2 max-w-xl text-[13.5px] text-muted-foreground">
-            {BRAND.tagline} — starting at nothing. Upgrade when the pipeline says you should.
+            {BRAND.tagline} — 14 days free, then from ₹444 a month. All prices exclude 18% GST.
           </p>
         </div>
 
@@ -55,7 +55,7 @@ export function PricingSection() {
             >
               {option}
               {option === 'annual' && (
-                <span className="ml-1.5 text-[10px] font-black opacity-90">−20%</span>
+                <span className="ml-1.5 text-[10px] font-black opacity-90">2 months free</span>
               )}
             </button>
           ))}
@@ -84,13 +84,13 @@ export function PricingSection() {
                 <p className="text-[11.5px] text-muted-foreground">{plan.tagline}</p>
 
                 <p className="mt-4 flex items-baseline gap-1">
-                  <span className="tabular text-4xl font-black tracking-tight">${perMonth}</span>
+                  <span className="tabular text-4xl font-black tracking-tight">₹{perMonth.toLocaleString('en-IN')}</span>
                   <span className="text-[12.5px] font-semibold text-muted-foreground">/mo</span>
                 </p>
                 {/* Reserved line keeps every card the same height on both cycles */}
                 <p className="mt-1 h-4 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
                   {cycle === 'annual' && plan.yearly > 0
-                    ? `$${plan.yearly} billed yearly · save $${plan.monthly * 12 - plan.yearly}`
+                    ? `₹${plan.yearly.toLocaleString('en-IN')} billed yearly · save ₹${(plan.monthly * 12 - plan.yearly).toLocaleString('en-IN')}`
                     : ' '}
                 </p>
 
@@ -115,6 +115,34 @@ export function PricingSection() {
         })}
       </div>
 
+      <Reveal delay={300}>
+        <article className="lit-border mt-3 flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/70 p-5 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="text-[14.5px] font-bold">{CUSTOM_PLAN.name}</h3>
+              <p className="text-[11.5px] text-muted-foreground">{CUSTOM_PLAN.tagline}</p>
+              <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                {CUSTOM_PLAN.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2 text-[12px]">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="shrink-0 text-left lg:text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Starts at</p>
+            <p className="tabular text-3xl font-black tracking-tight">₹{CUSTOM_PLAN.startsAt.toLocaleString('en-IN')}<span className="text-[12.5px] font-semibold text-muted-foreground">/mo</span></p>
+            <a href={ROUTES.register} className="mt-3 block">
+              <Button variant="outline" className="w-full font-bold lg:w-auto">Build your plan</Button>
+            </a>
+          </div>
+        </article>
+      </Reveal>
       <Reveal delay={120}>
         <ul className="mt-3 grid gap-3 rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-4">
           {PLAN_EXTRAS.map((extra) => (

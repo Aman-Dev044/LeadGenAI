@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
@@ -15,7 +15,14 @@ import { NotificationSchema } from '../../schemas/notification.schema';
 import { UserSchema } from '../../schemas/user.schema';
 import { NotificationModule } from '../notification/notification.module';
 import { PlanExpiryReminderService } from './plan-expiry-reminder.service';
+import { SubscriptionService } from './subscription.service';
+import { RazorpayService } from './razorpay.service';
+import { PlansController } from './plans.controller';
+import { CallLogSchema } from '../../schemas/call-log.schema';
 
+// Global so the subscription lock (SubscriptionGuard) and the calling engine
+// can read a workspace's entitlement without importing billing everywhere
+@Global()
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -29,11 +36,12 @@ import { PlanExpiryReminderService } from './plan-expiry-reminder.service';
       { name: 'KnowledgeSource', schema: KnowledgeSourceSchema },
       { name: 'Notification', schema: NotificationSchema },
       { name: 'User', schema: UserSchema },
+      { name: 'CallLog', schema: CallLogSchema },
     ]),
     NotificationModule,
   ],
-  controllers: [BillingController],
-  providers: [BillingService, UsageMeterService, PlanExpiryReminderService],
-  exports: [BillingService, UsageMeterService, PlanExpiryReminderService],
+  controllers: [BillingController, PlansController],
+  providers: [BillingService, UsageMeterService, PlanExpiryReminderService, SubscriptionService, RazorpayService],
+  exports: [BillingService, UsageMeterService, PlanExpiryReminderService, SubscriptionService, RazorpayService],
 })
 export class BillingModule {}

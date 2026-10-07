@@ -44,6 +44,11 @@ export default () => ({
     restUrl: process.env.UPSTASH_REDIS_REST_URL || '',
     restToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
   },
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+  },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',

@@ -34,19 +34,32 @@ export class Tenant {
     fontFamily?: string;
   };
 
+  /** `expired` = the trial ran out or the subscription lapsed: read-only until they pay. */
   @Prop({
     type: String,
-    enum: ['active', 'suspended', 'trial', 'cancelled'],
+    enum: ['active', 'suspended', 'trial', 'expired', 'cancelled'],
     default: 'trial',
   })
   status: string;
 
   @Prop({
     type: String,
-    enum: ['free', 'starter', 'professional', 'enterprise'],
-    default: 'free',
+    // The first four are the original names, kept so existing workspaces keep working
+    enum: ['free', 'starter', 'professional', 'enterprise', 'trial', 'basic', 'standard', 'premium', 'pro', 'custom'],
+    default: 'trial',
   })
   plan: string;
+
+  /** When the paid period ends. Past this, the workspace goes read-only. */
+  @Prop()
+  planExpiresAt: Date;
+
+  @Prop({ type: String, enum: ['monthly', 'yearly'], default: 'monthly' })
+  billingInterval: string;
+
+  /** For a plan the customer built themselves: what they bought. */
+  @Prop({ type: Object, default: undefined })
+  customPlan: { quota?: Record<string, number>; features?: Record<string, boolean>; priceMonthly?: number };
 
   @Prop({
     type: {

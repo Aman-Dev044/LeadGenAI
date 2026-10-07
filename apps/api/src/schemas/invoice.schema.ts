@@ -8,7 +8,7 @@ export class Invoice {
   @Prop({ required: true, index: true })
   tenantId: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ type: String, index: true })
   subscriptionId: string;
 
   @Prop({ required: true, unique: true })
@@ -17,7 +17,7 @@ export class Invoice {
   @Prop({ required: true })
   amount: number;
 
-  @Prop({ type: String, default: 'USD' })
+  @Prop({ type: String, default: 'INR' })
   currency: string;
 
   @Prop({
@@ -30,11 +30,18 @@ export class Invoice {
   @Prop({ type: String })
   plan: string;
 
-  @Prop({ required: true })
+  @Prop()
   periodStart: Date;
 
-  @Prop({ required: true })
+  @Prop()
   periodEnd: Date;
+
+  @Prop()
+  dueDate: Date;
+
+  /** What this invoice was for: plan, interval, the custom choices, the gateway order. */
+  @Prop({ type: Object, default: {} })
+  metadata: Record<string, any>;
 
   @Prop({ type: String })
   paymentProvider: string;

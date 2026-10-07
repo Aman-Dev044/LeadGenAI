@@ -5,6 +5,7 @@ import { Model } from 'mongoose';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { NotificationService } from '../notification/notification.service';
+import { SubscriptionService } from './subscription.service';
 import { EMAIL_FOOTER_HTML, EMAIL_FOOTER_TEXT } from '../../common/constants/brand';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -41,6 +42,7 @@ export class PlanExpiryReminderService implements OnModuleInit, OnModuleDestroy 
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: IEmailProvider,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
+  private readonly subscriptions: SubscriptionService,
   ) {}
 
   onModuleInit() {
@@ -88,6 +90,8 @@ export class PlanExpiryReminderService implements OnModuleInit, OnModuleDestroy 
         }
       }
       if (sent) this.logger.log(`Sent ${sent} plan renewal reminder(s)`);
+      // Trials and paid periods that have now passed go read-only
+      await this.subscriptions.expireLapsedWorkspaces().catch((err) => this.logger.warn(`Expiry sweep failed: ${err.message}`));
     } catch (err: any) {
       this.logger.error(`Renewal reminder sweep failed: ${err.message}`);
     } finally {

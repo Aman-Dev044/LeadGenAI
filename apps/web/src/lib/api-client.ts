@@ -106,6 +106,10 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         }
       }
     }
+    // 402: the workspace has to pay before it can use the product again
+    if (res.status === 402 && typeof window !== 'undefined' && !window.location.pathname.startsWith('/dashboard/billing')) {
+      window.location.href = '/dashboard/billing';
+    }
     throw new ApiError(res.status, errorData);
   }
 

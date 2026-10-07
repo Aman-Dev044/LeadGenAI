@@ -314,8 +314,8 @@ export const FAQS = [
     a: 'Yes — colours, greeting, avatar, position and tone are all per agent, and you can run different agents on different pages or sites.',
   },
   {
-    q: 'Is there a free plan?',
-    a: 'Yes — one agent, 100 leads and 500 conversations a month, no card required. Paid plans add agents, volume, users and CRM sync.',
+    q: 'Is there a free trial?',
+    a: 'Yes — 14 days with every feature unlocked and 10 AI calls to try on your own leads, no card required. After that, pick a plan from ₹444 a month or build your own.',
   },
 ];
 
@@ -332,47 +332,54 @@ export type Plan = {
 
 export const PLANS: Plan[] = [
   {
-    name: 'Free',
-    tagline: 'Try the basics',
-    monthly: 0,
-    yearly: 0,
-    features: ['1 Agent', '100 Leads', '500 Conversations/mo', '5 Knowledge Sources', '2 Users', 'Community Support'],
-    cta: 'Get started free',
+    name: 'Basic',
+    tagline: 'The AI makes the first call',
+    monthly: 444,
+    yearly: 4440,
+    features: ['5 AI calls a month', 'Recording, transcript and AI summary', 'Personalised WhatsApp after every call', '500 leads · 2 users', 'Pipeline, tasks and meeting reminders'],
+    cta: 'Start 14-day free trial',
     variant: 'outline',
     popular: false,
   },
   {
-    name: 'Starter',
-    tagline: 'For small teams',
-    monthly: 29,
-    yearly: 279,
-    features: ['3 Agents', '1,000 Leads', '2,000 Conversations/mo', '20 Knowledge Sources', '5 Users', 'WhatsApp & Email Support'],
-    cta: 'Start 14-day trial',
-    variant: 'outline',
-    popular: false,
-  },
-  {
-    name: 'Professional',
-    tagline: 'Most popular',
-    monthly: 79,
-    yearly: 759,
-    features: ['10 Agents', '10,000 Leads', '10,000 Conversations/mo', '50 Knowledge Sources', '20 Users', 'Priority Support & CRM Sync'],
-    cta: 'Start 14-day trial',
+    name: 'Standard',
+    tagline: 'For a team that lives on WhatsApp',
+    monthly: 700,
+    yearly: 7000,
+    features: ['15 AI calls a month', 'Two-way WhatsApp AI that replies for you', 'Google Calendar sync and no-show rescue', '2,000 leads · 5 users · 1,000 WhatsApp messages', 'Call playbooks per lead type'],
+    cta: 'Start 14-day free trial',
     variant: 'gradient',
     popular: true,
   },
   {
-    name: 'Enterprise',
-    tagline: 'Scale without limits',
-    monthly: 199,
-    yearly: 1910,
-    features: ['50 Agents', '100,000 Leads', '50,000 Conversations/mo', '200 Knowledge Sources', '100 Users', 'Custom SLA & Dedicated Manager'],
-    cta: 'Contact sales',
+    name: 'Premium',
+    tagline: 'Never miss an enquiry',
+    monthly: 1500,
+    yearly: 15000,
+    features: ['40 AI calls a month', 'Inbound AI receptionist, 24x7', 'Live transfer to a salesperson', 'Bookings and payment links on WhatsApp', '10,000 leads · 15 users · lead scoring and analytics'],
+    cta: 'Start 14-day free trial',
+    variant: 'outline',
+    popular: false,
+  },
+  {
+    name: 'Pro',
+    tagline: 'For agencies and multi-branch teams',
+    monthly: 2400,
+    yearly: 24000,
+    features: ['75 AI calls a month', 'Unlimited leads and chat agents', 'Leads Scrap AI finds new prospects', 'Send e-mail from your own address', 'Your logo and name everywhere · priority support'],
+    cta: 'Start 14-day free trial',
     variant: 'outline',
     popular: false,
   },
 ];
 
+/** Pick your own numbers - priced line by line in the dashboard. */
+export const CUSTOM_PLAN = {
+  name: 'Build your own',
+  tagline: 'Pay for exactly what you use',
+  startsAt: 444,
+  features: ['Choose AI calls, leads, users and WhatsApp volume', 'Add the inbound receptionist or prospecting only if you want them', 'Priced line by line, GST shown before you pay', 'Switch the numbers any month'],
+};
 export const PLAN_EXTRAS: { icon: LucideIcon; label: string }[] = [
   { icon: ShieldCheck, label: 'No setup fee, ever' },
   { icon: Zap, label: 'Every feature on every plan' },

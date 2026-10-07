@@ -12,6 +12,7 @@ import { validate } from './config/env.validation';
 // Guards
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { SubscriptionGuard } from './common/guards/subscription.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
 // Filters & Interceptors
@@ -181,6 +182,8 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Trial over / subscription lapsed: the workspace goes read-only until it pays
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
 
     // Global Filter

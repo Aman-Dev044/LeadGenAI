@@ -15,6 +15,7 @@ import { NotificationService } from '../notification/notification.service';
 import { AssignmentService } from '../lead/assignment.service';
 import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 import { AppointmentService } from '../appointment/appointment.service';
+import { SubscriptionService } from '../billing/subscription.service';
 import { AIProviderFactory } from '../../providers/ai/ai-provider.factory';
 import { EventBusService, PlatformEvents, LeadCreatedPayload, LeadUpdatedPayload, CallPayload, AppointmentPayload } from '../../common/events';
 import { VapiProvider } from './providers/vapi.provider';
@@ -71,6 +72,7 @@ export class CallingService implements OnModuleInit {
     private readonly assignment: AssignmentService,
     private readonly tasks: FollowUpTaskService,
     private readonly appointments: AppointmentService,
+    private readonly subscriptions: SubscriptionService,
     private readonly aiFactory: AIProviderFactory,
     private readonly analysis: CallAnalysisService,
     private readonly vapi: VapiProvider,
@@ -188,6 +190,10 @@ export class CallingService implements OnModuleInit {
     const settings = opts.settings || (await this.getSettings(tenantId));
     const phone = this.normalisePhone(opts.phone || lead.phone);
     if (!phone) throw new BadRequestException('Lead has no valid phone number');
+
+    // The plan says how many AI calls a month this workspace gets
+    const allowance = await this.subscriptions.canPlaceAiCall(tenantId);
+    if (!allowance.ok) throw new BadRequestException(allowance.reason || 'AI calling is not available on your plan right now');
 
     const existing = await this.callModel.findOne({
       tenantId,
@@ -492,6 +498,13 @@ export class CallingService implements OnModuleInit {
     }
     if (['won', 'lost'].includes(lead.status) && call.reason !== 'manual') {
       await this.markFailed(call, `Lead is already ${lead.status}`);
+      return false;
+    }
+
+    const allowance = await this.subscriptions.canPlaceAiCall(tenantId);
+    if (!allowance.ok) {
+      await this.markFailed(call, allowance.reason || 'Monthly AI call limit reached');
+      await this.notifyAdmins(tenantId, 'AI calling paused', allowance.reason || 'The monthly AI call limit is used up.', lead).catch(() => undefined);
       return false;
     }
 

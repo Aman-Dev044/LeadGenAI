@@ -1,574 +1,151 @@
 'use client';
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { Check, Zap, XCircle, FileText, CreditCard, ArrowUp, ArrowDown, Sparkles, CalendarDays, Receipt, Gauge, Crown, Rocket, Building2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, CalendarDays, CreditCard, FileText, Gauge, PhoneCall, Users, MessageCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
-import { useAuthStore } from '@/store/auth-store';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PageHeader } from '@/components/shared/page-header';
 import { Loading } from '@/components/shared/loading';
 import { EmptyState } from '@/components/shared/empty-state';
-import { formatCurrency, formatDate, cn } from '@/lib/utils';
+import { PlanPicker } from '@/components/billing/plan-picker';
+import { formatDate, cn } from '@/lib/utils';
 
-const PLAN_ORDER = ['free', 'starter', 'professional', 'enterprise'];
+const inr = (n: number) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
-const PLAN_META: Record<string, { icon: any; tagline: string }> = {
-  free: { icon: Sparkles, tagline: 'Try the basics' },
-  starter: { icon: Zap, tagline: 'For small teams' },
-  professional: { icon: Rocket, tagline: 'Most popular' },
-  enterprise: { icon: Building2, tagline: 'Scale without limits' },
-};
-
-const planFeatures: Record<string, string[]> = {
-  free: ['1 Agent', '100 Leads', '500 Conversations/mo', '5 Knowledge Sources', '2 Users'],
-  starter: ['3 Agents', '1,000 Leads', '2,000 Conversations/mo', '20 Knowledge Sources', '5 Users'],
-  professional: ['10 Agents', '10,000 Leads', '10,000 Conversations/mo', '50 Knowledge Sources', '20 Users'],
-  enterprise: ['50 Agents', '100,000 Leads', '50,000 Conversations/mo', '200 Knowledge Sources', '100 Users'],
-};
-
-const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-  active: 'success', trialing: 'warning', cancelled: 'destructive', past_due: 'destructive', paused: 'secondary',
-};
-
-const invoiceStatusVariant: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'secondary'> = {
-  paid: 'success', pending: 'warning', failed: 'destructive', refunded: 'secondary', draft: 'default',
-};
+/** One quota line: how much of the month's allowance is gone. */
+function UsageBar({ icon: Icon, label, used, quota }: { icon: any; label: string; used: number; quota: number }) {
+  const unlimited = quota < 0;
+  const pct = unlimited ? 0 : Math.min(100, Math.round((used / Math.max(1, quota)) * 100));
+  const tone = pct >= 100 ? 'text-destructive' : pct >= 80 ? 'text-amber-600' : 'text-muted-foreground';
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="flex items-center gap-1.5 font-medium"><Icon className="h-3.5 w-3.5 text-primary" /> {label}</span>
+        <span className={cn('tabular text-xs', tone)}>
+          {used.toLocaleString('en-IN')} {unlimited ? '· unlimited' : `/ ${quota.toLocaleString('en-IN')}`}
+        </span>
+      </div>
+      {!unlimited && <Progress value={pct} className={cn(pct >= 100 && '[&>div]:bg-destructive', pct >= 80 && pct < 100 && '[&>div]:bg-amber-500')} />}
+    </div>
+  );
+}
 
 export default function BillingPage() {
-  const queryClient = useQueryClient();
-
-  // Monthly / Yearly interval toggle
-  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
-
-  // Plan change confirmation
-  const [changePlan, setChangePlan] = useState<{ plan: string; direction: 'upgrade' | 'downgrade' } | null>(null);
-
-  // Cancel
-  const [showCancel, setShowCancel] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-
-  // Invoices
-  const [showInvoices, setShowInvoices] = useState(false);
-  const [invoicePage, setInvoicePage] = useState(1);
-
-  const activeTenantId = useAuthStore((s) => s.activeTenantId);
-
-  const { data: subData, isLoading } = useQuery({
-    queryKey: ['billing', activeTenantId, 'subscription'],
-    queryFn: () => api.get<any>('/billing/current'),
+  const { data, isLoading } = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () => api.get<any>('/billing/subscription'),
   });
+  const sub = (data as any)?.data || (data as any);
 
-  const { data: usageData } = useQuery({
-    queryKey: ['billing', activeTenantId, 'usage'],
-    queryFn: () => api.get<any>('/billing/usage'),
+  const { data: invData } = useQuery({
+    queryKey: ['billing-invoices'],
+    queryFn: () => api.get<any>('/billing/invoices', { limit: 10 }),
   });
+  const invoices = (invData as any)?.data?.data || (invData as any)?.data || [];
 
-  const { data: plansData } = useQuery({
-    queryKey: ['billing', 'plans'],
-    queryFn: () => api.get<any>('/billing/plans'),
-  });
+  if (isLoading) return <Loading label="Loading your plan" />;
 
-  const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
-    queryKey: ['billing', activeTenantId, 'invoices', invoicePage],
-    queryFn: () => api.get<any>('/billing/invoices', { page: invoicePage, limit: 10 }),
-    enabled: showInvoices,
-  });
-
-  const upgradeMutation = useMutation({
-    mutationFn: ({ plan, interval }: { plan: string; interval: 'monthly' | 'yearly' }) =>
-      api.patch('/billing/upgrade', { plan, interval }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billing'] });
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
-      setChangePlan(null);
-      toast.success('Plan upgraded successfully');
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const downgradeMutation = useMutation({
-    mutationFn: ({ plan, interval }: { plan: string; interval: 'monthly' | 'yearly' }) =>
-      api.patch('/billing/downgrade', { plan, interval }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billing'] });
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
-      setChangePlan(null);
-      toast.success('Plan downgraded');
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const payInvoiceMutation = useMutation({
-    mutationFn: (invoiceId: string) => api.patch(`/billing/invoices/${invoiceId}/pay`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billing'] });
-      toast.success('Invoice marked as paid');
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: (reason?: string) => api.post('/billing/cancel', reason ? { reason } : undefined),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['billing'] });
-      setShowCancel(false);
-      setCancelReason('');
-      toast.success('Subscription cancelled. Reverted to Free plan.');
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  if (isLoading) return <Loading label="Loading billing" />;
-
-  const subscription = (subData as any)?.data || {};
-  const usageRaw = (usageData as any)?.data || {};
-  const usage = usageRaw?.usage || {};
-  const limits = usageRaw?.limits || {};
-  const backendPlans = (plansData as any)?.data || [];
-  const currentPlan = subscription.plan || 'free';
-  const currentIndex = PLAN_ORDER.indexOf(currentPlan);
-  const subStatus = subscription.status || 'active';
-
-  // Build plans with backend data if available
-  const getPlanPrice = (plan: string, interval: 'monthly' | 'yearly' = billingInterval) => {
-    const bp = Array.isArray(backendPlans) ? backendPlans.find((p: any) => p.name === plan) : null;
-    if (interval === 'yearly') {
-      return bp?.priceYearly ?? { free: 0, starter: 279, professional: 759, enterprise: 1910 }[plan] ?? 0;
-    }
-    return bp?.priceMonthly ?? { free: 0, starter: 29, professional: 79, enterprise: 199 }[plan] ?? 0;
-  };
-
-  const getPlanLimits = (plan: string) => {
-    const bp = Array.isArray(backendPlans) ? backendPlans.find((p: any) => p.name === plan) : null;
-    return bp?.limits || null;
-  };
-
-  const handlePlanChange = () => {
-    if (!changePlan) return;
-    if (changePlan.direction === 'upgrade') {
-      upgradeMutation.mutate({ plan: changePlan.plan, interval: billingInterval });
-    } else {
-      downgradeMutation.mutate({ plan: changePlan.plan, interval: billingInterval });
-    }
-  };
-
-  const invoices = (invoicesData as any)?.data?.data || (invoicesData as any)?.data || [];
-  const invoicesTotalPages = (invoicesData as any)?.data?.totalPages || 1;
-
-  // Usage bars data
-  const usageBars = [
-    { label: 'Conversations', used: usage.conversations ?? 0, limit: limits.maxConversationsPerMonth ?? 0 },
-    { label: 'Leads', used: usage.leads ?? 0, limit: limits.maxLeads ?? 0 },
-    { label: 'Knowledge Sources', used: usage.kbSources ?? 0, limit: limits.maxKnowledgeSources ?? 0 },
-    { label: 'Agents', used: usage.agents ?? 0, limit: limits.maxAgents ?? 0 },
-    { label: 'Users', used: usage.users ?? 0, limit: limits.maxUsers ?? 0 },
-    { label: 'AI Tokens', used: usage.aiTokensUsed ?? 0, limit: 0 },
-    { label: 'Emails Sent', used: usage.emailsSent ?? 0, limit: 0 },
-    { label: 'SMS Sent', used: usage.smsSent ?? 0, limit: 0 },
-  ].filter((item) => item.limit > 0 || item.used > 0);
-
-  const CurrentIcon = PLAN_META[currentPlan]?.icon || Sparkles;
-  const usageTone = (pct: number): 'success' | 'warning' | 'danger' => (pct < 70 ? 'success' : pct < 90 ? 'warning' : 'danger');
+  const locked = sub?.requiresPayment;
+  const trial = sub?.trial;
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
+        title="Plan & billing"
+        description="What your workspace is on, how much of it you have used, and how to change it."
         icon={CreditCard}
-        title="Billing"
-        description="Your plan, monthly usage and invoices in one place."
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setShowInvoices(true); setInvoicePage(1); }}>
-              <FileText className="h-4 w-4" /> Invoices
-            </Button>
-            {currentPlan !== 'free' && subStatus === 'active' && (
-              <Button variant="outline" className="text-rose-600 hover:text-rose-600 hover:bg-rose-500/10 hover:border-rose-500/40" onClick={() => setShowCancel(true)}>
-                <XCircle className="h-4 w-4" /> Cancel Subscription
-              </Button>
-            )}
-          </div>
-        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-3 mb-6">
-        {/* Current Subscription hero */}
-        <Card className="relative overflow-hidden lg:col-span-1 border-0 text-white shadow-glow">
-          <div className="absolute inset-0 bg-brand-gradient" />
-          <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/15 blur-2xl" />
-          <div className="pointer-events-none absolute -left-10 -bottom-16 h-40 w-40 rounded-full bg-black/10 blur-2xl" />
-          <div className="relative p-6 flex flex-col h-full">
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider backdrop-blur">
-                <Crown className="h-3.5 w-3.5" /> Current plan
-              </span>
-              <span className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize backdrop-blur',
-                subStatus === 'active' ? 'bg-emerald-400/25 text-white' : subStatus === 'trialing' ? 'bg-amber-300/30 text-white' : 'bg-rose-400/30 text-white',
-              )}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" /> {subStatus.replace('_', ' ')}
-              </span>
-            </div>
-            <div className="mt-6 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur">
-                <CurrentIcon className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold capitalize leading-none tracking-tight">{currentPlan}</p>
-                <p className="mt-1 text-sm text-white/80">{PLAN_META[currentPlan]?.tagline}</p>
-              </div>
-            </div>
-            <p className="mt-5 text-4xl font-bold tabular leading-none">
-              {formatCurrency(getPlanPrice(currentPlan))}
-              <span className="text-base font-medium text-white/75">/mo</span>
-            </p>
-            <div className="mt-auto pt-6 space-y-2 text-sm text-white/85">
-              {subscription.currentPeriodStart && (
-                <div className="flex items-center justify-between"><span className="text-white/70">Period start</span><span className="font-medium">{formatDate(subscription.currentPeriodStart)}</span></div>
-              )}
-              {subscription.currentPeriodEnd && (
-                <div className="flex items-center justify-between"><span className="text-white/70">Renews on</span><span className="font-medium">{formatDate(subscription.currentPeriodEnd)}</span></div>
-              )}
-              {subscription.trialEndsAt && (
-                <div className="flex items-center justify-between"><span className="text-white/70">Trial ends</span><span className="font-medium">{formatDate(subscription.trialEndsAt)}</span></div>
-              )}
-              {subscription.cancelledAt && (
-                <div className="flex items-center justify-between"><span className="text-white/70">Cancelled</span><span className="font-medium">{formatDate(subscription.cancelledAt)}</span></div>
-              )}
-              {!subscription.currentPeriodStart && !subscription.currentPeriodEnd && !subscription.trialEndsAt && !subscription.cancelledAt && (
-                <p className="flex items-center gap-2 text-white/75"><CalendarDays className="h-4 w-4" /> No billing period yet</p>
+      {/* Where they stand */}
+      <Card className={cn(locked && 'border-destructive/50', trial && !locked && 'border-amber-500/40')}>
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold">{sub?.planName || 'No plan'}</h2>
+              {locked ? (
+                <Badge variant="destructive" dot>Payment needed</Badge>
+              ) : trial ? (
+                <Badge variant="warning" dot>Free trial</Badge>
+              ) : (
+                <Badge variant="success" dot>Active</Badge>
               )}
             </div>
+            {locked ? (
+              <p className="flex items-center gap-1.5 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {trial ? 'Your free trial has ended.' : 'Your subscription has ended.'} Pick a plan below to switch everything back on.
+              </p>
+            ) : sub?.expiresAt ? (
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                {trial ? 'Trial ends' : 'Renews'} on {formatDate(sub.expiresAt)} · {sub.daysLeft} day{sub.daysLeft === 1 ? '' : 's'} left
+              </p>
+            ) : null}
           </div>
-        </Card>
+          <div className="rounded-xl bg-muted/50 px-5 py-3 text-center">
+            <p className="text-2xl font-black text-primary">{sub?.quota?.aiCalls < 0 ? '∞' : sub?.quota?.aiCalls ?? 0}</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">AI calls a month</p>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Usage */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Gauge className="h-4 w-4 text-primary" /> Current usage</CardTitle>
-              <CardDescription>Consumption this billing period against your plan limits.</CardDescription>
+      {/* This month */}
+      {sub?.usage && (
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold"><Gauge className="h-4 w-4 text-primary" /> This month</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <UsageBar icon={PhoneCall} label="AI calls" used={sub.usage.aiCalls} quota={sub.quota.aiCalls} />
+              <UsageBar icon={MessageCircle} label="WhatsApp messages" used={sub.usage.whatsappMessages} quota={sub.quota.whatsappMessages} />
+              <UsageBar icon={Users} label="Team members" used={sub.usage.users} quota={sub.quota.users} />
+              <UsageBar icon={FileText} label="Leads" used={sub.usage.leads} quota={sub.quota.leads} />
             </div>
-          </CardHeader>
-          <CardContent>
-            {usageBars.length === 0 ? (
-              <EmptyState compact icon={Gauge} title="No usage yet" description="Usage meters appear once your agents start handling conversations." />
-            ) : (
-              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                {usageBars.map((item) => {
-                  const pct = item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
-                  const tone = usageTone(pct);
-                  return (
-                    <div key={item.label}>
-                      <div className="flex items-baseline justify-between text-sm mb-1.5">
-                        <span className="font-medium">{item.label}</span>
-                        <span className="text-xs text-muted-foreground tabular">
-                          <span className="font-semibold text-foreground">{item.used.toLocaleString()}</span>
-                          {item.limit > 0 ? ` / ${item.limit.toLocaleString()}` : ''}
-                          {item.limit > 0 && (
-                            <span className={cn(
-                              'ml-2 rounded-full px-1.5 py-px text-[10px] font-semibold',
-                              tone === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-                              tone === 'warning' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-                              tone === 'danger' && 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-                            )}>{Math.round(pct)}%</span>
-                          )}
-                        </span>
-                      </div>
-                      {item.limit > 0 ? (
-                        <Progress value={pct} tone={tone} />
-                      ) : (
-                        <Progress value={100} tone="primary" className="opacity-40" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Plans */}
+      <div>
+        <h2 className="mb-3 text-lg font-bold">{locked ? 'Choose a plan to carry on' : 'Plans'}</h2>
+        <PlanPicker />
       </div>
 
-      {/* Plans Header & Sliding Toggle */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-        <div>
-          <h3 className="text-lg font-semibold tracking-tight">Available plans</h3>
-          <p className="text-sm text-muted-foreground">Upgrade or downgrade any time. Changes apply immediately.</p>
-        </div>
-
-        {/* Liquid sliding pill toggle (matching Login page toggle style) */}
-        <div className="relative flex w-full max-w-[270px] p-1.5 rounded-full bg-slate-200/85 dark:bg-slate-800/90 border border-slate-300/70 dark:border-slate-700/80 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.08)] backdrop-blur-md self-start sm:self-auto">
-          <div
-            className={cn(
-              'absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] rounded-full bg-white/95 dark:bg-slate-900/95 border border-white/80 dark:border-white/10 shadow-[0_2px_10px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)]',
-              billingInterval === 'monthly' ? 'left-1.5' : 'left-[calc(50%+1.5px)]',
-            )}
-          />
-          <button
-            type="button"
-            onClick={() => setBillingInterval('monthly')}
-            className={cn(
-              'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none',
-              billingInterval === 'monthly'
-                ? 'text-slate-900 dark:text-white font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
-            )}
-          >
-            <span>Monthly</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBillingInterval('yearly')}
-            className={cn(
-              'relative z-10 flex-1 py-1.5 text-[13px] rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none',
-              billingInterval === 'yearly'
-                ? 'text-slate-900 dark:text-white font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium',
-            )}
-          >
-            <span>Yearly</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 leading-none">
-              -20%
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
-        {PLAN_ORDER.map((plan) => {
-          const planIndex = PLAN_ORDER.indexOf(plan);
-          const isCurrent = currentPlan === plan;
-          const isUpgrade = planIndex > currentIndex;
-          const isDowngrade = planIndex < currentIndex;
-          const bl = getPlanLimits(plan);
-          const meta = PLAN_META[plan];
-          const PlanIcon = meta?.icon || Sparkles;
-          const highlight = plan === 'professional' && !isCurrent;
-          const planPrice = getPlanPrice(plan, billingInterval);
-
-          return (
-            <Card
-              key={plan}
-              className={cn(
-                'relative flex flex-col transition-all',
-                isCurrent && 'ring-2 ring-primary border-primary/40 shadow-glow',
-                highlight && 'border-violet-500/40',
-              )}
-            >
-              {isCurrent && (
-                <Badge variant="solid" className="absolute -top-2.5 left-4 shadow-sm"><Check className="h-3 w-3" /> Current</Badge>
-              )}
-              {highlight && (
-                <Badge variant="violet" className="absolute -top-2.5 left-4 shadow-sm"><Sparkles className="h-3 w-3" /> Popular</Badge>
-              )}
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className={cn('flex h-9 w-9 items-center justify-center rounded-xl', isCurrent ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary')}>
-                    <PlanIcon className="h-[18px] w-[18px]" />
-                  </div>
-                  <div>
-                    <CardTitle className="capitalize">{plan}</CardTitle>
-                    <CardDescription className="text-xs">{meta?.tagline}</CardDescription>
-                  </div>
-                </div>
-                <div className="pt-3">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold tabular tracking-tight">{formatCurrency(planPrice)}</span>
-                    <span className="text-sm text-muted-foreground">/{billingInterval === 'yearly' ? 'yr' : 'mo'}</span>
-                    {billingInterval === 'yearly' && plan !== 'free' && (
-                      <Badge variant="success" className="text-[10px] ml-1 py-0 px-1.5 font-semibold">Save 20%</Badge>
-                    )}
-                  </div>
-                  {billingInterval === 'yearly' && plan !== 'free' ? (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      billed annually (${Math.round(planPrice / 12).toLocaleString()}/mo)
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {plan === 'free' ? 'Free forever' : 'billed monthly'}
-                    </p>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1">
-                <ul className="space-y-2.5">
-                  {(bl ? [
-                    `${bl.maxAgents} Agent${bl.maxAgents > 1 ? 's' : ''}`,
-                    `${bl.maxLeads?.toLocaleString()} Leads`,
-                    `${bl.maxConversationsPerMonth?.toLocaleString()} Conversations/mo`,
-                    `${bl.maxKnowledgeSources} Knowledge Sources`,
-                    `${bl.maxUsers} Users`,
-                  ] : planFeatures[plan] || []).map((feature: string) => (
-                    <li key={feature} className="flex items-center gap-2.5 text-sm">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3 w-3" strokeWidth={3} />
-                      </span>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              <CardFooter>
-                {isCurrent ? (
-                  <Button variant="soft" className="w-full" disabled>Current Plan</Button>
-                ) : isUpgrade ? (
-                  <Button variant={highlight ? 'gradient' : 'default'} className="w-full" onClick={() => setChangePlan({ plan, direction: 'upgrade' })}>
-                    <ArrowUp className="h-4 w-4" /> Upgrade
-                  </Button>
-                ) : isDowngrade ? (
-                  <Button variant="outline" className="w-full" onClick={() => setChangePlan({ plan, direction: 'downgrade' })}>
-                    <ArrowDown className="h-4 w-4" /> Downgrade
-                  </Button>
-                ) : null}
-              </CardFooter>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Plan Change Confirmation */}
-      <Dialog open={!!changePlan} onOpenChange={() => setChangePlan(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{changePlan?.direction === 'upgrade' ? 'Upgrade' : 'Downgrade'} Plan</DialogTitle>
-            <DialogDescription>
-              {changePlan?.direction === 'upgrade'
-                ? `Are you sure you want to upgrade from ${currentPlan} to ${changePlan?.plan}? You will be charged ${formatCurrency(getPlanPrice(changePlan?.plan || '', billingInterval))}/${billingInterval === 'yearly' ? 'yr' : 'mo'}.`
-                : `Are you sure you want to downgrade from ${currentPlan} to ${changePlan?.plan}? Your limits will be reduced. If current usage exceeds the new limits, some features may be restricted.`
-              }
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-center gap-3 rounded-xl border bg-muted/40 p-4 text-sm">
-            <span className="capitalize font-semibold">{currentPlan}</span>
-            <span className="text-muted-foreground">→</span>
-            <span className="capitalize font-semibold text-primary">{changePlan?.plan}</span>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setChangePlan(null)}>Cancel</Button>
-            <Button
-              variant={changePlan?.direction === 'upgrade' ? 'default' : 'outline'}
-              onClick={handlePlanChange}
-              disabled={upgradeMutation.isPending || downgradeMutation.isPending}
-            >
-              {(upgradeMutation.isPending || downgradeMutation.isPending)
-                ? 'Processing...'
-                : changePlan?.direction === 'upgrade' ? 'Confirm Upgrade' : 'Confirm Downgrade'
-              }
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cancel Subscription Dialog */}
-      <Dialog open={showCancel} onOpenChange={setShowCancel}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Subscription</DialogTitle>
-            <DialogDescription>
-              Are you sure? Your subscription will be cancelled immediately and you will be reverted to the Free plan. All data will be preserved but limits will be reduced.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label>Reason for cancellation <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Textarea
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              rows={3}
-              placeholder="Tell us why you're cancelling..."
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowCancel(false); setCancelReason(''); }}>Keep Subscription</Button>
-            <Button
-              variant="destructive"
-              onClick={() => cancelMutation.mutate(cancelReason.trim() || undefined)}
-              disabled={cancelMutation.isPending}
-            >
-              {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Subscription'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Invoices Dialog */}
-      <Dialog open={showInvoices} onOpenChange={setShowInvoices}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Invoices</DialogTitle>
-            <DialogDescription>Your billing history and invoices</DialogDescription>
-          </DialogHeader>
-
-          {invoicesLoading ? (
-            <Loading label="Loading invoices" />
-          ) : !Array.isArray(invoices) || invoices.length === 0 ? (
-            <EmptyState compact icon={Receipt} title="No invoices yet" description="Invoices will show up here after your first paid billing cycle." />
+      {/* Invoices */}
+      <Card>
+        <CardContent className="p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-primary" /> Invoices</h3>
+          {invoices.length === 0 ? (
+            <EmptyState icon={FileText} title="No invoices yet" description="Your first invoice appears here once you pay for a plan." compact />
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Date</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((inv: any) => (
+                  <TableRow key={inv._id}>
+                    <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
+                    <TableCell className="text-sm">{formatDate(inv.createdAt)}</TableCell>
+                    <TableCell className="tabular text-sm">{inr(inv.amount)}</TableCell>
+                    <TableCell>
+                      <Badge variant={inv.status === 'paid' ? 'success' : inv.status === 'failed' ? 'destructive' : 'warning'}>
+                        {inv.status}
+                      </Badge>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((inv: any) => (
-                    <TableRow key={inv._id}>
-                      <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
-                      <TableCell><Badge variant="outline">{inv.plan}</Badge></TableCell>
-                      <TableCell className="font-semibold tabular">{formatCurrency(inv.amount, inv.currency || 'USD')}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={invoiceStatusVariant[inv.status] || 'default'} dot>
-                            {inv.status}
-                          </Badge>
-                          {inv.status === 'pending' && (
-                            <Button
-                              size="sm"
-                              variant="soft"
-                              className="h-6 text-[11px] px-2"
-                              onClick={() => payInvoiceMutation.mutate(inv._id)}
-                              disabled={payInvoiceMutation.isPending}
-                            >
-                              {payInvoiceMutation.isPending ? 'Paying...' : 'Pay Now'}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {inv.periodStart && inv.periodEnd
-                          ? `${formatDate(inv.periodStart)} – ${formatDate(inv.periodEnd)}`
-                          : '—'
-                        }
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatDate(inv.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {invoicesTotalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-3">
-                  <Button size="sm" variant="outline" disabled={invoicePage <= 1} onClick={() => setInvoicePage(invoicePage - 1)}>Prev</Button>
-                  <span className="text-xs text-muted-foreground tabular">Page {invoicePage} of {invoicesTotalPages}</span>
-                  <Button size="sm" variant="outline" disabled={invoicePage >= invoicesTotalPages} onClick={() => setInvoicePage(invoicePage + 1)}>Next</Button>
-                </div>
-              )}
-            </>
+                ))}
+              </TableBody>
+            </Table>
           )}
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
     </div>
   );
 }
