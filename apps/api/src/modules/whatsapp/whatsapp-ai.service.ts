@@ -13,6 +13,7 @@ import { AppointmentService } from '../appointment/appointment.service';
 import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 import { NotificationService } from '../notification/notification.service';
 import { CallingService } from '../calling/calling.service';
+import { WebsiteService } from '../website/website.service';
 import { genderPromptRule, resolveAgentGender, resolveCallingSettings } from '../calling/calling-settings';
 import { dateToWords } from '../calling/speech-text';
 import { TwilioWhatsAppSender } from './twilio-whatsapp.sender';
@@ -104,6 +105,7 @@ export class WhatsAppAiService implements OnModuleInit {
     private readonly tasks: FollowUpTaskService,
     private readonly notifications: NotificationService,
     private readonly calling: CallingService,
+    private readonly website: WebsiteService,
     private readonly sender: TwilioWhatsAppSender,
     private readonly bus: EventBusService,
     private readonly chatGateway: ChatGateway,
@@ -449,15 +451,16 @@ export class WhatsAppAiService implements OnModuleInit {
     const lastBot = [...history].reverse().find((m) => m.sender !== 'visitor');
     if (lastBot && new Date(lastBot.createdAt) > new Date(lastUser.createdAt) && !opts.force) return;
 
-    const [context, knowledge, media, booking, forms] = await Promise.all([
+    const [context, knowledge, media, booking, forms, businessBrief] = await Promise.all([
       this.leadContext(tenantId, lead),
       settings.useKnowledgeBase ? this.knowledgeFor(tenantId, history) : Promise.resolve(''),
       settings.sendMedia ? this.mediaModel.find({ tenantId }).select('title description tags mimeType').limit(60).lean() : Promise.resolve([]),
       this.bookingModel.findOne({ tenantId, leadId: String(lead._id), status: 'collecting' }).sort({ updatedAt: -1 }).lean(),
       Promise.resolve(settings.bookings.enabled ? settings.bookings.forms : []),
+      this.website.briefFor(tenantId).catch(() => ''),
     ]);
 
-    const system = this.systemPrompt(settings, lead, context, knowledge, media as any[], forms, booking);
+    const system = this.systemPrompt(settings, lead, context, knowledge, media as any[], forms, booking, businessBrief);
     const messages: ChatMessage[] = [{ role: 'system', content: system }];
     let imagesUsed = 0;
     for (const m of history) {
@@ -702,6 +705,7 @@ export class WhatsAppAiService implements OnModuleInit {
     media: any[],
     forms: BookingForm[],
     booking: any,
+    businessBrief?: string,
   ): string {
     const agent = s.agentName || s.callingAgentName || 'Priya';
     const now = new Date().toLocaleString('en-IN', { timeZone: s.timezone, dateStyle: 'full', timeStyle: 'short' });
@@ -720,6 +724,21 @@ export class WhatsAppAiService implements OnModuleInit {
       `What we offer: ${s.instructions || 'See the knowledge base and context below.'}`,
       `CUSTOMER CONTEXT (from calls, meetings and our CRM - use it, do not ask again for what you already know):\n${context}`,
     ];
+    if (businessBrief) {
+      parts.push(
+        `FROM OUR OWN WEBSITE (facts about this business - answer from them, never contradict or go beyond them):\n${businessBrief}`,
+      );
+      parts.push(
+        [
+          'YOU WORK FOR THIS BUSINESS - SELL IT:',
+          '- Speak as "we" and "our". Our own service is always the answer you recommend, with conviction.',
+          '- On price, lead with what is included and the value. If our website promises something on price, say it.',
+          '- Never name or suggest another company. Bring every comparison back to what we do well.',
+          '- Close every exchange with a next step: a meeting, a callback, or the booking.',
+          '- Enthusiasm yes, invention never - only what the website above actually says.',
+        ].join('\n'),
+      );
+    }
     if (knowledge) parts.push(`KNOWLEDGE BASE (use for facts; if something is not here, say you will confirm with the team instead of inventing):\n${knowledge}`);
     if (media.length) {
       parts.push(

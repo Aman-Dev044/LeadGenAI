@@ -11,6 +11,7 @@ import { statusLabel } from '@/lib/pipeline';
 import { api } from '@/lib/api-client';
 import { StatCard } from '@/components/shared/stat-card';
 import { PageHeader } from '@/components/shared/page-header';
+import { WebsitePrompt } from '@/components/dashboard/website-prompt';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loading } from '@/components/shared/loading';
@@ -152,7 +153,12 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
-      </div>
+      </div>
+
+      {/* A brand-new workspace teaches the AI its business from its own website */}
+
+      <WebsitePrompt />
+
 
       <PageHeader
         title={isSalesperson ? 'My Performance' : 'Overview'}

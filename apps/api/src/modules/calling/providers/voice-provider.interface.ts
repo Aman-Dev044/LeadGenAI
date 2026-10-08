@@ -60,6 +60,12 @@ export interface OutboundCallRequest {
   direction?: 'outbound' | 'inbound';
   /** Tenant timezone, so "tomorrow 11am" resolves correctly. */
   timezone: string;
+  /**
+   * What the workspace's own website says they sell - services, prices, hours,
+   * the questions customers ask. Built by WebsiteService from a real crawl, so
+   * the agent answers from the business's own words rather than guessing.
+   */
+  businessBrief?: string;
   /** Live transfer destinations, in order of preference. Empty = no transfer tool. */
   transfer?: {
     destinations: { number: string; label: string }[];

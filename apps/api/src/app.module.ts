@@ -48,6 +48,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { WebsiteModule } from './modules/website/website.module';
 import { FollowUpModule } from './modules/follow-up/follow-up.module';
 import { VisitorTrackingModule } from './modules/visitor-tracking/visitor-tracking.module';
 import { BillingModule } from './modules/billing/billing.module';
@@ -152,6 +153,7 @@ import { AuditLogSchema } from './schemas/audit-log.schema';
     AppointmentModule,
     CalendarModule,
     WhatsAppModule,
+    WebsiteModule,
     FollowUpModule,
     VisitorTrackingModule,
     BillingModule,

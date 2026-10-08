@@ -127,6 +127,13 @@ export class Tenant {
   @Prop({ type: Object, default: {} })
   callingSettings: Record<string, any>;
 
+  /**
+   * The workspace's own website: the address, what we read from it, and the
+   * business profile the AI agents sell from. See WebsiteService.
+   */
+  @Prop({ type: Object, default: {} })
+  website: Record<string, any>;
+
   /** Two-way WhatsApp AI: persona, booking forms, media rules. See WhatsAppAiSettings. */
   @Prop({ type: Object, default: {} })
   whatsappSettings: Record<string, any>;

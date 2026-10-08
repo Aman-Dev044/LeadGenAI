@@ -16,6 +16,7 @@ import { AssignmentService } from '../lead/assignment.service';
 import { FollowUpTaskService } from '../follow-up-task/follow-up-task.service';
 import { AppointmentService } from '../appointment/appointment.service';
 import { SubscriptionService } from '../billing/subscription.service';
+import { WebsiteService } from '../website/website.service';
 import { AIProviderFactory } from '../../providers/ai/ai-provider.factory';
 import { EventBusService, PlatformEvents, LeadCreatedPayload, LeadUpdatedPayload, CallPayload, AppointmentPayload } from '../../common/events';
 import { VapiProvider } from './providers/vapi.provider';
@@ -74,6 +75,7 @@ export class CallingService implements OnModuleInit {
     private readonly tasks: FollowUpTaskService,
     private readonly appointments: AppointmentService,
     private readonly subscriptions: SubscriptionService,
+    private readonly website: WebsiteService,
     private readonly aiFactory: AIProviderFactory,
     private readonly analysis: CallAnalysisService,
     private readonly vapi: VapiProvider,
@@ -1038,6 +1040,8 @@ export class CallingService implements OnModuleInit {
     }
     return {
       timezone: settings.timezone,
+      // The agent sells from the workspace's own website, not from guesswork
+      businessBrief: await this.website.briefFor(tenantId).catch(() => ''),
       transfer: destinations.length
         ? { destinations, message: settings.transfer.message, instructions: settings.transfer.instructions }
         : undefined,

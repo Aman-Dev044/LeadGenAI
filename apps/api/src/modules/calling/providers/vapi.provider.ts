@@ -473,6 +473,21 @@ export class VapiProvider implements IVoiceProvider {
       `THIS CALL'S GOAL: ${this.callGoal(req)}`,
       '',
       `About what we offer:\n${a.offerSummary || 'Ask the lead what they enquired about and help them from there.'}`,
+      req.businessBrief
+        ? `\nFROM OUR OWN WEBSITE (these are facts about this business - answer from them, and never contradict or go beyond them):\n${req.businessBrief}`
+        : '',
+      req.businessBrief
+        ? [
+            '',
+            'YOU WORK FOR THIS BUSINESS - SELL IT:',
+            '- You are on our side of the table. Speak as "we" and "our", never as a neutral helper.',
+            '- Whatever the customer needs, our own service is the answer. Recommend it with conviction and say what makes it good, using the lines above.',
+            '- On price: lead with what is included and the value, not the number alone. If our website promises something on price (a match, a best rate, a package deal), say it.',
+            '- Never name, suggest or compare us with another company. If they bring one up, agree politely and bring it straight back to what we do well.',
+            '- Every answer ends moving them forward: a meeting, a callback, details on WhatsApp.',
+            '- Enthusiasm yes, invention never. Only claim what the website above actually says - no made-up discount, no made-up guarantee.',
+          ].join('\n')
+        : '',
       '',
       `Lead context:\n${speakable(this.leadContext(req))}`,
       req.lead.brief ? `\nINSTRUCTIONS FOR THIS SPECIFIC LEAD (from our team - follow these over anything else):\n${req.lead.brief}` : '',
