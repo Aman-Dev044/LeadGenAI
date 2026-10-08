@@ -25,11 +25,17 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
+              // Razorpay's checkout is a hosted script that opens its own payment
+              // frame on this page - both have to be allowed or nothing opens
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com",
+              "style-src 'self' 'unsafe-inline' https://*.razorpay.com",
               "img-src 'self' data: https: blob:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://*.razorpay.com",
               "connect-src 'self' ws: wss: http://localhost:* https://*",
+              "frame-src 'self' https://*.razorpay.com https://api.razorpay.com",
+              "child-src 'self' https://*.razorpay.com",
+              // Razorpay posts the card form to its own domain
+              "form-action 'self' https://*.razorpay.com",
               "frame-ancestors 'none'",
             ].join('; '),
           },
