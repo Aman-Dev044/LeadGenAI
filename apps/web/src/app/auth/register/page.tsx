@@ -21,6 +21,7 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   phone: z.string().optional(),
+  websiteUrl: z.string().optional(),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -100,6 +101,13 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <Label htmlFor="phone">Phone (optional)</Label>
               <Input id="phone" type="tel" placeholder="+91 98765 43210" {...register('phone')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="websiteUrl">Your website (optional)</Label>
+              <Input id="websiteUrl" placeholder="yourcompany.com" {...register('websiteUrl')} />
+              <p className="text-xs text-muted-foreground">
+                We read it and your AI agents learn what you sell, your prices and your cities - before your first lead arrives.
+              </p>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

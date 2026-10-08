@@ -26,6 +26,7 @@ export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 import { IEmailProvider } from '../../common/interfaces';
 import { EMAIL_PROVIDER } from '../../providers/email/email.module';
 import { PlatformSettingsService } from '../platform/platform-settings.service';
+import { WebsiteService } from '../website/website.service';
 import { EMAIL_FOOTER_HTML, EMAIL_FOOTER_TEXT } from '../../common/constants/brand';
 
 export interface IssueTokenOptions {
@@ -47,6 +48,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: IEmailProvider,
     private readonly platformSettings: PlatformSettingsService,
+    private readonly website: WebsiteService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -84,6 +86,14 @@ export class AuthService {
       limits: this.platformSettings.limitsForPlan(plan),
       trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000),
     });
+
+    // The website they gave us teaches the AI the business while they finish signing up
+    if (dto.websiteUrl?.trim()) {
+      void this.website
+        .verify(tenant._id.toString(), dto.websiteUrl)
+        .then(() => this.website.startCrawl(tenant._id.toString(), { applyToAgents: true }))
+        .catch((err) => this.logger.warn(`Website setup skipped for ${tenant.slug}: ${err?.message}`));
+    }
 
     // Hash password and create admin user
     const hashedPassword = await bcrypt.hash(dto.password, 12);
