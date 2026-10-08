@@ -707,7 +707,7 @@ export class WhatsAppAiService implements OnModuleInit {
     const now = new Date().toLocaleString('en-IN', { timeZone: s.timezone, dateStyle: 'full', timeStyle: 'short' });
     const language =
       s.language === 'hi'
-        ? 'Reply in Hindi (Devanagari).'
+        ? 'REPLY ONLY IN HINDI (Devanagari script). Every message is Hindi, start to finish. Even if the customer writes in English, you keep replying in Hindi. The only English words allowed are ones with no everyday Hindi equivalent (brand names, WhatsApp, email, website). Never switch language and never ask which language they prefer.'
         : s.language === 'en'
           ? 'Reply in English.'
           : s.language === 'hi-en'

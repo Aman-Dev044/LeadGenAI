@@ -5,7 +5,14 @@ import {
   OutboundCallResult,
   VoiceCallEvent,
 } from './voice-provider.interface';
-import { genderPromptRule, renderTemplate, resolveAgentGender } from '../calling-settings';
+import {
+  DEFAULT_CALLING_SETTINGS,
+  HINDI_WORDING,
+  genderPromptRule,
+  isUntouched,
+  renderTemplate,
+  resolveAgentGender,
+} from '../calling-settings';
 import { speakable } from '../speech-text';
 
 /**
@@ -286,7 +293,7 @@ export class VapiProvider implements IVoiceProvider {
             required: ['callbackAt'],
           },
         },
-        messages: [{ type: 'request-start', content: 'Okay, note kar rahi hoon…' }],
+        messages: [{ type: 'request-start', content: 'ठीक है, नोट कर रही हूँ…' }],
       });
     }
 
@@ -316,11 +323,18 @@ export class VapiProvider implements IVoiceProvider {
     const tools = this.buildTools(req);
     const voice = VOICE_PRESETS[a.voiceId] || { provider: a.voiceProvider || 'vapi', voiceId: a.voiceId || 'Neha' };
     const inbound = req.direction === 'inbound';
+    const hindiOnly = a.language === 'hi';
+    // A workspace that switched to Hindi but kept the wording it was given
+    // would otherwise be greeted in English by a Hindi-speaking agent
+    const greeting =
+      hindiOnly && isUntouched(a.firstMessage, DEFAULT_CALLING_SETTINGS.assistant.firstMessage)
+        ? HINDI_WORDING.firstMessage
+        : a.firstMessage;
     return {
       name: `${a.agentName} (${a.companyName || 'LeadBells'})`.slice(0, 40),
       // Only the greeting is slowed - natural pauses after the name and the company
       // so the opening lands clearly; the rest of the call runs at normal pace
-      firstMessage: slowGreeting(speakable(renderTemplate(a.firstMessage, vars))),
+      firstMessage: slowGreeting(speakable(renderTemplate(greeting, vars))),
       firstMessageMode: 'assistant-speaks-first',
       model: {
         provider: 'openai',
@@ -341,7 +355,13 @@ export class VapiProvider implements IVoiceProvider {
       // Fill the think-time with a word instead of dead air
       responseDelaySeconds: 0.3,
       endCallFunctionEnabled: true,
-      endCallMessage: inbound ? 'Thank you for calling. Have a great day!' : 'Thank you so much for your time. Have a great day!',
+      endCallMessage: hindiOnly
+        ? inbound
+          ? HINDI_WORDING.endCallMessageInbound
+          : HINDI_WORDING.endCallMessage
+        : inbound
+          ? 'Thank you for calling. Have a great day!'
+          : 'Thank you so much for your time. Have a great day!',
       // Faint office ambience makes the line feel like a desk, not a server
       backgroundSound: 'off',
       backgroundDenoisingEnabled: true,
@@ -357,7 +377,9 @@ export class VapiProvider implements IVoiceProvider {
             },
           }),
       voicemailMessage: renderTemplate(
-        'Hi {{leadName}}, this is {{agentName}} from {{companyName}} about your recent enquiry. I will message you on WhatsApp - talk soon.',
+        hindiOnly
+          ? HINDI_WORDING.voicemailMessage
+          : 'Hi {{leadName}}, this is {{agentName}} from {{companyName}} about your recent enquiry. I will message you on WhatsApp - talk soon.',
         vars,
       ),
       artifactPlan: { recordingEnabled: true },
@@ -437,9 +459,11 @@ export class VapiProvider implements IVoiceProvider {
   private systemPrompt(req: OutboundCallRequest): string {
     const a = req.assistant;
     const gender = resolveAgentGender(a);
+    // A workspace that chose Hindi gets Hindi - the agent must not drift into
+    // English halfway through, which is what happens without an explicit rule
     const language =
       a.language === 'hi'
-        ? 'Speak in natural Hindi.'
+        ? 'SPEAK ONLY IN HINDI. Every single sentence is Hindi, start to finish. Even if the person speaks to you in English, you keep answering in Hindi - politely, never apologising for it. The only English words allowed are ones that have no natural Hindi equivalent in everyday speech (brand names, "WhatsApp", "email", "website", "demo"). Never speak a full English sentence, never translate yourself, never ask which language they prefer.'
         : a.language === 'hi-en'
           ? 'Speak in natural Hinglish (Hindi-English mix, the way people talk in Indian offices). Switch fully to English if the person prefers it.'
           : 'Speak in clear, friendly English.';
@@ -475,8 +499,12 @@ export class VapiProvider implements IVoiceProvider {
       '- Never read a list. Say things the way you would say them out loud.',
       '',
       'HOW TO SAY NUMBERS (the voice reads your text literally - write numbers as words):',
-      '- Prices in words, Indian style: "twenty five thousand rupees", "one lakh fifty thousand", "around fifty k" - NEVER digits like 25000 or ₹25,000.',
-      '- Times as spoken: "eleven thirty in the morning", "four pm", "kal subah gyarah baje". Dates: "Thursday, the second of October" - never 02/10.',
+      a.language === 'hi'
+        ? '- Prices in Hindi words: "पच्चीस हज़ार रुपये", "डेढ़ लाख", "लगभग पचास हज़ार" - NEVER digits like 25000 or ₹25,000.'
+        : '- Prices in words, Indian style: "twenty five thousand rupees", "one lakh fifty thousand", "around fifty k" - NEVER digits like 25000 or ₹25,000.',
+      a.language === 'hi'
+        ? '- Times as spoken in Hindi: "सुबह साढ़े ग्यारह बजे", "शाम चार बजे", "कल सुबह". Dates: "गुरुवार, दो अक्टूबर" - never 02/10.'
+        : '- Times as spoken: "eleven thirty in the morning", "four pm", "kal subah gyarah baje". Dates: "Thursday, the second of October" - never 02/10.',
       '- Phone numbers digit by digit in small groups: "nine eight seven six five, four three two one zero".',
       '- Percentages: "twenty percent". Durations: "two to three weeks". Years: "twenty twenty six".',
       '',

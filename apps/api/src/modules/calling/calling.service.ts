@@ -236,7 +236,7 @@ export class CallingService implements OnModuleInit {
   async startAiCallNow(tenantId: string, leadId: string, actor: Actor, opts: { phone?: string; ignoreCallingHours?: boolean }) {
     const lead = await this.getLead(tenantId, leadId, actor);
     const settings = await this.getSettings(tenantId);
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     if (!this.vapi.isConfigured(creds)) {
       throw new BadRequestException('Vapi is not configured. Add the API key and phone number id under Settings > API Credentials.');
     }
@@ -260,7 +260,7 @@ export class CallingService implements OnModuleInit {
     const ids = [...new Set((leadIds || []).filter((id) => /^[a-f\d]{24}$/i.test(id)))].slice(0, 500);
     if (!ids.length) throw new BadRequestException('Select at least one lead');
     const settings = await this.getSettings(tenantId);
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     if (!this.vapi.isConfigured(creds)) {
       throw new BadRequestException('Vapi is not configured. Add the API key and phone number id under Settings > API Credentials.');
     }
@@ -298,7 +298,7 @@ export class CallingService implements OnModuleInit {
   /** Settings page: ring a number with the configured assistant, no lead needed. */
   async testCall(tenantId: string, phone: string, name: string | undefined, actor: Actor) {
     const settings = await this.getSettings(tenantId);
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     if (!this.vapi.isConfigured(creds)) throw new BadRequestException('Vapi is not configured yet.');
     const to = this.normalisePhone(phone);
     if (!to) throw new BadRequestException('Enter the number in international format, e.g. +919876543210');
@@ -457,7 +457,7 @@ export class CallingService implements OnModuleInit {
   private async reconcileWithProvider(call: any): Promise<boolean> {
     if (!call.externalId) return false;
     try {
-      const creds = await this.credentials.resolve(call.tenantId, 'vapi');
+      const creds = await this.vapiCredsFor(call.tenantId);
       if (!creds.apiKey) return false;
       const remote = await this.vapi.fetchCall(call.externalId, creds.apiKey);
       if (!remote) return false;
@@ -489,6 +489,23 @@ export class CallingService implements OnModuleInit {
     setImmediate(() => void this.processQueue().catch(() => undefined));
   }
 
+  /**
+   * Vapi credentials for one workspace.
+   *
+   * A hand-built assistant in the Vapi dashboard replaces the whole script we
+   * generate - prompt, language, voice, tools. That is fine when the workspace
+   * saved it themselves, but the platform-wide VAPI_ASSISTANT_ID fallback would
+   * silently give every workspace the same agent and throw away their settings.
+   * So the shared one is dropped here.
+   */
+  private async vapiCredsFor(tenantId: string): Promise<Record<string, string>> {
+    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    if (!creds.assistantId) return creds;
+    const own = await this.credentials.hasOwnValue(tenantId, 'vapi', 'assistantId').catch(() => false);
+    if (own) return creds;
+    const { assistantId, ...rest } = creds;
+    return rest;
+  }
   private async dial(call: any, settings: CallingSettings & { timezone: string }): Promise<boolean> {
     const tenantId = call.tenantId;
     const lead: any = await this.leadModel.findOne({ _id: call.leadId, tenantId, deletedAt: null }).lean();
@@ -508,7 +525,7 @@ export class CallingService implements OnModuleInit {
       return false;
     }
 
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     if (!this.vapi.isConfigured(creds)) {
       await this.markFailed(call, 'Vapi is not configured (API key / phone number id missing)');
       return false;
@@ -680,7 +697,7 @@ export class CallingService implements OnModuleInit {
     if (!call) return { ok: true, ignored: 'unknown call' };
 
     // Verify the shared secret when the tenant (or platform) configured one
-    const creds = await this.credentials.resolve(call.tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(call.tenantId);
     if (creds.webhookSecret) {
       if (!secretHeader || !this.safeEqual(secretHeader, creds.webhookSecret)) {
         this.logger.warn(`Vapi webhook for call ${call._id} rejected: bad secret`);
@@ -798,7 +815,7 @@ export class CallingService implements OnModuleInit {
     }
 
     const settings = await this.getSettings(tenantId);
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     if (creds.webhookSecret && (!secretHeader || !this.safeEqual(secretHeader, creds.webhookSecret))) {
       this.logger.warn('Inbound assistant request rejected: bad webhook secret');
       throw new ForbiddenException('Invalid webhook secret');
@@ -1983,7 +2000,7 @@ export class CallingService implements OnModuleInit {
     if (!call) throw new NotFoundException('Call not found');
     if (call.provider !== 'vapi' || !call.externalId) throw new BadRequestException('Only AI calls can be re-processed');
     if (actor.role === 'SALESPERSON') throw new ForbiddenException('Admins only');
-    const creds = await this.credentials.resolve(tenantId, 'vapi');
+    const creds = await this.vapiCredsFor(tenantId);
     const remote = await this.vapi.fetchCall(call.externalId, creds.apiKey);
     if (!remote || remote.status !== 'ended') throw new BadRequestException('The call has not ended yet on the provider');
     // Undo what the earlier (wrong) processing scheduled, so the re-run does not double up
@@ -2003,7 +2020,7 @@ export class CallingService implements OnModuleInit {
     if (!call) throw new NotFoundException('Call not found');
     if (!['queued', 'scheduled', 'ringing', 'dialing'].includes(call.status)) throw new BadRequestException('Call is no longer pending');
     if (call.externalId && call.provider === 'vapi') {
-      const creds = await this.credentials.resolve(tenantId, 'vapi');
+      const creds = await this.vapiCredsFor(tenantId);
       if (creds.apiKey) await this.vapi.endCall(call.externalId, creds.apiKey);
     }
     call.status = 'cancelled';

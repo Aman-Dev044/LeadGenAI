@@ -537,6 +537,25 @@ export function nextCallingSlot(now: Date, hours: CallingHours, timeZone: string
 }
 
 /**
+ * What a Hindi-only workspace hears. Used when the workspace picks Hindi but
+ * has never edited the English wording it started with - the greeting is
+ * spoken literally, so it has to be in the language the agent is told to use.
+ */
+export const HINDI_WORDING = {
+  firstMessage:
+    'नमस्ते {{leadName}} जी, मैं {{agentName}} बोल रही हूँ {{companyName}} से। आपने हमसे पूछताछ की थी, क्या अभी दो मिनट बात हो सकती है?',
+  voicemailMessage:
+    'नमस्ते {{leadName}} जी, मैं {{agentName}} बोल रही हूँ {{companyName}} से। आपकी पूछताछ के बारे में बात करनी थी, मैं व्हाट्सऐप पर मैसेज भेज रही हूँ।',
+  endCallMessage: 'आपके समय के लिए बहुत धन्यवाद। आपका दिन शुभ हो!',
+  endCallMessageInbound: 'कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो!',
+};
+
+/** True when the workspace never touched the wording it was given. */
+export function isUntouched(value: string, fallback: string): boolean {
+  return !value || value.trim() === fallback.trim();
+}
+
+/**
  * Which of the built-in voices is a woman's. Used when `agentGender` is `auto`,
  * so the agent's Hindi grammar matches the voice the customer hears.
  */
