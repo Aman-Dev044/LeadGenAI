@@ -289,7 +289,7 @@ export const DEFAULT_CALLING_SETTINGS: CallingSettings = {
     ],
     language: 'hi-en',
     voiceProvider: 'vapi',
-    voiceId: 'Neha',
+    voiceId: 'Naina',
     llmModel: 'gpt-4o-mini',
     maxDurationSeconds: 420,
   },
@@ -555,20 +555,92 @@ export function isUntouched(value: string, fallback: string): boolean {
   return !value || value.trim() === fallback.trim();
 }
 
+export interface VoiceOption {
+  /** What is stored in the workspace's settings. */
+  id: string;
+  label: string;
+  gender: 'female' | 'male';
+  /** Languages this voice genuinely speaks well. */
+  languages: ('hi' | 'hi-en' | 'en')[];
+  /** How the voice is addressed at the provider. */
+  provider: string;
+  providerVoiceId: string;
+  accent?: string;
+}
+
 /**
- * Which of the built-in voices is a woman's. Used when `agentGender` is `auto`,
- * so the agent's Hindi grammar matches the voice the customer hears.
+ * The voices a workspace can choose.
+ *
+ * Vapi's own voices are quick and cheap but speak Indian English - good for
+ * Hinglish, wrong for a customer who must be spoken to only in Hindi. The
+ * Azure voices are native Hindi speakers, so a workspace that picks Hindi gets
+ * one of those.
  */
-export const VOICE_GENDERS: Record<string, 'female' | 'male'> = {
-  Neha: 'female',
-  Naina: 'female',
-  Paige: 'female',
-  Lily: 'female',
-  Sagar: 'male',
-  Rohan: 'male',
-  Elliot: 'male',
-  Harry: 'male',
+export const VOICE_CATALOGUE: VoiceOption[] = [
+  // Native Hindi, Indian women
+  { id: 'hi-IN-SwaraNeural', label: 'Swara - Hindi, warm', gender: 'female', languages: ['hi', 'hi-en'], provider: 'azure', providerVoiceId: 'hi-IN-SwaraNeural', accent: 'Indian' },
+  { id: 'hi-IN-AnanyaNeural', label: 'Ananya - Hindi, bright', gender: 'female', languages: ['hi', 'hi-en'], provider: 'azure', providerVoiceId: 'hi-IN-AnanyaNeural', accent: 'Indian' },
+  { id: 'hi-IN-KavyaNeural', label: 'Kavya - Hindi, calm', gender: 'female', languages: ['hi', 'hi-en'], provider: 'azure', providerVoiceId: 'hi-IN-KavyaNeural', accent: 'Indian' },
+  { id: 'hi-IN-MadhurNeural', label: 'Madhur - Hindi, male', gender: 'male', languages: ['hi', 'hi-en'], provider: 'azure', providerVoiceId: 'hi-IN-MadhurNeural', accent: 'Indian' },
+  // Indian English
+  { id: 'Naina', label: 'Naina - Indian English', gender: 'female', languages: ['hi-en', 'en'], provider: 'vapi', providerVoiceId: 'Naina', accent: 'Indian' },
+  { id: 'en-IN-NeerjaNeural', label: 'Neerja - Indian English', gender: 'female', languages: ['hi-en', 'en'], provider: 'azure', providerVoiceId: 'en-IN-NeerjaNeural', accent: 'Indian' },
+  { id: 'Sagar', label: 'Sagar - Indian English, male', gender: 'male', languages: ['hi-en', 'en'], provider: 'vapi', providerVoiceId: 'Sagar', accent: 'Indian' },
+  { id: 'Rohan', label: 'Rohan - Indian English, male', gender: 'male', languages: ['hi-en', 'en'], provider: 'vapi', providerVoiceId: 'Rohan', accent: 'Indian' },
+  // International English
+  { id: 'Savannah', label: 'Savannah - English', gender: 'female', languages: ['en'], provider: 'vapi', providerVoiceId: 'Savannah' },
+  { id: 'Clara', label: 'Clara - English', gender: 'female', languages: ['en'], provider: 'vapi', providerVoiceId: 'Clara' },
+  { id: 'Elliot', label: 'Elliot - English, male', gender: 'male', languages: ['en'], provider: 'vapi', providerVoiceId: 'Elliot' },
+];
+
+/**
+ * Voices Vapi has retired. Workspaces still carry them in their settings, so
+ * they are swapped for the nearest living voice instead of failing the call.
+ */
+export const RETIRED_VOICES: Record<string, string> = {
+  Neha: 'Naina',
+  Lily: 'Savannah',
+  Hana: 'Naina',
+  Paige: 'Clara',
+  Kylie: 'Savannah',
+  Ayla: 'Clara',
+  Cole: 'Elliot',
+  Harry: 'Elliot',
+  Spencer: 'Elliot',
 };
+
+/** The default voice for a workspace speaking this language. */
+export function defaultVoiceFor(language: string): string {
+  return language === 'hi' ? 'hi-IN-SwaraNeural' : 'Naina';
+}
+
+export function findVoice(voiceId: string): VoiceOption | undefined {
+  const id = RETIRED_VOICES[voiceId] || voiceId;
+  return VOICE_CATALOGUE.find((v) => v.id === id);
+}
+
+/**
+ * What to send the provider: the chosen voice, unless it cannot speak the
+ * language the workspace picked - a Hindi-only agent with an English-only voice
+ * is the one combination that must never reach a customer.
+ */
+export function voiceConfigFor(voiceId: string, language: string): { provider: string; voiceId: string } {
+  let voice = findVoice(voiceId);
+  if (!voice || (language && !voice.languages.includes(language as any))) {
+    voice = findVoice(defaultVoiceFor(language)) || VOICE_CATALOGUE[0];
+  }
+  return { provider: voice.provider, voiceId: voice.providerVoiceId };
+}
+
+/**
+ * Which voice is a woman's. Used when `agentGender` is `auto`, so the agent's
+ * Hindi grammar matches the voice the customer hears.
+ */
+export const VOICE_GENDERS: Record<string, 'female' | 'male'> = Object.fromEntries(
+  VOICE_CATALOGUE.map((v) => [v.id, v.gender]).concat(
+    Object.entries(RETIRED_VOICES).map(([old, now]) => [old, VOICE_CATALOGUE.find((v) => v.id === now)?.gender || 'female']),
+  ),
+) as Record<string, 'female' | 'male'>;
 
 /** The agent's gender for grammar: the explicit setting, else the voice, else female. */
 export function resolveAgentGender(assistant: { agentGender?: string; voiceId?: string }): 'female' | 'male' {

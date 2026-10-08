@@ -12,6 +12,7 @@ import {
   isUntouched,
   renderTemplate,
   resolveAgentGender,
+  voiceConfigFor,
 } from '../calling-settings';
 import { speakable } from '../speech-text';
 
@@ -20,16 +21,8 @@ import { speakable } from '../speech-text';
  * multilingual handles Hinglish without the robotic cadence of stock TTS;
  * the Vapi voices stay as a no-key fallback.
  */
-const VOICE_PRESETS: Record<string, any> = {
-  Neha: { provider: 'vapi', voiceId: 'Neha' },
-  Naina: { provider: 'vapi', voiceId: 'Naina' },
-  Sagar: { provider: 'vapi', voiceId: 'Sagar' },
-  Rohan: { provider: 'vapi', voiceId: 'Rohan' },
-  Paige: { provider: 'vapi', voiceId: 'Paige' },
-  Elliot: { provider: 'vapi', voiceId: 'Elliot' },
-  Lily: { provider: 'vapi', voiceId: 'Lily' },
-  Harry: { provider: 'vapi', voiceId: 'Harry' },
-};
+// The voice catalogue lives in calling-settings, next to the rest of the
+// workspace configuration - see VOICE_CATALOGUE / voiceConfigFor.
 
 /**
  * Slows only the greeting: a short pause after each clause so the name and the
@@ -321,7 +314,8 @@ export class VapiProvider implements IVoiceProvider {
   private buildAssistant(req: OutboundCallRequest, vars: Record<string, string>, server: any, metadata: any) {
     const a = req.assistant;
     const tools = this.buildTools(req);
-    const voice = VOICE_PRESETS[a.voiceId] || { provider: a.voiceProvider || 'vapi', voiceId: a.voiceId || 'Neha' };
+    // Falls back to a Hindi voice when the workspace speaks Hindi but picked an English one
+    const voice = voiceConfigFor(a.voiceId, a.language);
     const inbound = req.direction === 'inbound';
     const hindiOnly = a.language === 'hi';
     // A workspace that switched to Hindi but kept the wording it was given

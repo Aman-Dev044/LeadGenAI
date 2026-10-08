@@ -29,6 +29,7 @@ import {
   pickPlaybook,
   renderTemplate,
   resolveCallingSettings,
+  VOICE_CATALOGUE,
 } from './calling-settings';
 import { CallQueryDto, LogManualCallDto } from './dto';
 import { AI_ASSIGNABLE_STATUSES } from '../../common/constants/pipeline';
@@ -129,6 +130,8 @@ export class CallingService implements OnModuleInit {
       webhookUrl: `${webhookBase}/api/v1/calling/webhooks/vapi`,
       webhookReachable: !/localhost|127\.0\.0\.1/.test(webhookBase),
       withinCallingHours: isWithinCallingHours(new Date(), settings.callingHours, settings.timezone),
+      // The dashboard builds its voice dropdown from this, so the two never drift apart
+      voices: VOICE_CATALOGUE,
       timezone: settings.timezone,
     };
   }

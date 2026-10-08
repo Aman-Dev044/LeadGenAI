@@ -550,6 +550,17 @@ export interface CallingSettings {
   timezone?: string;
 }
 
+export interface VoiceOption {
+  id: string;
+  label: string;
+  gender: 'female' | 'male';
+  /** Languages this voice genuinely speaks well. */
+  languages: ('hi' | 'hi-en' | 'en')[];
+  provider: string;
+  providerVoiceId: string;
+  accent?: string;
+}
+
 export interface CallingReadiness {
   aiCalling: { configured: boolean; enabled: boolean; usingSavedAssistant: boolean };
   humanCalling: { configured: boolean };
@@ -558,6 +569,8 @@ export interface CallingReadiness {
   webhookReachable: boolean;
   withinCallingHours: boolean;
   timezone: string;
+  /** What the voice picker offers - served by the API so it is never out of date. */
+  voices?: VoiceOption[];
 }
 
 export interface FollowUpWorkflow {

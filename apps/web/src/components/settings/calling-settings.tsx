@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loading } from '@/components/shared/loading';
 import { cn } from '@/lib/utils';
-import type { CallingReadiness, CallingSettings } from '@/types';
+import type { CallingReadiness, CallingSettings, VoiceOption } from '@/types';
 import { CallPlaybooksEditor } from '@/components/settings/call-playbooks';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -25,15 +25,10 @@ const DEFAULT_REMINDERS: CallingSettings['appointmentReminders'] = {
   enabled: true, dayBefore: true, hourBefore: true, minutesBefore: 60, remindSalesperson: true,
   noShowRescue: { enabled: true, askAfterMinutes: 20, autoMarkAfterMinutes: 90, whatsapp: true, aiCall: true, callDelayMinutes: 30 },
 };
-const VOICES = [
-  { value: 'Neha', label: 'Neha — Indian English / Hinglish (female) ★ recommended' },
-  { value: 'Naina', label: 'Naina — Indian English / Hinglish (female)' },
-  { value: 'Rohan', label: 'Rohan — Indian English / Hinglish (male)' },
-  { value: 'Sagar', label: 'Sagar — Indian English (male)' },
-  { value: 'Paige', label: 'Paige — US English (female)' },
-  { value: 'Elliot', label: 'Elliot — US English (male)' },
-  { value: 'Lily', label: 'Lily — UK English (female)' },
-  { value: 'Harry', label: 'Harry — UK English (male)' },
+/** Only used until the API's voice list arrives. */
+const FALLBACK_VOICES: VoiceOption[] = [
+  { id: 'hi-IN-SwaraNeural', label: 'Swara - Hindi, warm', gender: 'female', languages: ['hi', 'hi-en'], provider: 'azure', providerVoiceId: 'hi-IN-SwaraNeural' },
+  { id: 'Naina', label: 'Naina - Indian English', gender: 'female', languages: ['hi-en', 'en'], provider: 'vapi', providerVoiceId: 'Naina' },
 ];
 
 function Section({ icon: Icon, title, description, children, footer }: { icon: any; title: string; description: string; children: React.ReactNode; footer?: React.ReactNode }) {
@@ -167,13 +162,36 @@ export function CallingSettingsTab() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label>Voice</Label>
-            <Select value={form.assistant.voiceId} onValueChange={(v) => setA('voiceId', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{VOICES.map((v) => <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
+          {(() => {
+            const all = readiness?.voices?.length ? readiness.voices : FALLBACK_VOICES;
+            // A Hindi-only agent must not be given a voice that cannot speak Hindi
+            const usable = all.filter((v) => v.languages.includes(form.assistant.language as any));
+            const voices = usable.length ? usable : all;
+            const chosen = voices.find((v) => v.id === form.assistant.voiceId);
+            return (
+              <div className="space-y-1.5">
+                <Label>Voice</Label>
+                <Select value={chosen ? form.assistant.voiceId : voices[0]?.id} onValueChange={(v) => setA('voiceId', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {voices.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.label} ({v.gender === 'female' ? 'female' : 'male'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!chosen && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Your saved voice cannot speak {form.assistant.language === 'hi' ? 'Hindi' : 'this language'} - calls will use {voices[0]?.label}. Save to make it permanent.
+                  </p>
+                )}
+                {form.assistant.language === 'hi' && (
+                  <p className="text-xs text-muted-foreground">Hindi voices only. The agent will speak Hindi from the first word to the last.</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
         <div className="space-y-1.5">
           <Label>What you sell <span className="text-xs text-muted-foreground">(the agent's pitch context)</span></Label>
