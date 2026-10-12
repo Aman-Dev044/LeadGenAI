@@ -37,6 +37,7 @@ import {
   Radio,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Star,
   Sun,
@@ -216,7 +217,7 @@ type Turn = { from: 'visitor' | 'agent'; text: string };
 const TRANSCRIPT: Turn[] = [
   { from: 'visitor', text: 'Do you integrate with HubSpot? We run a 40-seat sales team.' },
   { from: 'agent', text: 'Yes — two-way sync. Every qualified lead lands in your pipeline in seconds.' },
-  { from: 'visitor', text: "We're evaluating this quarter. Budget is around $2k/mo." },
+  { from: 'visitor', text: "We're evaluating this quarter. Budget is around ₹2 lakh a month." },
   { from: 'agent', text: 'Noted. Our architect has Thursday 2:00 PM open — shall I hold it?' },
   { from: 'visitor', text: 'Yes please. sarah@northwind.io' },
   { from: 'agent', text: 'Booked. Invite sent, and your rep has been notified.' },
@@ -225,7 +226,7 @@ const TRANSCRIPT: Turn[] = [
 const LEAD_FIELDS = [
   { at: 5, label: 'Contact', value: 'Sarah Whitfield' },
   { at: 1, label: 'Company', value: 'Northwind Logistics' },
-  { at: 3, label: 'Budget', value: '$2,000 / mo' },
+  { at: 3, label: 'Budget', value: '₹2,00,000 / mo' },
   { at: 3, label: 'Timeline', value: 'This quarter' },
 ];
 
@@ -622,52 +623,104 @@ const FAQS = [
   },
   {
     q: 'Is there a free plan?',
-    a: 'Yes — one agent, 100 leads and 500 conversations a month, no card required. Paid plans add agents, volume, users and CRM sync.',
+    a: 'Yes — 14 days with every feature unlocked and 10 AI calls to try on your own leads, no card required. After that, pick a plan from ₹444 a month or build your own.',
   },
 ];
 
+/**
+ * Mirrors `PLAN_CATALOGUE` in the API, so the price a visitor reads here is
+ * the price the dashboard charges. Change a number there and here together.
+ * Rupees a month, excluding GST; a yearly subscription is charged for ten.
+ */
 const PLANS = [
   {
-    name: 'Free',
-    tagline: 'Try the basics',
-    monthly: 0,
-    yearly: 0,
-    features: ['1 Agent', '100 Leads', '500 Conversations/mo', '5 Knowledge Sources', '2 Users', 'Community Support'],
-    cta: 'Get started free',
+    name: 'Basic',
+    tagline: 'For a solo owner who wants the AI to make the first call.',
+    monthly: 444,
+    yearly: 4440,
+    aiCalls: 5,
+    features: [
+      '5 AI calls a month',
+      'Every call recorded, transcribed and summarised',
+      'Personalised WhatsApp after each call',
+      '500 leads · 2 team members',
+      'Pipeline, follow-up tasks and appointment reminders',
+      'Excel / CSV import and the website chat widget',
+    ],
+    cta: 'Choose Basic',
     variant: 'outline' as const,
     popular: false,
   },
   {
-    name: 'Starter',
-    tagline: 'For small teams',
-    monthly: 29,
-    yearly: 279,
-    features: ['3 Agents', '1,000 Leads', '2,000 Conversations/mo', '20 Knowledge Sources', '5 Users', 'WhatsApp & Email Support'],
-    cta: 'Start 14-day trial',
-    variant: 'outline' as const,
-    popular: false,
-  },
-  {
-    name: 'Professional',
-    tagline: 'Most popular',
-    monthly: 79,
-    yearly: 759,
-    features: ['10 Agents', '10,000 Leads', '10,000 Conversations/mo', '50 Knowledge Sources', '20 Users', 'Priority Support & CRM Sync'],
-    cta: 'Start 14-day trial',
+    name: 'Standard',
+    tagline: 'For a small sales team that lives on WhatsApp.',
+    monthly: 700,
+    yearly: 7000,
+    aiCalls: 15,
+    features: [
+      '15 AI calls a month',
+      'Two-way WhatsApp AI — it answers your customers, not just messages them',
+      'Google Calendar sync and no-show rescue',
+      '2,000 leads · 5 team members · 1,000 WhatsApp messages',
+      'Call playbooks for different kinds of leads',
+    ],
+    cta: 'Choose Standard',
     variant: 'gradient' as const,
     popular: true,
   },
   {
-    name: 'Enterprise',
-    tagline: 'Scale without limits',
-    monthly: 199,
-    yearly: 1910,
-    features: ['50 Agents', '100,000 Leads', '50,000 Conversations/mo', '200 Knowledge Sources', '100 Users', 'Custom SLA & Dedicated Manager'],
-    cta: 'Contact sales',
+    name: 'Premium',
+    tagline: 'For a team that must not miss a single enquiry.',
+    monthly: 1500,
+    yearly: 15000,
+    aiCalls: 40,
+    features: [
+      '40 AI calls a month',
+      'Inbound AI receptionist — the AI answers your number 24x7',
+      'Live transfer to a salesperson while the caller is on the line',
+      'Bookings and payment links on WhatsApp',
+      '10,000 leads · 15 team members · 5,000 WhatsApp messages',
+      'Lead scoring, analytics, API and webhooks',
+    ],
+    cta: 'Choose Premium',
+    variant: 'outline' as const,
+    popular: false,
+  },
+  {
+    name: 'Pro',
+    tagline: 'For an agency or a multi-branch business.',
+    monthly: 2400,
+    yearly: 24000,
+    aiCalls: 75,
+    features: [
+      '75 AI calls a month',
+      'Unlimited leads and unlimited chat agents',
+      'Leads Scrap AI — find prospects, not just answer them',
+      'Send every e-mail from your own address (your SMTP)',
+      'Your logo and name across the dashboard',
+      '50 team members · 20,000 WhatsApp messages · priority support',
+    ],
+    cta: 'Choose Pro',
     variant: 'outline' as const,
     popular: false,
   },
 ];
+
+/** GST is added at checkout; the cards show it so nobody is surprised. */
+const GST_RATE = 0.18;
+
+/** Pick your own numbers — priced line by line in the dashboard. */
+const CUSTOM_PLAN = {
+  name: 'Build your own',
+  tagline: 'Pay for exactly what you use',
+  startsAt: 444,
+  features: [
+    'Choose AI calls, leads, users and WhatsApp volume',
+    'Add the inbound receptionist or prospecting only if you want them',
+    'Priced line by line, GST shown before you pay',
+    'Switch the numbers any month',
+  ],
+};
 
 const PLAN_EXTRAS = [
   { icon: ShieldCheck, label: 'No setup fee, ever' },
@@ -682,7 +735,7 @@ const PLAN_EXTRAS = [
 
 export default function LandingPage() {
   const { theme, setTheme } = useUIStore();
-  const [cycle, setCycle] = useState<'monthly' | 'annual'>('annual');
+  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const heroRef = useRef<HTMLElement>(null);
 
@@ -1441,7 +1494,7 @@ export default function LandingPage() {
               Priced per plan. Not per missed lead.
             </h2>
             <p className="mt-2 max-w-xl text-[13.5px] text-muted-foreground">
-              {BRAND.tagline} — starting at nothing. Upgrade when the pipeline says you should.
+              {BRAND.tagline} — 14 days free, then from ₹444 a month. All prices exclude 18% GST.
             </p>
           </div>
 
@@ -1458,7 +1511,9 @@ export default function LandingPage() {
                 }`}
               >
                 {option}
-                {option === 'annual' && <span className="ml-1.5 text-[10px] font-black opacity-90">−20%</span>}
+                {option === 'annual' && (
+                  <span className="ml-1.5 text-[10px] font-black opacity-90">2 months free</span>
+                )}
               </button>
             ))}
           </div>
@@ -1483,23 +1538,37 @@ export default function LandingPage() {
                   )}
 
                   <p className="text-[14.5px] font-bold">{plan.name}</p>
-                  <p className="text-[11.5px] text-muted-foreground">{plan.tagline}</p>
+                  <p className="mt-0.5 min-h-[32px] text-[11.5px] text-muted-foreground">{plan.tagline}</p>
 
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="tabular text-4xl font-black tracking-tight">${perMonth}</span>
-                    <span className="text-[12.5px] font-semibold text-muted-foreground">/mo</span>
+                    <span className="tabular text-4xl font-black tracking-tight">
+                      ₹{perMonth.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[12.5px] font-semibold text-muted-foreground">/month</span>
                   </div>
+                  {/* GST is charged on top, so the card says so rather than surprising anyone at checkout */}
+                  <p className="mt-1 text-[10.5px] text-muted-foreground">
+                    + 18% GST = ₹{Math.round(perMonth * (1 + GST_RATE)).toLocaleString('en-IN')}
+                  </p>
                   {/* Reserved line keeps every card the same height on both cycles */}
-                  <p className="mt-1 h-4 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <p className="mt-0.5 h-4 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
                     {cycle === 'annual' && plan.yearly > 0
-                      ? `$${plan.yearly} billed yearly · save $${plan.monthly * 12 - plan.yearly}`
+                      ? `₹${plan.yearly.toLocaleString('en-IN')} billed yearly · save ₹${(plan.monthly * 12 - plan.yearly).toLocaleString('en-IN')}`
                       : ' '}
                   </p>
 
-                  <ul className="mt-5 flex-1 space-y-2">
+                  {/* The number that decides the plan */}
+                  <div className="mt-4 rounded-xl bg-muted/60 py-3 text-center">
+                    <p className="tabular text-2xl font-black text-primary">{plan.aiCalls}</p>
+                    <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      AI calls a month
+                    </p>
+                  </div>
+
+                  <ul className="mt-4 flex-1 space-y-2">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-[12px]">
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                         <span className="text-muted-foreground">{feature}</span>
                       </li>
                     ))}
@@ -1515,6 +1584,41 @@ export default function LandingPage() {
             );
           })}
         </div>
+
+        {/* Nothing on the four cards fits? Price it line by line instead. */}
+        <Reveal delay={300}>
+          <div className="lit-border mt-3 flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/70 p-5 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <SlidersHorizontal className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-[14.5px] font-bold">{CUSTOM_PLAN.name}</p>
+                <p className="text-[11.5px] text-muted-foreground">{CUSTOM_PLAN.tagline}</p>
+                <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  {CUSTOM_PLAN.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-[12px]">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span className="text-muted-foreground">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="shrink-0 text-left lg:text-right">
+              <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Starts at</p>
+              <p className="tabular text-3xl font-black tracking-tight">
+                ₹{CUSTOM_PLAN.startsAt.toLocaleString('en-IN')}
+                <span className="text-[12.5px] font-semibold text-muted-foreground">/mo</span>
+              </p>
+              <Link href="/auth/register" className="mt-3 block">
+                <Button variant="outline" className="w-full font-bold lg:w-auto">
+                  Build your plan
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Reveal>
 
         <Reveal delay={120}>
           <div className="mt-3 grid gap-3 rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm sm:grid-cols-2 lg:grid-cols-4">

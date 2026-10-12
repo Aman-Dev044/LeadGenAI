@@ -17,7 +17,7 @@ import { ROUTES } from '@/lib/site';
  * crawler reads, matching the `Offer` entries in the page's JSON-LD.
  */
 export function PricingSection() {
-  const [cycle, setCycle] = useState<'monthly' | 'annual'>('annual');
+  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
 
   return (
     <section
