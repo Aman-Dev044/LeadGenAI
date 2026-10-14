@@ -39,7 +39,11 @@ export const CONTACT_EMAIL = 'info.cyberbells@gmail.com';
 /** Pages that exist on this site — the sitemap and the footer both read this. */
 export const SITE_PAGES = [
   { path: '/', changeFrequency: 'weekly' as const, priority: 1 },
+  { path: '/about', changeFrequency: 'monthly' as const, priority: 0.5 },
+  { path: '/contact', changeFrequency: 'monthly' as const, priority: 0.5 },
+  { path: '/terms', changeFrequency: 'yearly' as const, priority: 0.3 },
   { path: '/privacy', changeFrequency: 'yearly' as const, priority: 0.3 },
+  { path: '/refunds', changeFrequency: 'yearly' as const, priority: 0.3 },
 ];
 
 /**

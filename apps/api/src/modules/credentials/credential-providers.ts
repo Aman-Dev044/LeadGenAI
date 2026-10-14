@@ -402,7 +402,9 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderSpec[] = [
         type: 'text',
         placeholder: 'Vapi > Phone Numbers > id',
         envKey: 'VAPI_PHONE_NUMBER_ID',
-        help: 'The outbound caller id. Twilio numbers can be imported into Vapi.',
+        help:
+          'The outbound caller id. A number bought elsewhere - Twilio, Telnyx - can be imported into Vapi ' +
+          'and used here by its Vapi id.',
       },
       {
         key: 'assistantId',

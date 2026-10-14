@@ -27,11 +27,43 @@ export const BRAND = {
   },
 } as const;
 
-/** The company that builds and operates the platform. */
+/**
+ * The company that builds and operates the platform.
+ *
+ * The registered address, phone and e-mail here are not decoration: a payment
+ * aggregator checks them against the live site before it will enable live keys,
+ * so they are kept in one place and rendered from it everywhere.
+ */
 export const COMPANY = {
   name: 'Cyberbells ITES Services Pvt Ltd',
   shortName: 'Cyberbells',
   url: 'https://www.cyberbells.com',
   /** Exact string used in every footer. */
   poweredBy: 'Powered by Cyberbells ITES Services Pvt Ltd',
+
+  /** Registered office, as it should appear on invoices and legal pages. */
+  address: {
+    line1: 'SCO 11, Industrial Area Phase II',
+    city: 'Chandigarh',
+    /** Leave empty until confirmed - a wrong PIN on a legal page is worse than none. */
+    postcode: '' as string,
+    country: 'India',
+  },
+
+  email: 'info.cyberbells@gmail.com',
+  /** Support line. Empty = the number is simply not rendered. */
+  phone: '' as string,
+  /** Monday to Saturday, shown on the contact page. */
+  supportHours: '10:00 - 19:00 IST, Monday to Saturday',
+
+  /** Corporate identifiers. Empty ones are not rendered. */
+  cin: '' as string,
+  gstin: '' as string,
+
+  /** One-line postal address for meta tags and invoices. */
+  get addressLine() {
+    return [this.address.line1, this.address.city, this.address.postcode, this.address.country]
+      .filter(Boolean)
+      .join(', ');
+  },
 } as const;

@@ -949,9 +949,19 @@ export default function LandingPage() {
             {
               title: 'Company',
               links: [
+                { label: 'About us', href: '/about' },
+                { label: 'Contact us', href: '/contact' },
                 { label: COMPANY.shortName, href: COMPANY.url },
-                { label: 'Privacy policy', href: '/privacy' },
                 { label: 'Sign in', href: ROUTES.login },
+              ],
+            },
+            {
+              title: 'Legal',
+              links: [
+                { label: 'Terms & conditions', href: '/terms' },
+                { label: 'Privacy policy', href: '/privacy' },
+                { label: 'Refunds & cancellation', href: '/refunds' },
+                { label: 'Pricing', href: '#pricing' },
               ],
             },
           ].map((column) => (
