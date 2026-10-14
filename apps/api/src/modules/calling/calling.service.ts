@@ -35,6 +35,15 @@ import {
 import { CallQueryDto, LogManualCallDto } from './dto';
 import { AI_ASSIGNABLE_STATUSES } from '../../common/constants/pipeline';
 import { dateToWords } from './speech-text';
+import { ExperimentService } from '../revenue-brain/experiment.service';
+import type { ExperimentField } from '../../schemas/script-experiment.schema';
+
+/** Which assistant field a script experiment swaps out for the calls it runs. */
+const EXPERIMENT_SETTING: Record<ExperimentField, 'firstMessage' | 'offerSummary' | 'extraInstructions'> = {
+  greeting: 'firstMessage',
+  pitch: 'offerSummary',
+  goal: 'extraInstructions',
+};
 
 const MAX_DIALS_PER_TICK = 20;
 const STALE_DIALING_MS = 2 * 60_000;
@@ -81,6 +90,7 @@ export class CallingService implements OnModuleInit {
     private readonly vapi: VapiProvider,
     private readonly twilio: TwilioVoiceProvider,
     private readonly bus: EventBusService,
+    private readonly experiments: ExperimentService,
   ) {}
 
   onModuleInit() {
@@ -536,8 +546,16 @@ export class CallingService implements OnModuleInit {
       return false;
     }
 
+    // A running A/B test swaps one field of the script for this call only -
+    // and the call log remembers which side it was on, so the result counts.
+    const variant = await this.experiments.variantFor(tenantId).catch(() => null);
+    const assistant = variant ? { ...settings.assistant, [EXPERIMENT_SETTING[variant.field]]: variant.text } : settings.assistant;
+
     try {
-      await this.callModel.updateOne({ _id: call._id }, { $set: { status: 'dialing' } });
+      await this.callModel.updateOne(
+        { _id: call._id },
+        { $set: { status: 'dialing', ...(variant ? { experimentId: variant.experimentId, variantKey: variant.variantKey } : {}) } },
+      );
       const result = await this.vapi.startOutboundCall({
         tenantId,
         callId: String(call._id),
@@ -569,7 +587,7 @@ export class CallingService implements OnModuleInit {
         })(),
         credentials: creds,
         webhookUrl: this.vapiWebhookUrl(),
-        assistant: settings.assistant,
+        assistant,
         reason: call.reason,
         ...(await this.callExtras(tenantId, settings, lead)),
       });

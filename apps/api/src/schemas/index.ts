@@ -39,3 +39,5 @@ export * from './social-run.schema';
 export * from './tenant-credential.schema';
 export * from './call-log.schema';
 export * from './follow-up-task.schema';
+export * from './call-review.schema';
+export * from './script-experiment.schema';

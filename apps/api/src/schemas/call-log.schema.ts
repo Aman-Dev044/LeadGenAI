@@ -155,6 +155,17 @@ export class CallLog {
   @Prop({ type: Number })
   costUsd: number;
 
+  /**
+   * Which script A/B test, and which side of it, this call ran on. Written at
+   * dial time so the result can be counted even if the experiment is edited
+   * afterwards. Empty when nothing was being tested.
+   */
+  @Prop({ type: String, default: '', index: true })
+  experimentId: string;
+
+  @Prop({ type: String, default: '' })
+  variantKey: string;
+
   @Prop({ type: String })
   errorMessage: string;
 

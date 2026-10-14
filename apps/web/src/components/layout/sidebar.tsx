@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, MessageSquare, Bot, BookOpen, BarChart3,
+  LayoutDashboard, Users, MessageSquare, Bot, BookOpen, BarChart3, BrainCircuit,
   Bell, Settings, CreditCard, Ticket, ArrowLeftRight, Calendar,
   Workflow, Globe, Key, Webhook, Target, UserCog, ChevronLeft,
   ChevronRight, Crown, Building2, Gauge, ScrollText,
@@ -80,6 +80,7 @@ export const navGroups: NavGroup[] = [
     title: 'Insights',
     items: [
       { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, roles: PAGE_ACCESS['/dashboard/analytics'] },
+      { label: 'Revenue Brain', href: '/dashboard/revenue-brain', icon: BrainCircuit, roles: PAGE_ACCESS['/dashboard/revenue-brain'] },
       { label: 'Visitor Tracking', href: '/dashboard/visitor-tracking', icon: Globe, roles: PAGE_ACCESS['/dashboard/visitor-tracking'] },
       { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badgeKey: 'notifications', roles: PAGE_ACCESS['/dashboard/notifications'] },
     ],

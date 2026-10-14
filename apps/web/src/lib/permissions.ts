@@ -23,6 +23,7 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
   '/dashboard': WITH_VIEWER,
   '/dashboard/leads': WITH_VIEWER,
   '/dashboard/calls': TEAM,
+  '/dashboard/revenue-brain': TEAM,
   '/dashboard/follow-up-tasks': TEAM,
   '/dashboard/conversations': TEAM,
   '/dashboard/handoffs': TEAM,
