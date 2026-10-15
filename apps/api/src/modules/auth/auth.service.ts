@@ -499,6 +499,7 @@ ${EMAIL_FOOTER_TEXT}`,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      pagePermissions: user.pagePermissions || [],
       avatar: user.avatar,
     };
   }
@@ -716,6 +717,8 @@ ${EMAIL_FOOTER_TEXT}`,
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      // Empty = no restriction; the sidebar then falls back to the role default
+      pagePermissions: user.pagePermissions || [],
       phone: user.phone,
       avatar: user.avatar,
       lastLoginAt: user.lastLoginAt,

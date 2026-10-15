@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   Plus,
   Pencil,
+  SlidersHorizontal,
   Trash2,
   Users,
   UserCheck,
@@ -36,6 +37,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
+import { PagePermissionsDialog } from '@/components/users/page-permissions-dialog';
 import { StatCard } from '@/components/shared/stat-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Toolbar, SearchInput, ToolbarSpacer } from '@/components/shared/toolbar';
@@ -76,6 +78,7 @@ export default function UsersPage() {
 
   // Edit
   const [editUser, setEditUser] = useState<any>(null);
+  const [permsUser, setPermsUser] = useState<any>(null);
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', role: '', phone: '' });
 
   // Delete
@@ -283,6 +286,11 @@ export default function UsersPage() {
     {
       key: 'actions', label: '', className: 'w-[90px]', render: (u: any) => (
         <div className="flex justify-end gap-1">
+          {u.role !== 'ADMIN' && u.role !== 'SUPER_ADMIN' && (
+            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Menu access" title="Choose what they can see" onClick={(e) => { e.stopPropagation(); setPermsUser(u); }}>
+              <SlidersHorizontal className="h-4 w-4" />
+            </Button>
+          )}
           <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Edit" onClick={(e) => { e.stopPropagation(); handleEdit(u); }}>
             <Pencil className="h-4 w-4" />
           </Button>
@@ -790,6 +798,7 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
     </div>
   );
 }

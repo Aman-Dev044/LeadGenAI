@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/paginate';
+import { sanitisePagePermissions } from '../../common/constants/dashboard-pages';
 import { escapeRegex } from '../../common/utils/sanitize';
 
 @Injectable()
@@ -79,6 +80,29 @@ export class UserService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    return this.sanitizeUser(user);
+  }
+
+  /**
+   * Choose which dashboard pages one teammate sees.
+   *
+   * The submitted list is intersected with what their role allows, so an
+   * administrator can only take pages away - never hand out a page the role
+   * was never entitled to. An empty result means "no restriction", which also
+   * keeps them on the role default as the product grows new pages.
+   */
+  async setPagePermissions(tenantId: string, userId: string, pages: unknown) {
+    const filter: any = { _id: userId, deletedAt: null };
+    if (tenantId && tenantId !== 'all') filter.tenantId = tenantId;
+
+    const user = await this.userModel.findOne(filter);
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      throw new BadRequestException('Administrators always see the whole workspace');
+    }
+
+    user.pagePermissions = sanitisePagePermissions(user.role, pages);
+    await user.save();
     return this.sanitizeUser(user);
   }
 

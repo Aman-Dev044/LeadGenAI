@@ -4,7 +4,9 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'SALESPERSON';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALESPERSON' | 'VIEWER';
+  /** Dashboard pages an admin left switched on. Empty = everything the role allows. */
+  pagePermissions?: string[];
   isActive: boolean;
   avatar?: string;
   phone?: string;

@@ -27,6 +27,16 @@ export class User {
   })
   role: string;
 
+  /**
+   * Dashboard pages this person may open, chosen by an administrator.
+   *
+   * Empty means no restriction - they get everything their role allows. A list
+   * can only narrow that, never widen it, so the role stays the real boundary
+   * and the API's own @Roles checks remain the lock.
+   */
+  @Prop({ type: [String], default: [] })
+  pagePermissions: string[];
+
   @Prop({ default: true })
   isActive: boolean;
 

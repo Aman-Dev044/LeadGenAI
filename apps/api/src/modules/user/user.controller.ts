@@ -12,6 +12,7 @@ import { UserService } from './user.service';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { Roles, CurrentTenant } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { DASHBOARD_PAGES } from '../../common/constants/dashboard-pages';
 
 @Controller('users')
 @Roles('ADMIN')
@@ -32,6 +33,30 @@ export class UserController {
     @Query() paginationDto: PaginationDto,
   ) {
     return this.userService.findAll(tenantId, paginationDto);
+  }
+
+  /**
+   * The menu an administrator can switch on and off, grouped as the sidebar is.
+   * Declared before ':id' so the literal path wins.
+   */
+  @Get('page-catalogue')
+  @Roles('ADMIN')
+  async pageCatalogue() {
+    return { pages: DASHBOARD_PAGES };
+  }
+
+  /**
+   * Choose which pages one teammate sees. The list can only narrow what their
+   * role already allows - an empty list puts them back on the role default.
+   */
+  @Patch(':id/permissions')
+  @Roles('ADMIN')
+  async setPermissions(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: { pages?: string[] },
+  ) {
+    return this.userService.setPagePermissions(tenantId, id, dto?.pages);
   }
 
   // Must be declared before ':id'. Open to every dashboard role so assignment dropdowns work for non-admins.

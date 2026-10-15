@@ -80,12 +80,27 @@ function scannable(key: string, value: string): boolean {
  * Walks a value, carrying the key it sits under so strings inside arrays
  * (`keyPoints`, `objections`, ...) are scanned too.
  */
+/**
+ * A value that must be handed back exactly as it came. Spreading an ObjectId
+ * turns it into `{ buffer: { data: [...] } }`, which serialises as a raw byte
+ * array instead of the hex id - every link, lookup and detail page built on
+ * that id then breaks.
+ */
+function isLeafObject(value: any): boolean {
+  if (value instanceof Date || Buffer.isBuffer(value)) return true;
+  if (value._bsontype || typeof value.toHexString === 'function') return true;
+  // Mongoose documents are not plain but must still be masked - they have toObject()
+  if (typeof value.toObject === 'function') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto !== Object.prototype && proto !== null;
+}
+
 function maskNode(value: any, key: string, selfId: string, depth: number): any {
   if (value === null || value === undefined || depth > 12) return value;
   if (Array.isArray(value)) return value.map((v) => maskNode(v, key, selfId, depth + 1));
   if (typeof value === 'string') return scannable(key, value) ? redactText(value) : value;
   if (typeof value !== 'object') return value;
-  if (value instanceof Date || Buffer.isBuffer(value)) return value;
+  if (isLeafObject(value)) return value;
   return maskObject(value, selfId, depth + 1);
 }
 

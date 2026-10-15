@@ -52,17 +52,43 @@ export const PAGE_ACCESS: Record<string, Role[]> = {
 export const homePathFor = (_role?: string | null) => '/dashboard';
 
 /** True when `role` may open `pathname` (owner console is handled by its own layout). */
-export function canAccessPath(role: string | null | undefined, pathname: string): boolean {
+/**
+ * Pages an administrator can never take away - everyone needs somewhere to
+ * land and a way back to their own profile.
+ */
+export const LOCKED_PAGES = ['/dashboard', '/dashboard/settings'];
+
+/**
+ * True when `role` may open `pathname`.
+ *
+ * `pagePermissions` is the per-person list an administrator chose. It can only
+ * narrow the role, never widen it, and an empty list means no restriction - so
+ * a page added to the product later shows up without anyone re-ticking boxes.
+ * The real boundary is still the API's own @Roles checks; this only decides
+ * what the menu shows.
+ */
+export function canAccessPath(
+  role: string | null | undefined,
+  pathname: string,
+  pagePermissions?: string[] | null,
+): boolean {
   if (!role) return false;
   if (role === 'SUPER_ADMIN') return true;
   if (pathname.startsWith('/dashboard/admin')) return false;
-  // Dashboard home is accessible to all workspace users
-  if (pathname === '/dashboard') return true;
+
   const match = Object.keys(PAGE_ACCESS)
     .filter((p) => pathname === p || pathname.startsWith(p + '/'))
     .sort((a, b) => b.length - a.length)[0];
-  if (!match) return true;
-  return PAGE_ACCESS[match].includes(role as Role);
+
+  // Dashboard home is accessible to all workspace users
+  if (pathname !== '/dashboard') {
+    if (!match) return true;
+    if (!PAGE_ACCESS[match].includes(role as Role)) return false;
+  }
+
+  if (!pagePermissions?.length) return true;
+  const page = match || '/dashboard';
+  return LOCKED_PAGES.includes(page) || pagePermissions.includes(page);
 }
 
 const is = (role: string | null | undefined, ...roles: Role[]) =>

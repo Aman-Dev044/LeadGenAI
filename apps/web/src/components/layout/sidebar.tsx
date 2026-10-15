@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useUIStore } from '@/store/ui-store';
 import { useAuthStore } from '@/store/auth-store';
-import { PAGE_ACCESS } from '@/lib/permissions';
+import { PAGE_ACCESS, canAccessPath } from '@/lib/permissions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -111,14 +111,15 @@ export const ownerNavItems: NavItem[] = [
 ];
 
 /** Flat list used by the header's quick-jump search. */
-export const allNavItems = (isOwner: boolean, userRole?: string): NavItem[] => [
+export const allNavItems = (isOwner: boolean, userRole?: string, userPages?: string[]): NavItem[] => [
   ...(isOwner ? ownerNavItems.map((i) => ({ ...i, label: `Owner · ${i.label}` })) : []),
   ...navGroups
     .filter((g) => !(isOwner && g.title === 'Overview'))
     .flatMap((g) =>
       g.items.filter((item) => {
         if (!userRole || userRole === 'SUPER_ADMIN') return true;
-        return !item.roles || item.roles.includes(userRole);
+        if (item.roles && !item.roles.includes(userRole)) return false;
+        return canAccessPath(userRole, item.href, userPages);
       }),
     ),
 ];
@@ -373,7 +374,8 @@ export function Sidebar() {
             .map((group) => {
               const visibleItems = group.items.filter((item) => {
                 if (!user?.role || user.role === 'SUPER_ADMIN') return true;
-                return !item.roles || item.roles.includes(user.role);
+                if (item.roles && !item.roles.includes(user.role)) return false;
+                return canAccessPath(user.role, item.href, user.pagePermissions);
               });
               if (visibleItems.length === 0) return null;
               return (
